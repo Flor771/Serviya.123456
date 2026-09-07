@@ -33,7 +33,7 @@ app.include_router(api_router)
 def health_check():
     return {"status": "ok", "version": settings.VERSION}
 
-# Deterministic absolute path calculation based on __file__
+# Absolute path based on __file__
 # __file__ = /.../repo_root/backend/app/main.py
 # .parent.parent.parent = /.../repo_root
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
@@ -41,19 +41,17 @@ DIST_DIR = BASE_DIR / "dist"
 INDEX_FILE = DIST_DIR / "index.html"
 ASSETS_DIR = DIST_DIR / "assets"
 
-if ASSETS_DIR.exists() and ASSETS_DIR.is_dir():
+if ASSETS_DIR.exists():
     app.mount("/assets", StaticFiles(directory=str(ASSETS_DIR)), name="assets")
 
 @app.get("/", include_in_schema=False)
 async def serve_frontend_root():
     if INDEX_FILE.exists():
         return FileResponse(str(INDEX_FILE))
-    return {
-        "app": "SERVIYA.do API 🇩🇴",
-        "tagline": "Trabajo • Confianza • Oportunidades",
-        "status": "online",
-        "docs": "/docs"
-    }
+    alt_index = Path.cwd() / "dist" / "index.html"
+    if alt_index.exists():
+        return FileResponse(str(alt_index))
+    return FileResponse(str(INDEX_FILE))
 
 @app.get("/{full_path:path}", include_in_schema=False)
 async def serve_frontend_spa(full_path: str):
@@ -67,9 +65,8 @@ async def serve_frontend_spa(full_path: str):
     if INDEX_FILE.exists():
         return FileResponse(str(INDEX_FILE))
 
-    return {
-        "app": "SERVIYA.do API 🇩🇴",
-        "tagline": "Trabajo • Confianza • Oportunidades",
-        "status": "online",
-        "docs": "/docs"
-    }
+    alt_index = Path.cwd() / "dist" / "index.html"
+    if alt_index.exists():
+        return FileResponse(str(alt_index))
+
+    return FileResponse(str(INDEX_FILE))
