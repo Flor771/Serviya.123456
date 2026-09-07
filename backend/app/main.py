@@ -1,5 +1,8 @@
+import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from app.core.config import settings
 from app.api.v1.router import api_router
 
@@ -22,18 +25,64 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Include API Router
+# Include API Router FIRST
 app.include_router(api_router)
-
-@app.get("/")
-def root():
-    return {
-        "app": "SERVIYA.do API 🇩🇴",
-        "tagline": "Trabajo • Confianza • Oportunidades",
-        "status": "online",
-        "docs": "/docs"
-    }
 
 @app.get("/api/v1/health")
 def health_check():
     return {"status": "ok", "version": settings.VERSION}
+
+# Path to built static frontend directory
+dist_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "dist"))
+
+if os.path.exists(dist_dir):
+    # Mount assets subfolder
+    assets_dir = os.path.join(dist_dir, "assets")
+    if os.path.exists(assets_dir):
+        app.mount("/assets", StaticFiles(directory=assets_dir), name="assets")
+
+    # Serve SPA index.html on root
+    @app.get("/", include_in_schema=False)
+    def serve_frontend_root():
+        index_file = os.path.join(dist_dir, "index.html")
+        if os.path.exists(index_file):
+            return FileResponse(index_file)
+        return {
+            "app": "SERVIYA.do API 🇩🇴",
+            "tagline": "Trabajo • Confianza • Oportunidades",
+            "status": "online",
+            "docs": "/docs"
+        }
+
+    # Catch-all route for static files & SPA client-side routing
+    @app.get("/{full_path:path}", include_in_schema=False)
+    def serve_frontend_spa(full_path: str):
+        # Do not intercept API, docs, or openapi routes
+        if full_path.startswith("api/") or full_path.startswith("docs") or full_path.startswith("openapi.json"):
+            return None
+
+        # Check if direct file exists in dist/ (e.g. sw.js, manifest.webmanifest, registerSW.js)
+        target_file = os.path.join(dist_dir, full_path)
+        if os.path.isfile(target_file):
+            return FileResponse(target_file)
+
+        # Fallback to SPA index.html
+        index_file = os.path.join(dist_dir, "index.html")
+        if os.path.exists(index_file):
+            return FileResponse(index_file)
+
+        return {
+            "app": "SERVIYA.do API 🇩🇴",
+            "tagline": "Trabajo • Confianza • Oportunidades",
+            "status": "online",
+            "docs": "/docs"
+        }
+else:
+    @app.get("/")
+    def root():
+        return {
+            "app": "SERVIYA.do API 🇩🇴",
+            "tagline": "Trabajo • Confianza • Oportunidades",
+            "status": "online",
+            "docs": "/docs"
+        }
