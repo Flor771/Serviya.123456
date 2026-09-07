@@ -1,0 +1,168 @@
+from typing import Optional
+from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel, EmailStr
+from sqlalchemy.orm import Session
+
+from app.core.config import settings
+from app.core.security import get_password_hash, verify_password, create_access_token
+from app.core.deps import get_db, get_current_active_user
+from app.models.models import User, UserRoleEnum, Wallet, WorkerProfile
+
+router = APIRouter(prefix="/auth", tags=["Autenticación"])
+
+class RegisterSchema(BaseModel):
+    first_name: str
+    last_name: str
+    email: EmailStr
+    phone: str
+    password: str
+    role: Optional[str] = "CLIENTE"
+    cedula: Optional[str] = None
+    province: Optional[str] = "Distrito Nacional"
+    municipality: Optional[str] = "Santo Domingo de Guzmán (DN)"
+    profession: Optional[str] = None
+
+class LoginSchema(BaseModel):
+    email: EmailStr
+    password: str
+
+class RecoverPasswordSchema(BaseModel):
+    email: EmailStr
+
+class RoleToggleSchema(BaseModel):
+    active_role: str
+
+@router.post("/register")
+def register(data: RegisterSchema, db: Session = Depends(get_db)):
+    existing_user = db.query(User).filter(User.email == data.email).first()
+    if existing_user:
+        raise HTTPException(
+            status_code=400,
+            detail="Ya existe una cuenta registrada con este correo electrónico."
+        )
+    
+    role_enum = UserRoleEnum.TRABAJADOR if data.role == "TRABAJADOR" else UserRoleEnum.CLIENTE
+    hashed_pwd = get_password_hash(data.password)
+    
+    user = User(
+        first_name=data.first_name,
+        last_name=data.last_name,
+        email=data.email,
+        phone=data.phone,
+        cedula=data.cedula,
+        hashed_password=hashed_pwd,
+        role=role_enum,
+        active_role=data.role or "CLIENTE",
+        province=data.province or "Distrito Nacional",
+        municipality=data.municipality or "Santo Domingo de Guzmán (DN)",
+        is_verified=False
+    )
+    db.add(user)
+    db.flush()
+
+    # Create Wallet for User
+    wallet = Wallet(
+        user_id=user.id,
+        available_rd=0.0,
+        escrow_rd=0.0,
+        pending_rd=0.0
+    )
+    db.add(wallet)
+
+    if data.role == "TRABAJADOR":
+        profile = WorkerProfile(
+            user_id=user.id,
+            profession=data.profession or "Técnico General",
+            specialties=["Servicios Generales"],
+            experience_years=2,
+            hourly_rate_rd=600.0,
+            availability="TIEMPO_COMPLETO"
+        )
+        db.add(profile)
+
+    db.commit()
+    db.refresh(user)
+
+    token = create_access_token(user.id)
+    return {
+        "message": "Usuario registrado exitosamente en SERVIYA.do",
+        "token": token,
+        "access_token": token,
+        "token_type": "bearer",
+        "user": {
+            "id": user.id,
+            "first_name": user.first_name,
+            "last_name": user.last_name,
+            "email": user.email,
+            "phone": user.phone,
+            "role": user.role.value if hasattr(user.role, "value") else str(user.role),
+            "active_role": user.active_role,
+            "is_verified": user.is_verified
+        }
+    }
+
+@router.post("/login")
+def login(data: LoginSchema, db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.email == data.email).first()
+    if not user or not verify_password(data.password, user.hashed_password):
+        raise HTTPException(
+            status_code=401,
+            detail="Credenciales incorrectas. Verifique su correo y contraseña."
+        )
+    
+    token = create_access_token(user.id)
+    return {
+        "message": "Inicio de sesión exitoso",
+        "token": token,
+        "access_token": token,
+        "token_type": "bearer",
+        "user": {
+            "id": user.id,
+            "first_name": user.first_name,
+            "last_name": user.last_name,
+            "email": user.email,
+            "phone": user.phone,
+            "role": user.role.value if hasattr(user.role, "value") else str(user.role),
+            "active_role": user.active_role,
+            "is_verified": user.is_verified
+        }
+    }
+
+@router.get("/me")
+def get_me(current_user: User = Depends(get_current_active_user)):
+    role_str = current_user.role.value if hasattr(current_user.role, "value") else str(current_user.role)
+    return {
+        "user": {
+            "id": current_user.id,
+            "first_name": current_user.first_name,
+            "last_name": current_user.last_name,
+            "email": current_user.email,
+            "phone": current_user.phone,
+            "cedula": current_user.cedula,
+            "role": role_str,
+            "active_role": current_user.active_role,
+            "province": current_user.province,
+            "municipality": current_user.municipality,
+            "bio": current_user.bio,
+            "is_verified": current_user.is_verified,
+            "rating": current_user.rating,
+            "jobs_completed": current_user.jobs_completed
+        }
+    }
+
+@router.post("/recover-password")
+def recover_password(data: RecoverPasswordSchema, db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.email == data.email).first()
+    if not user:
+        return {"message": "Si el correo está registrado, se enviaron instrucciones de recuperación."}
+    return {"message": "Instrucciones de recuperación de contraseña enviadas exitosamente a su correo."}
+
+@router.post("/role-toggle")
+def role_toggle(data: RoleToggleSchema, current_user: User = Depends(get_current_active_user), db: Session = Depends(get_db)):
+    current_user.active_role = data.active_role
+    db.commit()
+    db.refresh(current_user)
+    return {
+        "message": f"Modo actualizado a {data.active_role}",
+        "active_role": current_user.active_role
+    }
