@@ -1,0 +1,21 @@
+services:
+  - type: web
+    name: serviya-do-backend
+    env: python
+    buildCommand: "pip install -r backend/requirements.txt && alembic upgrade head"
+    startCommand: "uvicorn backend.app.main:app --host 0.0.0.0 --port $PORT"
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: serviya-db
+          property: connectionString
+      - key: SECRET_KEY
+        generateValue: true
+      - key: PLATFORM_COMMISSION_PERCENT
+        value: "8.0"
+
+databases:
+  - name: serviya-db
+    databaseName: serviya_db
+    user: serviya_user
+    plan: free

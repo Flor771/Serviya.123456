@@ -1,0 +1,6 @@
+{
+  "name": "SERVIYA.do",
+  "description": "Plataforma dominicana para conectar clientes con trabajadores y profesionales que ofrecen servicios.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

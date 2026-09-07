@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>SERVIYA.do 🇩🇴 — Trabajo • Confianza • Oportunidades</title>
+    <meta name="description" content="Plataforma dominicana para conectar clientes con trabajadores y profesionales que ofrecen servicios." />
+    <meta property="og:title" content="SERVIYA.do 🇩🇴 — Trabajo • Confianza • Oportunidades" />
+    <meta property="og:description" content="Plataforma dominicana para conectar clientes con trabajadores y profesionales que ofrecen servicios." />
+    <meta property="og:type" content="website" />
+    <meta name="theme-color" content="#002D62" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="SERVIYA.do" />
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="icon" type="image/svg+xml" href="/icon.svg" />
+    <link rel="shortcut icon" href="/favicon.ico" />
+  </head>
+  <body class="bg-slate-50 text-slate-900 antialiased selection:bg-blue-600 selection:text-white">
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+    <script>
+      if ('serviceWorker' in navigator && window.location.protocol !== 'http:') {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/sw.js')
+            .then(reg => console.log('Service Worker registrado:', reg.scope))
+            .catch(err => console.log('Error al registrar Service Worker:', err));
+        });
+      }
+    </script>
+  </body>
+</html>
+
