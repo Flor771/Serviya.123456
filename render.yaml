@@ -3,7 +3,7 @@ services:
     name: serviya-do-backend
     env: python
     buildCommand: "npm install && npm run build && pip install -r backend/requirements.txt && alembic -c backend/alembic.ini upgrade head"
-    startCommand: "uvicorn backend.app.main:app --host 0.0.0.0 --port $PORT"
+    startCommand: "PYTHONPATH=backend uvicorn app.main:app --host 0.0.0.0 --port $PORT"
     envVars:
       - key: DATABASE_URL
         fromDatabase:

@@ -32,11 +32,21 @@ app.include_router(api_router)
 def health_check():
     return {"status": "ok", "version": settings.VERSION}
 
-# Path to built static frontend directory
-dist_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "dist"))
+# Robust search for built dist frontend directory across working directories
+possible_dist_dirs = [
+    os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "dist")),
+    os.path.abspath(os.path.join(os.getcwd(), "dist")),
+    os.path.abspath(os.path.join(os.getcwd(), "..", "dist")),
+]
 
-if os.path.exists(dist_dir):
-    # Mount assets subfolder
+dist_dir = None
+for d in possible_dist_dirs:
+    if os.path.exists(d) and os.path.exists(os.path.join(d, "index.html")):
+        dist_dir = d
+        break
+
+if dist_dir:
+    # Mount assets subfolder if present
     assets_dir = os.path.join(dist_dir, "assets")
     if os.path.exists(assets_dir):
         app.mount("/assets", StaticFiles(directory=assets_dir), name="assets")
