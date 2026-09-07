@@ -51,7 +51,12 @@ async def serve_frontend_root():
     alt_index = Path.cwd() / "dist" / "index.html"
     if alt_index.exists():
         return FileResponse(str(alt_index))
-    return FileResponse(str(INDEX_FILE))
+    return {
+        "app": "SERVIYA.do API 🇩🇴",
+        "tagline": "Trabajo • Confianza • Oportunidades",
+        "status": "online",
+        "docs": "/docs"
+    }
 
 @app.get("/{full_path:path}", include_in_schema=False)
 async def serve_frontend_spa(full_path: str):
@@ -69,4 +74,9 @@ async def serve_frontend_spa(full_path: str):
     if alt_index.exists():
         return FileResponse(str(alt_index))
 
-    return FileResponse(str(INDEX_FILE))
+    return {
+        "app": "SERVIYA.do API 🇩🇴",
+        "tagline": "Trabajo • Confianza • Oportunidades",
+        "status": "online",
+        "docs": "/docs"
+    }
