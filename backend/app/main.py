@@ -1,5 +1,6 @@
 import os
-from fastapi import FastAPI
+from pathlib import Path
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
@@ -32,67 +33,43 @@ app.include_router(api_router)
 def health_check():
     return {"status": "ok", "version": settings.VERSION}
 
-# Robust search for built dist frontend directory across working directories
-possible_dist_dirs = [
-    os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "dist")),
-    os.path.abspath(os.path.join(os.getcwd(), "dist")),
-    os.path.abspath(os.path.join(os.getcwd(), "..", "dist")),
-]
+# Deterministic absolute path calculation based on __file__
+# __file__ = /.../repo_root/backend/app/main.py
+# .parent.parent.parent = /.../repo_root
+BASE_DIR = Path(__file__).resolve().parent.parent.parent
+DIST_DIR = BASE_DIR / "dist"
+INDEX_FILE = DIST_DIR / "index.html"
+ASSETS_DIR = DIST_DIR / "assets"
 
-dist_dir = None
-for d in possible_dist_dirs:
-    if os.path.exists(d) and os.path.exists(os.path.join(d, "index.html")):
-        dist_dir = d
-        break
+if ASSETS_DIR.exists() and ASSETS_DIR.is_dir():
+    app.mount("/assets", StaticFiles(directory=str(ASSETS_DIR)), name="assets")
 
-if dist_dir:
-    # Mount assets subfolder if present
-    assets_dir = os.path.join(dist_dir, "assets")
-    if os.path.exists(assets_dir):
-        app.mount("/assets", StaticFiles(directory=assets_dir), name="assets")
+@app.get("/", include_in_schema=False)
+async def serve_frontend_root():
+    if INDEX_FILE.exists():
+        return FileResponse(str(INDEX_FILE))
+    return {
+        "app": "SERVIYA.do API 🇩🇴",
+        "tagline": "Trabajo • Confianza • Oportunidades",
+        "status": "online",
+        "docs": "/docs"
+    }
 
-    # Serve SPA index.html on root
-    @app.get("/", include_in_schema=False)
-    def serve_frontend_root():
-        index_file = os.path.join(dist_dir, "index.html")
-        if os.path.exists(index_file):
-            return FileResponse(index_file)
-        return {
-            "app": "SERVIYA.do API 🇩🇴",
-            "tagline": "Trabajo • Confianza • Oportunidades",
-            "status": "online",
-            "docs": "/docs"
-        }
+@app.get("/{full_path:path}", include_in_schema=False)
+async def serve_frontend_spa(full_path: str):
+    if full_path.startswith("api/") or full_path.startswith("docs") or full_path.startswith("openapi.json"):
+        raise HTTPException(status_code=404, detail="Not found")
 
-    # Catch-all route for static files & SPA client-side routing
-    @app.get("/{full_path:path}", include_in_schema=False)
-    def serve_frontend_spa(full_path: str):
-        # Do not intercept API, docs, or openapi routes
-        if full_path.startswith("api/") or full_path.startswith("docs") or full_path.startswith("openapi.json"):
-            return None
+    target_file = DIST_DIR / full_path
+    if target_file.is_file():
+        return FileResponse(str(target_file))
 
-        # Check if direct file exists in dist/ (e.g. sw.js, manifest.webmanifest, registerSW.js)
-        target_file = os.path.join(dist_dir, full_path)
-        if os.path.isfile(target_file):
-            return FileResponse(target_file)
+    if INDEX_FILE.exists():
+        return FileResponse(str(INDEX_FILE))
 
-        # Fallback to SPA index.html
-        index_file = os.path.join(dist_dir, "index.html")
-        if os.path.exists(index_file):
-            return FileResponse(index_file)
-
-        return {
-            "app": "SERVIYA.do API 🇩🇴",
-            "tagline": "Trabajo • Confianza • Oportunidades",
-            "status": "online",
-            "docs": "/docs"
-        }
-else:
-    @app.get("/")
-    def root():
-        return {
-            "app": "SERVIYA.do API 🇩🇴",
-            "tagline": "Trabajo • Confianza • Oportunidades",
-            "status": "online",
-            "docs": "/docs"
-        }
+    return {
+        "app": "SERVIYA.do API 🇩🇴",
+        "tagline": "Trabajo • Confianza • Oportunidades",
+        "status": "online",
+        "docs": "/docs"
+    }
