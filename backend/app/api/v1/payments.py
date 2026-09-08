@@ -42,11 +42,11 @@ def pay_escrow(data: EscrowPaymentSchema, current_user: User = Depends(get_curre
         raise HTTPException(status_code=400, detail="Este servicio ya tiene su pago retenido en Custodia SERVIYA.")
 
     amount = service.price_rd
-    wallet = db.query(Wallet).filter(Wallet.user_id == current_user.id).first()
-    if not wallet or wallet.available_rd < amount:
+    wallet = db.query(Wallet).filter(Wallet.worker_id == current_user.id).first()
+    if wallet and wallet.available_balance < amount:
         raise HTTPException(
             status_code=400,
-            detail=f"Saldo insuficiente en Billetera. Necesita RD$ {amount:,.2f} y dispone de RD$ {wallet.available_rd if wallet else 0:,.2f}."
+            detail=f"Saldo insuficiente en Billetera. Necesita RD$ {amount:,.2f} y dispone de RD$ {wallet.available_balance:,.2f}."
         )
 
     # Calculate Commission (8%)
@@ -54,9 +54,9 @@ def pay_escrow(data: EscrowPaymentSchema, current_user: User = Depends(get_curre
     commission_amount = amount * (commission_rate / 100.0)
     worker_payout = amount - commission_amount
 
-    # Transfer from available to escrow
-    wallet.available_rd -= amount
-    wallet.escrow_rd += amount
+    if wallet:
+        wallet.available_balance -= amount
+        wallet.pending_custody_balance += amount
 
     escrow = Escrow(
         service_id=service.id,
@@ -73,16 +73,18 @@ def pay_escrow(data: EscrowPaymentSchema, current_user: User = Depends(get_curre
     service.status = ServiceStatusEnum.EN_PROGRESO
 
     ref = f"ESCROW-{uuid.uuid4().hex[:8].upper()}"
-    tx = WalletTransaction(
-        wallet_id=wallet.id,
-        user_id=current_user.id,
-        type="pago",
-        amount_rd=amount,
-        description=f"Pago en Custodia SERVIYA para servicio #{service.id[:8]}",
-        reference=ref,
-        status="EXITOSO"
-    )
-    db.add(tx)
+    if wallet:
+        tx = WalletTransaction(
+            wallet_id=wallet.id,
+            user_id=current_user.id,
+            type="pago",
+            amount_rd=amount,
+            description=f"Pago en Custodia SERVIYA para servicio #{service.id[:8]}",
+            reference=ref,
+            status="EXITOSO"
+        )
+        db.add(tx)
+
     db.commit()
 
     return {
@@ -107,17 +109,17 @@ def release_escrow(data: EscrowReleaseSchema, current_user: User = Depends(get_c
     escrow.status = "LIBERADO"
     escrow.released_at = datetime.utcnow()
 
-    # Update Client Wallet
-    client_wallet = db.query(Wallet).filter(Wallet.user_id == escrow.client_id).first()
+    # Update Client Wallet (if any exists)
+    client_wallet = db.query(Wallet).filter(Wallet.worker_id == escrow.client_id).first()
     if client_wallet:
-        client_wallet.escrow_rd = max(0.0, client_wallet.escrow_rd - escrow.total_amount_rd)
-        client_wallet.total_spent_rd += escrow.total_amount_rd
+        client_wallet.pending_custody_balance = max(0.0, client_wallet.pending_custody_balance - escrow.total_amount_rd)
 
     # Update Worker Wallet
-    worker_wallet = db.query(Wallet).filter(Wallet.user_id == escrow.worker_id).first()
+    worker_wallet = db.query(Wallet).filter(Wallet.worker_id == escrow.worker_id).first()
     if worker_wallet:
-        worker_wallet.available_rd += escrow.worker_payout_rd
-        worker_wallet.total_received_rd += escrow.worker_payout_rd
+        worker_wallet.available_balance += escrow.worker_payout_rd
+        worker_wallet.total_earnings += escrow.worker_payout_rd
+        worker_wallet.total_commissions += escrow.commission_amount_rd
 
         tx = WalletTransaction(
             wallet_id=worker_wallet.id,
@@ -152,10 +154,10 @@ def refund_escrow(data: RefundSchema, current_user: User = Depends(get_current_a
 
     escrow.status = "REEMBOLSADO"
 
-    client_wallet = db.query(Wallet).filter(Wallet.user_id == escrow.client_id).first()
+    client_wallet = db.query(Wallet).filter(Wallet.worker_id == escrow.client_id).first()
     if client_wallet:
-        client_wallet.escrow_rd = max(0.0, client_wallet.escrow_rd - escrow.total_amount_rd)
-        client_wallet.available_rd += escrow.total_amount_rd
+        client_wallet.pending_custody_balance = max(0.0, client_wallet.pending_custody_balance - escrow.total_amount_rd)
+        client_wallet.available_balance += escrow.total_amount_rd
 
         tx = WalletTransaction(
             wallet_id=client_wallet.id,

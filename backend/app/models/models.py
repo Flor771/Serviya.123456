@@ -1,5 +1,6 @@
 import enum
 import uuid
+from typing import Optional
 from datetime import datetime
 from sqlalchemy import Column, String, Integer, Float, Boolean, DateTime, Enum, ForeignKey, Text, JSON
 from sqlalchemy.orm import relationship
@@ -75,7 +76,7 @@ class User(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
     worker_profile = relationship("WorkerProfile", back_populates="user", uselist=False)
-    wallet = relationship("Wallet", back_populates="user", uselist=False)
+    wallet = relationship("Wallet", back_populates="worker", uselist=False, foreign_keys="Wallet.worker_id")
 
 class WorkerProfile(Base):
     __tablename__ = "worker_profiles"
@@ -90,8 +91,18 @@ class WorkerProfile(Base):
     portfolio_images = Column(JSON, default=[])
     certifications = Column(JSON, default=[])
     verification_status = Column(Enum(VerificationStatusEnum), default=VerificationStatusEnum.SIN_VERIFICAR)
+    bank_name = Column(String(100), nullable=True)
+    account_number = Column(String(50), nullable=True)
 
     user = relationship("User", back_populates="worker_profile")
+
+    @property
+    def bank_account_number(self) -> Optional[str]:
+        return self.account_number
+
+    @bank_account_number.setter
+    def bank_account_number(self, value: Optional[str]):
+        self.account_number = value
 
 class Category(Base):
     __tablename__ = "categories"
@@ -143,15 +154,67 @@ class Wallet(Base):
     __tablename__ = "wallets"
 
     id = Column(String, primary_key=True, default=generate_uuid)
-    user_id = Column(String, ForeignKey("users.id"), nullable=False, unique=True)
-    available_rd = Column(Float, default=0.0)
-    escrow_rd = Column(Float, default=0.0)
-    pending_rd = Column(Float, default=0.0)
-    total_received_rd = Column(Float, default=0.0)
-    total_spent_rd = Column(Float, default=0.0)
+    worker_id = Column(String, ForeignKey("users.id"), nullable=False, unique=True)
+    available_balance = Column(Float, default=0.0)
+    pending_custody_balance = Column(Float, default=0.0)
+    total_earnings = Column(Float, default=0.0)
+    total_commissions = Column(Float, default=0.0)
+    total_withdrawn = Column(Float, default=0.0)
     updated_at = Column(DateTime, default=datetime.utcnow)
 
-    user = relationship("User", back_populates="wallet")
+    worker = relationship("User", back_populates="wallet")
+
+    @property
+    def user(self):
+        return self.worker
+
+    @property
+    def user_id(self) -> str:
+        return self.worker_id
+
+    @user_id.setter
+    def user_id(self, value: str):
+        self.worker_id = value
+
+    @property
+    def available_rd(self) -> float:
+        return self.available_balance
+
+    @available_rd.setter
+    def available_rd(self, value: float):
+        self.available_balance = value
+
+    @property
+    def escrow_rd(self) -> float:
+        return self.pending_custody_balance
+
+    @escrow_rd.setter
+    def escrow_rd(self, value: float):
+        self.pending_custody_balance = value
+
+    @property
+    def pending_rd(self) -> float:
+        return self.pending_custody_balance
+
+    @pending_rd.setter
+    def pending_rd(self, value: float):
+        self.pending_custody_balance = value
+
+    @property
+    def total_received_rd(self) -> float:
+        return self.total_earnings
+
+    @total_received_rd.setter
+    def total_received_rd(self, value: float):
+        self.total_earnings = value
+
+    @property
+    def total_spent_rd(self) -> float:
+        return self.total_withdrawn
+
+    @total_spent_rd.setter
+    def total_spent_rd(self, value: float):
+        self.total_withdrawn = value
 
 class WalletTransaction(Base):
     __tablename__ = "wallet_transactions"

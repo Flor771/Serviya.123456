@@ -21,6 +21,7 @@ USER_FK_DEFINITIONS = [
     ('services', 'client_id', 'fk_services_client_id_users'),
     ('services', 'worker_id', 'fk_services_worker_id_users'),
     ('applications', 'worker_id', 'fk_applications_worker_id_users'),
+    ('wallets', 'worker_id', 'fk_wallets_worker_id_users'),
     ('wallets', 'user_id', 'fk_wallets_user_id_users'),
     ('wallet_transactions', 'user_id', 'fk_wallet_transactions_user_id_users'),
     ('escrows', 'client_id', 'fk_escrows_client_id_users'),

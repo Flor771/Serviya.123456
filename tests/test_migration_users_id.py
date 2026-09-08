@@ -41,8 +41,8 @@ class TestUsersUUIDAndForeignKeys(unittest.TestCase):
 
         wallet = Wallet(
             id=str(uuid.uuid4()),
-            user_id=user_uuid,
-            available_rd=1500.0
+            worker_id=user_uuid,
+            available_balance=1500.0
         )
 
         self.session.add(new_user)

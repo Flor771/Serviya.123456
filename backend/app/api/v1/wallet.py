@@ -24,9 +24,19 @@ class WithdrawSchema(BaseModel):
 
 @router.get("")
 def get_wallet(current_user: User = Depends(get_current_active_user), db: Session = Depends(get_db)):
-    wallet = db.query(Wallet).filter(Wallet.user_id == current_user.id).first()
-    if not wallet:
-        wallet = Wallet(user_id=current_user.id, available_rd=0.0, escrow_rd=0.0, pending_rd=0.0)
+    role_str = current_user.role.value if hasattr(current_user.role, "value") else str(current_user.role)
+    is_worker = (role_str == "TRABAJADOR")
+
+    wallet = db.query(Wallet).filter(Wallet.worker_id == current_user.id).first()
+    if is_worker and not wallet:
+        wallet = Wallet(
+            worker_id=current_user.id,
+            available_balance=0.0,
+            pending_custody_balance=0.0,
+            total_earnings=0.0,
+            total_commissions=0.0,
+            total_withdrawn=0.0
+        )
         db.add(wallet)
         db.commit()
         db.refresh(wallet)
@@ -34,18 +44,44 @@ def get_wallet(current_user: User = Depends(get_current_active_user), db: Sessio
     txs = db.query(WalletTransaction).filter(WalletTransaction.user_id == current_user.id).order_by(WalletTransaction.created_at.desc()).all()
     withdrawals = db.query(Withdrawal).filter(Withdrawal.user_id == current_user.id).order_by(Withdrawal.requested_at.desc()).all()
 
-    role_str = current_user.role.value if hasattr(current_user.role, "value") else str(current_user.role)
+    if not wallet:
+        return {
+            "wallet": {
+                "id": None,
+                "user_id": current_user.id,
+                "worker_id": current_user.id,
+                "available_rd": 0.0,
+                "escrow_rd": 0.0,
+                "pending_rd": 0.0,
+                "total_received_rd": 0.0,
+                "total_spent_rd": 0.0,
+                "can_withdraw": False
+            },
+            "transactions": [
+                {
+                    "id": t.id,
+                    "type": t.type,
+                    "amount_rd": t.amount_rd,
+                    "description": t.description,
+                    "reference": t.reference,
+                    "status": t.status,
+                    "created_at": str(t.created_at)
+                } for t in txs
+            ],
+            "withdrawals": []
+        }
 
     return {
         "wallet": {
             "id": wallet.id,
-            "user_id": wallet.user_id,
-            "available_rd": wallet.available_rd,
-            "escrow_rd": wallet.escrow_rd,
-            "pending_rd": wallet.pending_rd,
-            "total_received_rd": wallet.total_received_rd,
-            "total_spent_rd": wallet.total_spent_rd,
-            "can_withdraw": (role_str == "TRABAJADOR")
+            "user_id": wallet.worker_id,
+            "worker_id": wallet.worker_id,
+            "available_rd": wallet.available_balance,
+            "escrow_rd": wallet.pending_custody_balance,
+            "pending_rd": wallet.pending_custody_balance,
+            "total_received_rd": wallet.total_earnings,
+            "total_spent_rd": wallet.total_withdrawn,
+            "can_withdraw": is_worker
         },
         "transactions": [
             {
@@ -73,15 +109,29 @@ def get_wallet(current_user: User = Depends(get_current_active_user), db: Sessio
 
 @router.post("/deposit")
 def deposit(data: DepositSchema, current_user: User = Depends(get_current_active_user), db: Session = Depends(get_db)):
+    role_str = current_user.role.value if hasattr(current_user.role, "value") else str(current_user.role)
+    if role_str != "TRABAJADOR":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Los clientes pagan los servicios directamente mediante Custodia SERVIYA."
+        )
+
     if data.amount_rd <= 0:
         raise HTTPException(status_code=400, detail="El monto a depositar debe ser mayor que RD$ 0.")
 
-    wallet = db.query(Wallet).filter(Wallet.user_id == current_user.id).first()
+    wallet = db.query(Wallet).filter(Wallet.worker_id == current_user.id).first()
     if not wallet:
-        wallet = Wallet(user_id=current_user.id, available_rd=0.0, escrow_rd=0.0, pending_rd=0.0)
+        wallet = Wallet(
+            worker_id=current_user.id,
+            available_balance=0.0,
+            pending_custody_balance=0.0,
+            total_earnings=0.0,
+            total_commissions=0.0,
+            total_withdrawn=0.0
+        )
         db.add(wallet)
 
-    wallet.available_rd += data.amount_rd
+    wallet.available_balance += data.amount_rd
     ref = f"DEP-{uuid.uuid4().hex[:8].upper()}"
 
     tx = WalletTransaction(
@@ -99,7 +149,7 @@ def deposit(data: DepositSchema, current_user: User = Depends(get_current_active
     return {
         "message": f"Depósito de RD$ {data.amount_rd:,.2f} procesado exitosamente.",
         "reference": ref,
-        "available_rd": wallet.available_rd
+        "available_rd": wallet.available_balance
     }
 
 @router.post("/withdraw")
@@ -118,12 +168,12 @@ def withdraw(data: WithdrawSchema, current_user: User = Depends(get_current_acti
             detail=f"El monto mínimo de retiro es RD$ {settings.MIN_WITHDRAWAL_RD:,.2f}"
         )
 
-    wallet = db.query(Wallet).filter(Wallet.user_id == current_user.id).first()
-    if not wallet or wallet.available_rd < data.amount_rd:
+    wallet = db.query(Wallet).filter(Wallet.worker_id == current_user.id).first()
+    if not wallet or wallet.available_balance < data.amount_rd:
         raise HTTPException(status_code=400, detail="Saldo insuficiente en Billetera disponible.")
 
-    wallet.available_rd -= data.amount_rd
-    wallet.pending_rd += data.amount_rd
+    wallet.available_balance -= data.amount_rd
+    wallet.pending_custody_balance += data.amount_rd
 
     withdrawal = Withdrawal(
         user_id=current_user.id,
@@ -152,6 +202,6 @@ def withdraw(data: WithdrawSchema, current_user: User = Depends(get_current_acti
     return {
         "message": f"Solicitud de retiro por RD$ {data.amount_rd:,.2f} enviada a revisión administrativa.",
         "withdrawal_id": withdrawal.id,
-        "available_rd": wallet.available_rd,
-        "pending_rd": wallet.pending_rd
+        "available_rd": wallet.available_balance,
+        "pending_rd": wallet.pending_custody_balance
     }

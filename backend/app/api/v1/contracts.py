@@ -84,17 +84,17 @@ def confirm_completion(id: str, current_user: User = Depends(get_current_active_
 
     service.status = ServiceStatusEnum.COMPLETADA
 
-    # Client Wallet: subtract from escrow_rd
-    client_wallet = db.query(Wallet).filter(Wallet.user_id == service.client_id).first()
+    # Client Wallet (if any exists)
+    client_wallet = db.query(Wallet).filter(Wallet.worker_id == service.client_id).first()
     if client_wallet:
-        client_wallet.escrow_rd = max(0.0, client_wallet.escrow_rd - escrow.total_amount_rd)
-        client_wallet.total_spent_rd += escrow.total_amount_rd
+        client_wallet.pending_custody_balance = max(0.0, client_wallet.pending_custody_balance - escrow.total_amount_rd)
 
     # Worker Wallet: add worker_payout_rd
-    worker_wallet = db.query(Wallet).filter(Wallet.user_id == service.worker_id).first()
+    worker_wallet = db.query(Wallet).filter(Wallet.worker_id == service.worker_id).first()
     if worker_wallet:
-        worker_wallet.available_rd += escrow.worker_payout_rd
-        worker_wallet.total_received_rd += escrow.worker_payout_rd
+        worker_wallet.available_balance += escrow.worker_payout_rd
+        worker_wallet.total_earnings += escrow.worker_payout_rd
+        worker_wallet.total_commissions += escrow.commission_amount_rd
 
         tx = WalletTransaction(
             wallet_id=worker_wallet.id,

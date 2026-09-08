@@ -153,9 +153,9 @@ def process_withdrawal(id: str, admin_user: User = Depends(require_admin), db: S
     with_item.status = WithdrawalStatusEnum.COMPLETADO
     with_item.processed_at = datetime.utcnow()
 
-    wallet = db.query(Wallet).filter(Wallet.user_id == with_item.user_id).first()
+    wallet = db.query(Wallet).filter(Wallet.worker_id == with_item.user_id).first()
     if wallet:
-        wallet.pending_rd = max(0.0, wallet.pending_rd - with_item.amount_rd)
+        wallet.pending_custody_balance = max(0.0, wallet.pending_custody_balance - with_item.amount_rd)
 
     audit = AuditLog(
         user_id=admin_user.id,
@@ -184,21 +184,21 @@ def resolve_dispute(id: str, data: ResolveDisputeSchema, admin_user: User = Depe
     if escrow:
         if data.action == "REFUND_TO_CLIENT":
             escrow.status = "REEMBOLSADO"
-            client_wallet = db.query(Wallet).filter(Wallet.user_id == escrow.client_id).first()
+            client_wallet = db.query(Wallet).filter(Wallet.worker_id == escrow.client_id).first()
             if client_wallet:
-                client_wallet.escrow_rd = max(0.0, client_wallet.escrow_rd - escrow.total_amount_rd)
-                client_wallet.available_rd += escrow.total_amount_rd
+                client_wallet.pending_custody_balance = max(0.0, client_wallet.pending_custody_balance - escrow.total_amount_rd)
+                client_wallet.available_balance += escrow.total_amount_rd
         else:
             escrow.status = "LIBERADO"
             escrow.released_at = datetime.utcnow()
 
-            client_wallet = db.query(Wallet).filter(Wallet.user_id == escrow.client_id).first()
+            client_wallet = db.query(Wallet).filter(Wallet.worker_id == escrow.client_id).first()
             if client_wallet:
-                client_wallet.escrow_rd = max(0.0, client_wallet.escrow_rd - escrow.total_amount_rd)
+                client_wallet.pending_custody_balance = max(0.0, client_wallet.pending_custody_balance - escrow.total_amount_rd)
 
-            worker_wallet = db.query(Wallet).filter(Wallet.user_id == escrow.worker_id).first()
+            worker_wallet = db.query(Wallet).filter(Wallet.worker_id == escrow.worker_id).first()
             if worker_wallet:
-                worker_wallet.available_rd += escrow.worker_payout_rd
+                worker_wallet.available_balance += escrow.worker_payout_rd
 
     service = db.query(Service).filter(Service.id == disp.service_id).first()
     if service:

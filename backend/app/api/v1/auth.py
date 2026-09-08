@@ -16,12 +16,18 @@ class RegisterSchema(BaseModel):
     email: EmailStr
     phone: str
     password: str
+    confirm_password: Optional[str] = None
     role: Optional[str] = "CLIENTE"
     cedula: Optional[str] = None
     province: Optional[str] = "Distrito Nacional"
     municipality: Optional[str] = "Santo Domingo de Guzmán (DN)"
     profession: Optional[str] = None
     accept_policies: Optional[bool] = False
+    bank_name: Optional[str] = None
+    bank_account_number: Optional[str] = None
+    confirm_bank_account_number: Optional[str] = None
+    account_number: Optional[str] = None
+    confirm_account_number: Optional[str] = None
 
 class LoginSchema(BaseModel):
     email: EmailStr
@@ -41,6 +47,43 @@ def register(data: RegisterSchema, db: Session = Depends(get_db)):
             detail="Debe aceptar las políticas y condiciones para registrarse."
         )
 
+    if data.confirm_password is not None and data.confirm_password != data.password:
+        raise HTTPException(
+            status_code=400,
+            detail="Las contraseñas no coinciden."
+        )
+
+    role_str = (data.role or "CLIENTE").upper()
+
+    if role_str == "TRABAJADOR":
+        if not data.cedula:
+            raise HTTPException(
+                status_code=400,
+                detail="La cédula es obligatoria para registrarse como trabajador."
+            )
+
+        allowed_banks = ["banco popular", "bhd", "banreservas"]
+        if not data.bank_name or data.bank_name.strip().lower() not in allowed_banks:
+            raise HTTPException(
+                status_code=400,
+                detail="El banco debe ser Banco Popular, BHD o Banreservas."
+            )
+
+        acc_num = data.bank_account_number or data.account_number
+        conf_acc_num = data.confirm_bank_account_number or data.confirm_account_number
+
+        if not acc_num or not acc_num.strip():
+            raise HTTPException(
+                status_code=400,
+                detail="El número de cuenta bancaria es obligatorio para el trabajador."
+            )
+
+        if not conf_acc_num or conf_acc_num.strip() != acc_num.strip():
+            raise HTTPException(
+                status_code=400,
+                detail="Los números de cuenta bancaria no coinciden."
+            )
+
     existing_user = db.query(User).filter(User.email == data.email).first()
     if existing_user:
         raise HTTPException(
@@ -48,7 +91,7 @@ def register(data: RegisterSchema, db: Session = Depends(get_db)):
             detail="Ya existe una cuenta registrada con este correo electrónico."
         )
     
-    role_enum = UserRoleEnum.TRABAJADOR if data.role == "TRABAJADOR" else UserRoleEnum.CLIENTE
+    role_enum = UserRoleEnum.TRABAJADOR if role_str == "TRABAJADOR" else UserRoleEnum.CLIENTE
     hashed_pwd = get_password_hash(data.password)
     
     user = User(
@@ -59,7 +102,7 @@ def register(data: RegisterSchema, db: Session = Depends(get_db)):
         cedula=data.cedula,
         password_hash=hashed_pwd,
         role=role_enum,
-        active_role=data.role or "CLIENTE",
+        active_role=role_str,
         province=data.province or "Distrito Nacional",
         municipality=data.municipality or "Santo Domingo de Guzmán (DN)",
         is_verified=False
@@ -67,25 +110,31 @@ def register(data: RegisterSchema, db: Session = Depends(get_db)):
     db.add(user)
     db.flush()
 
-    # Create Wallet for User
-    wallet = Wallet(
-        user_id=user.id,
-        available_rd=0.0,
-        escrow_rd=0.0,
-        pending_rd=0.0
-    )
-    db.add(wallet)
-
-    if data.role == "TRABAJADOR":
+    if role_str == "TRABAJADOR":
+        acc_num = (data.bank_account_number or data.account_number or "").strip()
+        # Create WorkerProfile with bank details
         profile = WorkerProfile(
             user_id=user.id,
             profession=data.profession or "Técnico General",
             specialties=["Servicios Generales"],
             experience_years=2,
             hourly_rate_rd=600.0,
-            availability="TIEMPO_COMPLETO"
+            availability="TIEMPO_COMPLETO",
+            bank_name=data.bank_name.strip() if data.bank_name else None,
+            account_number=acc_num
         )
         db.add(profile)
+
+        # Create Worker Wallet with worker_id
+        wallet = Wallet(
+            worker_id=user.id,
+            available_balance=0.0,
+            pending_custody_balance=0.0,
+            total_earnings=0.0,
+            total_commissions=0.0,
+            total_withdrawn=0.0
+        )
+        db.add(wallet)
 
     db.commit()
     db.refresh(user)

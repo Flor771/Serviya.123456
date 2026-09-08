@@ -19,7 +19,7 @@ KNOWN_USER_FK_MAP = {
     'worker_profiles': ['user_id'],
     'services': ['client_id', 'worker_id'],
     'applications': ['worker_id'],
-    'wallets': ['user_id'],
+    'wallets': ['worker_id', 'user_id'],
     'wallet_transactions': ['user_id'],
     'escrows': ['client_id', 'worker_id'],
     'reviews': ['reviewer_id', 'target_user_id'],
