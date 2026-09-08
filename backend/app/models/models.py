@@ -242,7 +242,7 @@ class Withdrawal(Base):
     account_number = Column(String(50), nullable=False)
     account_holder_name = Column(String(150), nullable=False)
     account_holder_cedula = Column(String(20), nullable=False)
-    status = Column(Enum(WithdrawalStatusEnum), default=WithdrawalStatusEnum.PENDIENTE)
+    status = Column(Enum(WithdrawalStatusEnum), default=VerificationStatusEnum.PENDIENTE)
     requested_at = Column(DateTime, default=datetime.utcnow)
     processed_at = Column(DateTime, nullable=True)
 
