@@ -21,6 +21,7 @@ class RegisterSchema(BaseModel):
     province: Optional[str] = "Distrito Nacional"
     municipality: Optional[str] = "Santo Domingo de Guzmán (DN)"
     profession: Optional[str] = None
+    accept_policies: Optional[bool] = False
 
 class LoginSchema(BaseModel):
     email: EmailStr
@@ -34,6 +35,12 @@ class RoleToggleSchema(BaseModel):
 
 @router.post("/register")
 def register(data: RegisterSchema, db: Session = Depends(get_db)):
+    if not data.accept_policies:
+        raise HTTPException(
+            status_code=400,
+            detail="Debe aceptar las políticas y condiciones para registrarse."
+        )
+
     existing_user = db.query(User).filter(User.email == data.email).first()
     if existing_user:
         raise HTTPException(
@@ -50,7 +57,7 @@ def register(data: RegisterSchema, db: Session = Depends(get_db)):
         email=data.email,
         phone=data.phone,
         cedula=data.cedula,
-        hashed_password=hashed_pwd,
+        password_hash=hashed_pwd,
         role=role_enum,
         active_role=data.role or "CLIENTE",
         province=data.province or "Distrito Nacional",
@@ -104,7 +111,8 @@ def register(data: RegisterSchema, db: Session = Depends(get_db)):
 @router.post("/login")
 def login(data: LoginSchema, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.email == data.email).first()
-    if not user or not verify_password(data.password, user.hashed_password):
+    pwd_hash = getattr(user, "password_hash", None) or getattr(user, "hashed_password", None)
+    if not user or not verify_password(data.password, pwd_hash):
         raise HTTPException(
             status_code=401,
             detail="Credenciales incorrectas. Verifique su correo y contraseña."

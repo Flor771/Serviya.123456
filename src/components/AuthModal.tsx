@@ -15,6 +15,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({ initialMode, onClose }) =>
   // Form states
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [acceptPolicies, setAcceptPolicies] = useState(false);
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [phone, setPhone] = useState('809-555-0199');
@@ -32,12 +34,41 @@ export const AuthModal: React.FC<AuthModalProps> = ({ initialMode, onClose }) =>
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    setLoading(true);
 
-    try {
-      if (mode === 'login') {
+    if (mode === 'login') {
+      if (!password) {
+        setError('La contraseña es obligatoria.');
+        return;
+      }
+      setLoading(true);
+      try {
         await login(email, password);
-      } else {
+        onClose();
+      } catch (err: any) {
+        setError(err.message || 'Error en la autenticación.');
+      } finally {
+        setLoading(false);
+      }
+    } else {
+      if (!password) {
+        setError('La contraseña es obligatoria.');
+        return;
+      }
+      if (!confirmPassword) {
+        setError('Debe confirmar su contraseña.');
+        return;
+      }
+      if (password !== confirmPassword) {
+        setError('Las contraseñas no coinciden.');
+        return;
+      }
+      if (!acceptPolicies) {
+        setError('Debe aceptar las políticas y condiciones para registrarse.');
+        return;
+      }
+
+      setLoading(true);
+      try {
         await register({
           email,
           password,
@@ -48,14 +79,15 @@ export const AuthModal: React.FC<AuthModalProps> = ({ initialMode, onClose }) =>
           province,
           municipality,
           role,
-          profession: role === 'TRABAJADOR' ? profession : undefined
+          profession: role === 'TRABAJADOR' ? profession : undefined,
+          accept_policies: true
         });
+        onClose();
+      } catch (err: any) {
+        setError(err.message || 'Error en la autenticación.');
+      } finally {
+        setLoading(false);
       }
-      onClose();
-    } catch (err: any) {
-      setError(err.message || 'Error en la autenticación.');
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -229,6 +261,37 @@ export const AuthModal: React.FC<AuthModalProps> = ({ initialMode, onClose }) =>
               required
             />
           </div>
+
+          {/* Confirm Password (Register mode) */}
+          {mode === 'register' && (
+            <>
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Confirmar contraseña *</label>
+                <input
+                  type="password"
+                  placeholder="••••••••"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  className="w-full text-xs p-3 bg-slate-50 border border-slate-200 rounded-xl"
+                  required
+                />
+              </div>
+
+              {/* Accept Policies Checkbox */}
+              <div className="flex items-start gap-2 pt-1">
+                <input
+                  type="checkbox"
+                  id="acceptPolicies"
+                  checked={acceptPolicies}
+                  onChange={(e) => setAcceptPolicies(e.target.checked)}
+                  className="mt-0.5 h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                />
+                <label htmlFor="acceptPolicies" className="text-xs text-slate-600 cursor-pointer select-none">
+                  Acepto las políticas y condiciones *
+                </label>
+              </div>
+            </>
+          )}
 
           <button
             type="submit"

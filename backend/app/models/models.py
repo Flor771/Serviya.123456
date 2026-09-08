@@ -54,7 +54,15 @@ class User(Base):
     email = Column(String(255), unique=True, index=True, nullable=False)
     phone = Column(String(50), nullable=False)
     cedula = Column(String(20), nullable=True)
-    hashed_password = Column(String(255), nullable=False)
+    password_hash = Column(String(255), nullable=False)
+
+    @property
+    def hashed_password(self) -> str:
+        return self.password_hash
+
+    @hashed_password.setter
+    def hashed_password(self, value: str):
+        self.password_hash = value
     role = Column(Enum(UserRoleEnum), default=UserRoleEnum.CLIENTE)
     active_role = Column(String(20), default="CLIENTE")
     province = Column(String(100), nullable=False, default="Distrito Nacional")

@@ -105,7 +105,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       email: formData.email,
       phone: formData.phone || '809-555-0199',
       password: formData.password,
-      role: role
+      role: role,
+      accept_policies: formData.accept_policies !== undefined ? formData.accept_policies : true
     };
 
     if (formData.cedula || formData.cedula_passport) {
