@@ -185,6 +185,7 @@ const AppContent: React.FC = () => {
         onOpenPublish={() => setShowPublishModal(true)}
         onOpenWallet={() => setActiveTab('billetera')}
         onOpenNotifications={() => setShowNotificationsModal(true)}
+        onOpenMessages={() => setChatParams({ serviceId: '', receiverId: '' })}
         onOpenProfile={() => setActiveTab('perfil')}
         onOpenAdmin={() => setActiveTab('admin')}
         onOpenVerification={() => setShowVerificationModal(true)}

@@ -8,11 +8,29 @@ from app.core.config import settings
 from app.core.deps import get_db, require_admin
 from app.models.models import (
     User, Service, Escrow, Dispute, Withdrawal, VerificationDocument,
-    AuditLog, Wallet, WalletTransaction, VerificationStatusEnum,
+    AuditLog, Wallet, WalletTransaction, BankAccount, VerificationStatusEnum,
     WithdrawalStatusEnum, ServiceStatusEnum, DisputeStatusEnum, UserRoleEnum
 )
 
 router = APIRouter(prefix="/admin", tags=["Administración SERVIYA"])
+
+class BankAccountSchema(BaseModel):
+    bank_name: str
+    account_number: str
+    account_type: Optional[str] = "AHORROS"
+    account_holder: Optional[str] = None
+    rnc_cedula: Optional[str] = None
+    is_active: Optional[bool] = True
+    is_primary: Optional[bool] = False
+
+class UpdateBankAccountSchema(BaseModel):
+    bank_name: Optional[str] = None
+    account_number: Optional[str] = None
+    account_type: Optional[str] = None
+    account_holder: Optional[str] = None
+    rnc_cedula: Optional[str] = None
+    is_active: Optional[bool] = None
+    is_primary: Optional[bool] = None
 
 class ResolveDisputeSchema(BaseModel):
     resolution: str
@@ -246,3 +264,107 @@ def get_audit_logs(admin_user: User = Depends(require_admin), db: Session = Depe
         } for l in logs
     ]
     return {"audit_logs": results}
+
+@router.get("/bank-accounts")
+def get_admin_bank_accounts(admin_user: User = Depends(require_admin), db: Session = Depends(get_db)):
+    accounts = db.query(BankAccount).order_by(BankAccount.is_primary.desc(), BankAccount.id.asc()).all()
+    return {
+        "bank_accounts": [
+            {
+                "id": a.id,
+                "bank_name": a.bank_name,
+                "account_number": a.account_number,
+                "account_type": a.account_type,
+                "account_holder": a.account_holder,
+                "rnc_cedula": a.rnc_cedula,
+                "is_active": a.is_active if a.is_active is not None else True,
+                "is_primary": a.is_primary if a.is_primary is not None else False,
+            } for a in accounts
+        ]
+    }
+
+@router.post("/bank-accounts")
+def create_admin_bank_account(data: BankAccountSchema, admin_user: User = Depends(require_admin), db: Session = Depends(get_db)):
+    if data.is_primary:
+        db.query(BankAccount).update({BankAccount.is_primary: False})
+        db.commit()
+
+    account = BankAccount(
+        bank_name=data.bank_name,
+        account_number=data.account_number,
+        account_type=data.account_type,
+        account_holder=data.account_holder,
+        rnc_cedula=data.rnc_cedula,
+        is_active=data.is_active if data.is_active is not None else True,
+        is_primary=data.is_primary if data.is_primary is not None else False
+    )
+    db.add(account)
+    db.commit()
+    db.refresh(account)
+
+    audit = AuditLog(
+        user_id=admin_user.id,
+        action="BANK_ACCOUNT_CREATED",
+        details=f"Cuenta bancaria {data.bank_name} - {data.account_number} creada."
+    )
+    db.add(audit)
+    db.commit()
+
+    return {
+        "message": "Cuenta bancaria agregada exitosamente.",
+        "bank_account": {
+            "id": account.id,
+            "bank_name": account.bank_name,
+            "account_number": account.account_number,
+            "account_type": account.account_type,
+            "account_holder": account.account_holder,
+            "rnc_cedula": account.rnc_cedula,
+            "is_active": account.is_active,
+            "is_primary": account.is_primary
+        }
+    }
+
+@router.put("/bank-accounts/{account_id}")
+def update_admin_bank_account(account_id: int, data: UpdateBankAccountSchema, admin_user: User = Depends(require_admin), db: Session = Depends(get_db)):
+    account = db.query(BankAccount).filter(BankAccount.id == account_id).first()
+    if not account:
+        raise HTTPException(status_code=404, detail="Cuenta bancaria no encontrada.")
+
+    if data.is_primary:
+        db.query(BankAccount).filter(BankAccount.id != account_id).update({BankAccount.is_primary: False})
+
+    if data.bank_name is not None: account.bank_name = data.bank_name
+    if data.account_number is not None: account.account_number = data.account_number
+    if data.account_type is not None: account.account_type = data.account_type
+    if data.account_holder is not None: account.account_holder = data.account_holder
+    if data.rnc_cedula is not None: account.rnc_cedula = data.rnc_cedula
+    if data.is_active is not None: account.is_active = data.is_active
+    if data.is_primary is not None: account.is_primary = data.is_primary
+
+    db.commit()
+    db.refresh(account)
+
+    return {
+        "message": "Cuenta bancaria actualizada exitosamente.",
+        "bank_account": {
+            "id": account.id,
+            "bank_name": account.bank_name,
+            "account_number": account.account_number,
+            "account_type": account.account_type,
+            "account_holder": account.account_holder,
+            "rnc_cedula": account.rnc_cedula,
+            "is_active": account.is_active,
+            "is_primary": account.is_primary
+        }
+    }
+
+@router.delete("/bank-accounts/{account_id}")
+def delete_admin_bank_account(account_id: int, admin_user: User = Depends(require_admin), db: Session = Depends(get_db)):
+    account = db.query(BankAccount).filter(BankAccount.id == account_id).first()
+    if not account:
+        raise HTTPException(status_code=404, detail="Cuenta bancaria no encontrada.")
+
+    db.delete(account)
+    db.commit()
+
+    return {"message": "Cuenta bancaria eliminada exitosamente."}

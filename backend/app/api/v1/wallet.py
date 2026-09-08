@@ -6,9 +6,26 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.deps import get_db, get_current_active_user
-from app.models.models import Wallet, WalletTransaction, Withdrawal, WithdrawalStatusEnum, User, UserRoleEnum
+from app.models.models import Wallet, WalletTransaction, Withdrawal, WithdrawalStatusEnum, User, UserRoleEnum, BankAccount
 
 router = APIRouter(prefix="/wallet", tags=["Billetera SERVIYA"])
+
+@router.get("/bank-accounts")
+def get_active_serviya_bank_accounts(current_user: User = Depends(get_current_active_user), db: Session = Depends(get_db)):
+    accounts = db.query(BankAccount).filter(BankAccount.is_active == True).order_by(BankAccount.is_primary.desc(), BankAccount.id.asc()).all()
+    return {
+        "bank_accounts": [
+            {
+                "id": a.id,
+                "bank_name": a.bank_name,
+                "account_number": a.account_number,
+                "account_type": a.account_type,
+                "account_holder": a.account_holder,
+                "rnc_cedula": a.rnc_cedula,
+                "is_primary": a.is_primary if a.is_primary is not None else False
+            } for a in accounts
+        ]
+    }
 
 class DepositSchema(BaseModel):
     amount_rd: float

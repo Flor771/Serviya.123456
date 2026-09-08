@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useWallet } from '../context/WalletContext';
 import { useAuth } from '../context/AuthContext';
 import { DOMINICAN_BANKS } from '../data/dominicanData';
+import { api } from '../services/api';
 import { 
   Wallet as WalletIcon, 
   ArrowDownLeft, 
@@ -24,11 +25,26 @@ export const WalletView: React.FC = () => {
   const [showDepositModal, setShowDepositModal] = useState(false);
   const [showWithdrawModal, setShowWithdrawModal] = useState(false);
 
+  // SERVIYA Bank Accounts
+  const [serviyaBankAccounts, setServiyaBankAccounts] = useState<any[]>([]);
+
   // Deposit Form
   const [depositAmount, setDepositAmount] = useState<number | ''>(2500);
   const [depositMethod, setDepositMethod] = useState('Tarjeta Visa / Mastercard');
   const [cardLast4, setCardLast4] = useState('4821');
   const [depositSubmitting, setDepositSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (showDepositModal) {
+      api.get<any>('/wallet/bank-accounts').then((data) => {
+        if (data && data.bank_accounts) {
+          setServiyaBankAccounts(data.bank_accounts);
+        }
+      }).catch((err) => {
+        console.error('Error fetching bank accounts:', err);
+      });
+    }
+  }, [showDepositModal]);
 
   // Withdraw Form
   const [withdrawAmount, setWithdrawAmount] = useState<number | ''>(1000);
@@ -269,19 +285,63 @@ export const WalletView: React.FC = () => {
                   <option value="Transferencia Banco Popular">Transferencia Banco Popular</option>
                   <option value="Transferencia Banreservas">Transferencia Banreservas</option>
                   <option value="Transferencia Banco BHD">Transferencia Banco BHD</option>
+                  <option value="Transferencia Bancaria Directa">Transferencia Bancaria Directa</option>
                 </select>
               </div>
 
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Últimos 4 dígitos tarjeta (Simulado)</label>
-                <input
-                  type="text"
-                  maxLength={4}
-                  value={cardLast4}
-                  onChange={(e) => setCardLast4(e.target.value)}
-                  className="w-full text-xs p-3 bg-slate-50 border border-slate-200 rounded-xl"
-                />
-              </div>
+              {depositMethod.toLowerCase().includes('transferencia') ? (
+                <div className="bg-blue-50/80 p-4 rounded-2xl border border-blue-200 space-y-3 text-xs">
+                  <div className="flex items-center gap-1.5 font-bold text-blue-900">
+                    <Building2 className="w-4 h-4 text-blue-600" />
+                    <span>Cuentas Bancarias Oficiales SERVIYA.do</span>
+                  </div>
+                  <p className="text-[11px] text-blue-800">
+                    Por favor realiza tu transferencia a la siguiente cuenta y confirma el monto ingresado:
+                  </p>
+
+                  {serviyaBankAccounts.filter(a => a.is_active !== false).length === 0 ? (
+                    <div className="p-3 bg-white rounded-xl border border-blue-100 text-slate-700 font-medium text-[11px]">
+                      <p><strong>Banco:</strong> Banco Popular Dominicano</p>
+                      <p><strong>Cuenta Corriente:</strong> 792003841</p>
+                      <p><strong>Titular:</strong> SERVIYA DOMINICANA SRL</p>
+                      <p><strong>RNC:</strong> 1-32-45678-9</p>
+                    </div>
+                  ) : (
+                    serviyaBankAccounts
+                      .filter(a => a.is_active !== false)
+                      .map((acc) => (
+                        <div key={acc.id} className="p-3 bg-white rounded-xl border border-blue-100 text-slate-800 text-[11px] space-y-1 shadow-sm">
+                          <div className="flex items-center justify-between">
+                            <span className="font-black text-blue-950 text-xs">{acc.bank_name}</span>
+                            {acc.is_primary && (
+                              <span className="bg-emerald-100 text-emerald-800 text-[9px] font-bold px-2 py-0.5 rounded-full border border-emerald-300">
+                                ⭐ Principal
+                              </span>
+                            )}
+                          </div>
+                          <p><strong>Número de Cuenta:</strong> <span className="font-bold text-slate-900">{acc.account_number}</span> ({acc.account_type || 'Ahorros'})</p>
+                          <p><strong>Titular:</strong> {acc.account_holder || 'SERVIYA SRL'}</p>
+                          {acc.rnc_cedula && <p><strong>RNC / Cédula:</strong> {acc.rnc_cedula}</p>}
+                        </div>
+                      ))
+                  )}
+
+                  <div className="text-[10px] text-blue-700 font-semibold bg-blue-100/60 p-2 rounded-lg">
+                    💡 <strong>Instrucciones:</strong> Utiliza el número de cuenta arriba indicado en tu Banca en Línea. Al presionar "Confirmar Depósito", tu solicitud de depósito simulado será registrada.
+                  </div>
+                </div>
+              ) : (
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Últimos 4 dígitos tarjeta (Simulado)</label>
+                  <input
+                    type="text"
+                    maxLength={4}
+                    value={cardLast4}
+                    onChange={(e) => setCardLast4(e.target.value)}
+                    className="w-full text-xs p-3 bg-slate-50 border border-slate-200 rounded-xl"
+                  />
+                </div>
+              )}
 
               <button
                 type="submit"

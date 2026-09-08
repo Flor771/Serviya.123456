@@ -317,6 +317,19 @@ class Withdrawal(Base):
     requested_at = Column(DateTime, default=datetime.utcnow)
     processed_at = Column(DateTime, nullable=True)
 
+class BankAccount(Base):
+    __tablename__ = "bank_accounts"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    bank_name = Column(String(100), nullable=False)
+    account_number = Column(String(100), nullable=False)
+    account_type = Column(String(50), nullable=True)
+    account_holder = Column(String(150), nullable=True)
+    rnc_cedula = Column(String(50), nullable=True)
+    is_active = Column(Boolean, default=True, nullable=True)
+    is_primary = Column(Boolean, default=False, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
 class AuditLog(Base):
     __tablename__ = "audit_logs"
 

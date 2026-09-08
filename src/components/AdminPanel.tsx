@@ -30,8 +30,17 @@ export const AdminPanel: React.FC = () => {
   const [verifications, setVerifications] = useState<any[]>([]);
   const [withdrawals, setWithdrawals] = useState<any[]>([]);
   const [disputes, setDisputes] = useState<any[]>([]);
+  const [bankAccounts, setBankAccounts] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [msgSuccess, setMsgSuccess] = useState('');
+
+  // Bank account form
+  const [newBank, setNewBank] = useState('Banco Popular');
+  const [newNumber, setNewNumber] = useState('');
+  const [newType, setNewType] = useState('CORRIENTE');
+  const [newHolder, setNewHolder] = useState('SERVIYA DOMINICANA SRL');
+  const [newRnc, setNewRnc] = useState('1-32-45678-9');
+  const [newPrimary, setNewPrimary] = useState(false);
 
   const fetchAdminData = async () => {
     setLoading(true);
@@ -44,10 +53,69 @@ export const AdminPanel: React.FC = () => {
         setWithdrawals(data.withdrawals || []);
         setDisputes(data.disputes || []);
       }
+      const accData = await api.get<any>('/admin/bank-accounts');
+      if (accData && accData.bank_accounts) {
+        setBankAccounts(accData.bank_accounts);
+      }
     } catch (err) {
       console.error('Error fetching admin data:', err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleCreateBankAccount = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newBank || !newNumber) return;
+    try {
+      await api.post('/admin/bank-accounts', {
+        bank_name: newBank,
+        account_number: newNumber,
+        account_type: newType,
+        account_holder: newHolder,
+        rnc_cedula: newRnc,
+        is_active: true,
+        is_primary: newPrimary
+      });
+      setMsgSuccess('Cuenta bancaria agregada exitosamente.');
+      setNewNumber('');
+      fetchAdminData();
+    } catch (err) {
+      console.error('Error adding bank account:', err);
+    }
+  };
+
+  const handleToggleActiveBank = async (acc: any) => {
+    try {
+      await api.put(`/admin/bank-accounts/${acc.id}`, {
+        is_active: !acc.is_active
+      });
+      setMsgSuccess(`Cuenta ${acc.bank_name} actualizada.`);
+      fetchAdminData();
+    } catch (err) {
+      console.error('Error updating bank account:', err);
+    }
+  };
+
+  const handleSetPrimaryBank = async (acc: any) => {
+    try {
+      await api.put(`/admin/bank-accounts/${acc.id}`, {
+        is_primary: true
+      });
+      setMsgSuccess(`Cuenta ${acc.bank_name} establecida como principal.`);
+      fetchAdminData();
+    } catch (err) {
+      console.error('Error updating primary bank account:', err);
+    }
+  };
+
+  const handleDeleteBank = async (id: number) => {
+    try {
+      await api.delete(`/admin/bank-accounts/${id}`);
+      setMsgSuccess('Cuenta bancaria eliminada.');
+      fetchAdminData();
+    } catch (err) {
+      console.error('Error deleting bank account:', err);
     }
   };
 
@@ -251,6 +319,159 @@ export const AdminPanel: React.FC = () => {
             ))}
           </div>
         )}
+      </div>
+
+      {/* Official SERVIYA Bank Accounts Management */}
+      <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-6">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Building2 className="w-5 h-5 text-blue-600" />
+            <h2 className="text-base font-bold text-slate-900">Cuentas Bancarias Oficiales de SERVIYA (Para Depósitos de Clientes)</h2>
+          </div>
+        </div>
+
+        {/* Add Bank Account Form */}
+        <form onSubmit={handleCreateBankAccount} className="bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-3 text-xs">
+          <h3 className="font-bold text-slate-800">Agregar Nueva Cuenta Bancaria SERVIYA</h3>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div>
+              <label className="block font-bold text-slate-700 mb-1">Banco *</label>
+              <select
+                value={newBank}
+                onChange={(e) => setNewBank(e.target.value)}
+                className="w-full p-2.5 bg-white border border-slate-200 rounded-xl font-medium"
+              >
+                <option value="Banco Popular">Banco Popular</option>
+                <option value="Banreservas">Banreservas</option>
+                <option value="Banco BHD">Banco BHD</option>
+                <option value="Banco Santa Cruz">Banco Santa Cruz</option>
+                <option value="Scotiabank RD">Scotiabank RD</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block font-bold text-slate-700 mb-1">Número de Cuenta *</label>
+              <input
+                type="text"
+                placeholder="Ej. 792003841"
+                value={newNumber}
+                onChange={(e) => setNewNumber(e.target.value)}
+                className="w-full p-2.5 bg-white border border-slate-200 rounded-xl"
+                required
+              />
+            </div>
+
+            <div>
+              <label className="block font-bold text-slate-700 mb-1">Tipo de Cuenta</label>
+              <select
+                value={newType}
+                onChange={(e) => setNewType(e.target.value)}
+                className="w-full p-2.5 bg-white border border-slate-200 rounded-xl"
+              >
+                <option value="CORRIENTE">Corriente</option>
+                <option value="AHORROS">Ahorros</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block font-bold text-slate-700 mb-1">Titular de la Cuenta</label>
+              <input
+                type="text"
+                value={newHolder}
+                onChange={(e) => setNewHolder(e.target.value)}
+                className="w-full p-2.5 bg-white border border-slate-200 rounded-xl"
+              />
+            </div>
+
+            <div>
+              <label className="block font-bold text-slate-700 mb-1">RNC o Cédula Titular</label>
+              <input
+                type="text"
+                value={newRnc}
+                onChange={(e) => setNewRnc(e.target.value)}
+                className="w-full p-2.5 bg-white border border-slate-200 rounded-xl"
+              />
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between pt-1">
+            <label className="flex items-center gap-2 cursor-pointer font-bold text-slate-700">
+              <input
+                type="checkbox"
+                checked={newPrimary}
+                onChange={(e) => setNewPrimary(e.target.checked)}
+                className="rounded text-blue-600 focus:ring-blue-500"
+              />
+              <span>Marcar como Cuenta Principal</span>
+            </label>
+
+            <button
+              type="submit"
+              className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-4 py-2 rounded-xl transition shadow-sm"
+            >
+              ➕ Guardar Cuenta
+            </button>
+          </div>
+        </form>
+
+        {/* Existing Accounts List */}
+        <div className="space-y-3">
+          <h3 className="text-xs font-bold text-slate-500 uppercase">Cuentas Configuradas ({bankAccounts.length})</h3>
+          {bankAccounts.length === 0 ? (
+            <p className="text-xs text-slate-400 text-center py-4">No hay cuentas bancarias registradas en el sistema.</p>
+          ) : (
+            bankAccounts.map((acc) => (
+              <div key={acc.id} className="p-4 bg-slate-50 rounded-2xl border border-slate-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-slate-900 text-sm">{acc.bank_name}</span>
+                    {acc.is_primary && (
+                      <span className="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2 py-0.5 rounded-full border border-emerald-300">
+                        ⭐ Principal
+                      </span>
+                    )}
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${acc.is_active ? 'bg-blue-100 text-blue-800' : 'bg-slate-200 text-slate-600'}`}>
+                      {acc.is_active ? 'Activa' : 'Inactiva'}
+                    </span>
+                  </div>
+                  <p className="text-slate-700 font-medium">
+                    Número: <strong className="text-slate-900">{acc.account_number}</strong> ({acc.account_type || 'Ahorros'})
+                  </p>
+                  <p className="text-slate-500 text-[11px]">
+                    Titular: {acc.account_holder || 'SERVIYA SRL'} {acc.rnc_cedula ? `• RNC/Cédula: ${acc.rnc_cedula}` : ''}
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  {!acc.is_primary && (
+                    <button
+                      onClick={() => handleSetPrimaryBank(acc)}
+                      className="bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold px-2.5 py-1.5 rounded-xl transition text-[11px]"
+                    >
+                      Hacer Principal
+                    </button>
+                  )}
+                  <button
+                    onClick={() => handleToggleActiveBank(acc)}
+                    className={`font-bold px-2.5 py-1.5 rounded-xl transition text-[11px] ${
+                      acc.is_active ? 'bg-amber-100 text-amber-800 hover:bg-amber-200' : 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200'
+                    }`}
+                  >
+                    {acc.is_active ? 'Desactivar' : 'Activar'}
+                  </button>
+                  <button
+                    onClick={() => handleDeleteBank(acc.id)}
+                    className="bg-red-50 hover:bg-red-100 text-red-600 font-bold px-2.5 py-1.5 rounded-xl border border-red-200 transition text-[11px]"
+                  >
+                    Eliminar
+                  </button>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
       </div>
 
     </div>

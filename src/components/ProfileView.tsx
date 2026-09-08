@@ -10,6 +10,8 @@ interface ProfileViewProps {
 export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenVerification }) => {
   const { user, updateProfile, logout } = useAuth();
 
+  const isWorker = user?.role === 'TRABAJADOR' || user?.activeRole === 'TRABAJADOR';
+
   const [firstName, setFirstName] = useState(user?.first_name || '');
   const [lastName, setLastName] = useState(user?.last_name || '');
   const [phone, setPhone] = useState(user?.phone || '');
@@ -28,20 +30,25 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenVerification }) 
     e.preventDefault();
     setSaving(true);
     try {
-      await updateProfile({
+      const payload: any = {
         first_name: firstName,
         last_name: lastName,
         phone,
         province,
-        municipality,
-        worker_profile: {
+        municipality
+      };
+
+      if (isWorker) {
+        payload.worker_profile = {
           profession,
           hourly_rate_rd: hourlyRate,
           bio,
           specialties: ['Reparaciones de emergencia', 'Instalación industrial'],
           portfolio_images: ['https://images.unsplash.com/photo-1581578731548-c64695cc6952?w=800']
-        } as any
-      });
+        };
+      }
+
+      await updateProfile(payload);
       setMsgSuccess('¡Perfil actualizado con éxito!');
     } catch (err) {
       console.error('Error updating profile:', err);
@@ -142,42 +149,44 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenVerification }) 
           </div>
         </div>
 
-        {/* Worker Specifics */}
-        <div className="pt-2 border-t border-slate-100 space-y-3">
-          <h3 className="text-xs font-bold text-slate-900 uppercase text-slate-400">Perfil de Trabajo / Oficio</h3>
+        {/* Worker Specifics - Only rendered for TRABAJADOR */}
+        {isWorker && (
+          <div className="pt-2 border-t border-slate-100 space-y-3">
+            <h3 className="text-xs font-bold text-slate-900 uppercase text-slate-400">Perfil de Trabajo / Oficio</h3>
 
-          <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Especialidad / Oficio</label>
+                <input
+                  type="text"
+                  value={profession}
+                  onChange={(e) => setProfession(e.target.value)}
+                  className="w-full text-xs p-3 bg-slate-50 border border-slate-200 rounded-xl"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Tarifa Hora Estimada (RD$)</label>
+                <input
+                  type="number"
+                  value={hourlyRate}
+                  onChange={(e) => setHourlyRate(Number(e.target.value))}
+                  className="w-full text-xs p-3 bg-slate-50 border border-slate-200 rounded-xl font-bold"
+                />
+              </div>
+            </div>
+
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">Especialidad / Oficio</label>
-              <input
-                type="text"
-                value={profession}
-                onChange={(e) => setProfession(e.target.value)}
+              <label className="block text-xs font-bold text-slate-700 mb-1">Biografía / Presentación técnica</label>
+              <textarea
+                rows={3}
+                value={bio}
+                onChange={(e) => setBio(e.target.value)}
                 className="w-full text-xs p-3 bg-slate-50 border border-slate-200 rounded-xl"
               />
             </div>
-
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">Tarifa Hora Estimada (RD$)</label>
-              <input
-                type="number"
-                value={hourlyRate}
-                onChange={(e) => setHourlyRate(Number(e.target.value))}
-                className="w-full text-xs p-3 bg-slate-50 border border-slate-200 rounded-xl font-bold"
-              />
-            </div>
           </div>
-
-          <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1">Biografía / Presentación técnica</label>
-            <textarea
-              rows={3}
-              value={bio}
-              onChange={(e) => setBio(e.target.value)}
-              className="w-full text-xs p-3 bg-slate-50 border border-slate-200 rounded-xl"
-            />
-          </div>
-        </div>
+        )}
 
         <button
           type="submit"

@@ -13,7 +13,8 @@ import {
   Layers, 
   Menu, 
   X,
-  ChevronDown
+  ChevronDown,
+  MessageSquare
 } from 'lucide-react';
 
 interface HeaderProps {
@@ -21,6 +22,7 @@ interface HeaderProps {
   onOpenPublish: () => void;
   onOpenWallet: () => void;
   onOpenNotifications: () => void;
+  onOpenMessages?: () => void;
   onOpenProfile: () => void;
   onOpenAdmin: () => void;
   onOpenVerification: () => void;
@@ -34,6 +36,7 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenPublish,
   onOpenWallet,
   onOpenNotifications,
+  onOpenMessages,
   onOpenProfile,
   onOpenAdmin,
   onOpenVerification,
@@ -129,6 +132,17 @@ export const Header: React.FC<HeaderProps> = ({
                   <PlusCircle className="w-4 h-4" />
                   <span>Publicar Servicio</span>
                 </button>
+
+                {/* Messages Shortcut */}
+                {onOpenMessages && (
+                  <button
+                    onClick={onOpenMessages}
+                    className="p-2 text-slate-300 hover:text-white hover:bg-slate-800 rounded-xl transition flex items-center gap-1"
+                    title="Mensajes y Chats"
+                  >
+                    <MessageSquare className="w-5 h-5 text-blue-400" />
+                  </button>
+                )}
 
                 {/* Notifications Bell */}
                 <button
