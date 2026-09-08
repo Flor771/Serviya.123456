@@ -26,6 +26,15 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.on_event("startup")
+def on_startup():
+    try:
+        from app.database.database import engine
+        from app.database.base import Base
+        Base.metadata.create_all(bind=engine)
+    except Exception as e:
+        print(f"Startup DB table initialization notice: {e}")
+
 # Include API Router FIRST
 app.include_router(api_router)
 
