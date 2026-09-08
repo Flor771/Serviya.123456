@@ -12,7 +12,7 @@ export function removeAuthToken() {
   localStorage.removeItem('serviya_token');
 }
 
-async function request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
+export async function apiFetch<T = any>(endpoint: string, options: RequestInit = {}): Promise<T> {
   const token = getAuthToken();
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -23,18 +23,56 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
     headers['Authorization'] = `Bearer ${token}`;
   }
 
-  const response = await fetch(`${API_BASE}${endpoint}`, {
+  const url = endpoint.startsWith('/api') ? endpoint : `${API_BASE}${endpoint.startsWith('/') ? '' : '/'}${endpoint}`;
+
+  const response = await fetch(url, {
     ...options,
     headers
   });
 
-  const data = await response.json();
+  let data: any = null;
+  const contentType = response.headers.get('content-type') || '';
+
+  if (contentType.includes('application/json')) {
+    try {
+      data = await response.json();
+    } catch (err) {
+      data = null;
+    }
+  } else {
+    try {
+      const text = await response.text();
+      data = { message: text || `Error HTTP ${response.status}: ${response.statusText}` };
+    } catch (err) {
+      data = { message: `Error HTTP ${response.status}: ${response.statusText}` };
+    }
+  }
 
   if (!response.ok) {
-    throw new Error(data.error || data.message || 'Error en la solicitud a la API.');
+    let errorMsg = 'Error en la solicitud a la API.';
+    if (data) {
+      if (typeof data.detail === 'string') {
+        errorMsg = data.detail;
+      } else if (Array.isArray(data.detail)) {
+        errorMsg = data.detail.map((d: any) => d.msg || d.message || JSON.stringify(d)).join(', ');
+      } else if (data.error) {
+        errorMsg = typeof data.error === 'string' ? data.error : JSON.stringify(data.error);
+      } else if (data.message) {
+        errorMsg = typeof data.message === 'string' ? data.message : JSON.stringify(data.message);
+      } else if (typeof data === 'string') {
+        errorMsg = data;
+      }
+    } else {
+      errorMsg = `Error HTTP ${response.status}: ${response.statusText}`;
+    }
+    throw new Error(errorMsg);
   }
 
   return data as T;
+}
+
+async function request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
+  return apiFetch<T>(endpoint, options);
 }
 
 export const api = {

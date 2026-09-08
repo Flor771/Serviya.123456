@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { User } from '../types';
-import { api, setAuthToken, removeAuthToken, getAuthToken } from '../services/api';
+import { api, apiFetch, setAuthToken, removeAuthToken, getAuthToken } from '../services/api';
 
 interface AuthContextType {
   user: User | null;
@@ -12,6 +12,31 @@ interface AuthContextType {
   updateProfile: (data: Partial<User>) => Promise<void>;
   refreshUser: () => Promise<void>;
 }
+
+const normalizeUser = (userObj: any): User | null => {
+  if (!userObj) return null;
+  const raw = userObj.user || userObj;
+
+  const firstName = raw.first_name || '';
+  const lastName = raw.last_name || '';
+  const fullName = raw.full_name || `${firstName} ${lastName}`.trim() || raw.email || 'Usuario';
+
+  let role = raw.role;
+  if (role === 'CLIENT') role = 'CLIENTE';
+  if (role === 'WORKER') role = 'TRABAJADOR';
+  if (!role) role = 'CLIENTE';
+
+  const activeRole = raw.active_role || raw.activeRole || (role === 'TRABAJADOR' ? 'TRABAJADOR' : 'CLIENTE');
+
+  return {
+    ...raw,
+    first_name: firstName,
+    last_name: lastName,
+    full_name: fullName,
+    role: role,
+    activeRole: activeRole
+  };
+};
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
@@ -27,8 +52,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setLoading(false);
         return;
       }
-      const data = await api.get<{ user: User }>('/auth/me');
-      setUser(data.user);
+      const me = await apiFetch('/auth/me');
+      const normalized = normalizeUser(me);
+      setUser(normalized);
     } catch (err) {
       console.error('Failed to load user:', err);
       removeAuthToken();
@@ -43,15 +69,70 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const login = async (email: string, pass: string) => {
-    const data = await api.post<{ user: User; token: string }>('/auth/login', { email, password: pass });
-    setAuthToken(data.token);
-    setUser(data.user);
+    const data = await api.post<any>('/auth/login', { email, password: pass });
+    const token = data.token || data.access_token;
+    if (token) {
+      setAuthToken(token);
+    }
+
+    try {
+      const me = await apiFetch('/auth/me');
+      setUser(normalizeUser(me));
+    } catch (err) {
+      setUser(normalizeUser(data.user || data));
+    }
   };
 
   const register = async (formData: any) => {
-    const data = await api.post<{ user: User; token: string }>('/auth/register', formData);
-    setAuthToken(data.token);
-    setUser(data.user);
+    let firstName = formData.first_name || '';
+    let lastName = formData.last_name || '';
+
+    if (!firstName && formData.full_name) {
+      const parts = String(formData.full_name).trim().split(/\s+/);
+      firstName = parts[0] || 'Usuario';
+      lastName = parts.slice(1).join(' ') || 'SERVIYA';
+    } else if (!lastName) {
+      lastName = 'SERVIYA';
+    }
+
+    let role = formData.role || 'CLIENTE';
+    if (role === 'CLIENT') role = 'CLIENTE';
+    if (role === 'WORKER') role = 'TRABAJADOR';
+
+    const payload: Record<string, any> = {
+      first_name: firstName,
+      last_name: lastName,
+      email: formData.email,
+      phone: formData.phone || '809-555-0199',
+      password: formData.password,
+      role: role
+    };
+
+    if (formData.cedula || formData.cedula_passport) {
+      payload.cedula = formData.cedula || formData.cedula_passport;
+    }
+    if (formData.province) {
+      payload.province = formData.province;
+    }
+    if (formData.municipality) {
+      payload.municipality = formData.municipality;
+    }
+    if (formData.profession) {
+      payload.profession = formData.profession;
+    }
+
+    const data = await api.post<any>('/auth/register', payload);
+    const token = data.token || data.access_token;
+    if (token) {
+      setAuthToken(token);
+    }
+
+    try {
+      const me = await apiFetch('/auth/me');
+      setUser(normalizeUser(me));
+    } catch (err) {
+      setUser(normalizeUser(data.user || data));
+    }
   };
 
   const logout = () => {
@@ -61,16 +142,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const toggleRole = async () => {
     try {
-      const data = await api.post<{ user: User }>('/auth/role-toggle', {});
-      setUser(data.user);
+      const nextRole = user?.activeRole === 'CLIENTE' ? 'TRABAJADOR' : 'CLIENTE';
+      const data = await api.post<any>('/auth/role-toggle', { active_role: nextRole });
+      if (user) {
+        setUser({
+          ...user,
+          activeRole: data.active_role || nextRole
+        });
+      }
     } catch (err) {
       console.error('Error toggling role:', err);
     }
   };
 
   const updateProfile = async (data: Partial<User>) => {
-    const res = await api.put<{ user: User }>('/users/profile', data);
-    setUser(res.user);
+    const res = await api.put<any>('/users/profile', data);
+    setUser(normalizeUser(res));
   };
 
   return (
