@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNotifications } from '../context/NotificationContext';
-import { PWAInstallPrompt } from './PWAInstallPrompt';
 import {
   Bell, User as UserIcon, PlusCircle, ShieldCheck, LogOut, Layers,
   Menu, X, ChevronDown, MessageSquare, FileText, Search, BriefcaseBusiness
@@ -88,7 +87,6 @@ export const Header: React.FC<HeaderProps> = ({
           </nav>
 
           <div className="flex items-center justify-end gap-0.5 sm:gap-2 shrink-0">
-            <PWAInstallPrompt />
             {user ? (
               <>
                 <button onClick={() => onOpenMessages?.()} className="p-2 rounded-xl hover:bg-slate-800" title="Mensajes">
@@ -99,8 +97,18 @@ export const Header: React.FC<HeaderProps> = ({
                   {unreadCount > 0 && <span className="absolute top-0 right-0 bg-red-600 text-[9px] font-bold min-w-4 h-4 rounded-full flex items-center justify-center">{unreadCount}</span>}
                 </button>
                 <div className="relative">
-                  <button onClick={() => setProfileOpen(v => !v)} className="p-1.5 rounded-xl hover:bg-slate-800" title="Mi perfil">
-                    <img src={user.avatar_url || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100'} alt="Mi perfil" className="w-8 h-8 sm:w-9 sm:h-9 rounded-full object-cover border-2 border-blue-500" />
+                  <button onClick={() => setProfileOpen(v => !v)} className="p-1 rounded-xl hover:bg-slate-800" title="Mi perfil" aria-label="Mi perfil">
+                    {user.avatar_url ? (
+                      <img
+                        src={user.avatar_url}
+                        alt={`Foto de perfil de ${user.first_name || 'usuario'}`}
+                        className="w-9 h-9 sm:w-10 sm:h-10 rounded-full object-cover border-2 border-blue-500 bg-slate-800"
+                      />
+                    ) : (
+                      <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-full border-2 border-blue-500 bg-slate-800 flex items-center justify-center">
+                        <UserIcon className="w-5 h-5 text-slate-300" />
+                      </div>
+                    )}
                   </button>
                   {profileOpen && (
                     <div className="absolute right-0 mt-2 w-60 max-w-[calc(100vw-1rem)] bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl p-2 z-50">
