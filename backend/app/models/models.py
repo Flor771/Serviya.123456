@@ -73,7 +73,7 @@ class Review(Base):
 class Notification(Base):
  __tablename__="notifications"; id=Column(String,primary_key=True,default=generate_uuid); user_id=Column(String,ForeignKey("users.id"),nullable=False); title=Column(String(200),nullable=False); message=Column(Text,nullable=False); type=Column(String(50),nullable=False); read=Column(Boolean,default=False); created_at=Column(DateTime,default=datetime.utcnow)
 class Message(Base):
- __tablename__="messages"; id=Column(String,primary_key=True,default=generate_uuid); service_id=Column(String,ForeignKey("services.id"),nullable=False); sender_id=Column(String,ForeignKey("users.id"),nullable=False); receiver_id=Column(String,ForeignKey("users.id"),nullable=False); content=Column(Text,nullable=False); created_at=Column(DateTime,default=datetime.utcnow)
+ __tablename__="messages"; id=Column(Integer,primary_key=True,autoincrement=True); conversation_id=Column(Integer,nullable=True); service_id=Column(String,nullable=True); sender_id=Column(String,ForeignKey("users.id"),nullable=False); receiver_id=Column(String,ForeignKey("users.id"),nullable=True); text=Column(Text,nullable=False); content=Column(Text,nullable=True); is_read=Column(Boolean,default=False); created_at=Column(DateTime,default=datetime.utcnow)
 class VerificationDocument(Base):
  __tablename__="verification_documents"; id=Column(String,primary_key=True,default=generate_uuid); user_id=Column(String,ForeignKey("users.id"),nullable=False); document_type=Column(String(50),nullable=False); document_url=Column(String(500),nullable=False); status=Column(Enum(VerificationStatusEnum),default=VerificationStatusEnum.PENDIENTE); notes=Column(Text); submitted_at=Column(DateTime,default=datetime.utcnow)
 class Dispute(Base):
