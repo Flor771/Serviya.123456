@@ -40,7 +40,6 @@ class TestUsersUUIDAndForeignKeys(unittest.TestCase):
         )
 
         wallet = Wallet(
-            id=str(uuid.uuid4()),
             worker_id=user_uuid,
             available_balance=1500.0
         )

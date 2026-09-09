@@ -20,6 +20,18 @@ def upgrade() -> None:
     tables = inspector.get_table_names()
 
     # 1. Ensure services table exists safely without category_id FK constraint
+    if 'wallets' not in tables:
+        op.create_table(
+            'wallets',
+            sa.Column('id', sa.Integer(), primary_key=True, autoincrement=True),
+            sa.Column('worker_id', sa.String(), sa.ForeignKey('users.id'), nullable=False, unique=True),
+            sa.Column('available_balance', sa.Float(), server_default='0.0'),
+            sa.Column('pending_custody_balance', sa.Float(), server_default='0.0'),
+            sa.Column('total_earnings', sa.Float(), server_default='0.0'),
+            sa.Column('total_commissions', sa.Float(), server_default='0.0'),
+            sa.Column('total_withdrawn', sa.Float(), server_default='0.0')
+        )
+
     if 'services' not in tables:
         op.create_table(
             'services',

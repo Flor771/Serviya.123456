@@ -8,6 +8,7 @@
   "tests/test_auth_registration.py::TestRegistrationAndAuth::test_6_login_after_registration",
   "tests/test_auth_registration.py::TestRegistrationAndAuth::test_6_trabajador_account_mismatch_rejected",
   "tests/test_auth_registration.py::TestRegistrationAndAuth::test_7_trabajador_invalid_bank_rejected",
+  "tests/test_auth_registration.py::TestRegistrationAndAuth::test_7_wallet_production_schema_compatibility",
   "tests/test_auth_registration.py::TestRegistrationAndAuth::test_8_login_after_registration",
   "tests/test_e2e_full.py::TestFullSERVIYAEngine::test_full_serviya_e2e_lifecycle",
   "tests/test_falla1_falla2.py::TestFalla1AndFalla2::test_falla_1_trabajador_registration_no_bank_required",

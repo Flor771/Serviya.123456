@@ -153,14 +153,13 @@ class Application(Base):
 class Wallet(Base):
     __tablename__ = "wallets"
 
-    id = Column(String, primary_key=True, default=generate_uuid)
+    id = Column(Integer, primary_key=True, autoincrement=True)
     worker_id = Column(String, ForeignKey("users.id"), nullable=False, unique=True)
     available_balance = Column(Float, default=0.0)
     pending_custody_balance = Column(Float, default=0.0)
     total_earnings = Column(Float, default=0.0)
     total_commissions = Column(Float, default=0.0)
     total_withdrawn = Column(Float, default=0.0)
-    updated_at = Column(DateTime, default=datetime.utcnow)
 
     worker = relationship("User", back_populates="wallet")
 
