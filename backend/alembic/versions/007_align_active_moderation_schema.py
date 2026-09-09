@@ -1,6 +1,6 @@
 """Align active disputes and reviews with services/applications flow.
 
-Revision ID: 007_align_active_moderation_schema
+Revision ID: 007_align_moderation_schema
 Revises: 006_ensure_all_tables_exist
 Create Date: 2026-09-09
 """
@@ -8,7 +8,7 @@ from typing import Sequence, Union
 from alembic import op
 import sqlalchemy as sa
 
-revision: str = "007_align_active_moderation_schema"
+revision: str = "007_align_moderation_schema"
 down_revision: Union[str, None] = "006_ensure_all_tables_exist"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -23,9 +23,6 @@ def upgrade() -> None:
     inspector = sa.inspect(bind)
     tables = set(inspector.get_table_names())
 
-    # The production disputes table predates the active services/escrows flow.
-    # Keep its historical columns/data, but make legacy identifiers nullable and
-    # add the identifiers required by the current service-based API.
     if "disputes" in tables:
         cols = _columns(bind, "disputes")
         for col in ("job_request_id", "contract_id"):
@@ -42,8 +39,6 @@ def upgrade() -> None:
         if "resolution_notes" not in cols:
             op.add_column("disputes", sa.Column("resolution_notes", sa.Text(), nullable=True))
 
-    # The production reviews table also predates the active services flow.
-    # Preserve contract_id for historical rows while allowing service reviews.
     if "reviews" in tables:
         cols = _columns(bind, "reviews")
         if "contract_id" in cols:
