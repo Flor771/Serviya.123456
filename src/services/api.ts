@@ -1,4 +1,4 @@
-const API_BASE = '/api/v1';
+const API_BASE = (import.meta as any).env?.VITE_API_BASE_URL || '/api/v1';
 
 export function getAuthToken(): string | null {
   return localStorage.getItem('serviya_token');
@@ -19,31 +19,23 @@ export async function apiFetch<T = any>(endpoint: string, options: RequestInit =
     ...(options.headers as Record<string, string> || {})
   };
 
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
-  }
+  if (token) headers['Authorization'] = `Bearer ${token}`;
 
-  const url = endpoint.startsWith('/api') ? endpoint : `${API_BASE}${endpoint.startsWith('/') ? '' : '/'}${endpoint}`;
+  const url = endpoint.startsWith('/api')
+    ? endpoint
+    : `${API_BASE}${endpoint.startsWith('/') ? '' : '/'}${endpoint}`;
 
-  const response = await fetch(url, {
-    ...options,
-    headers
-  });
-
+  const response = await fetch(url, { ...options, headers });
   let data: any = null;
   const contentType = response.headers.get('content-type') || '';
 
   if (contentType.includes('application/json')) {
-    try {
-      data = await response.json();
-    } catch (err) {
-      data = null;
-    }
+    try { data = await response.json(); } catch { data = null; }
   } else {
     try {
       const text = await response.text();
       data = { message: text || `Error HTTP ${response.status}: ${response.statusText}` };
-    } catch (err) {
+    } catch {
       data = { message: `Error HTTP ${response.status}: ${response.statusText}` };
     }
   }
@@ -51,20 +43,12 @@ export async function apiFetch<T = any>(endpoint: string, options: RequestInit =
   if (!response.ok) {
     let errorMsg = 'Error en la solicitud a la API.';
     if (data) {
-      if (typeof data.detail === 'string') {
-        errorMsg = data.detail;
-      } else if (Array.isArray(data.detail)) {
-        errorMsg = data.detail.map((d: any) => d.msg || d.message || JSON.stringify(d)).join(', ');
-      } else if (data.error) {
-        errorMsg = typeof data.error === 'string' ? data.error : JSON.stringify(data.error);
-      } else if (data.message) {
-        errorMsg = typeof data.message === 'string' ? data.message : JSON.stringify(data.message);
-      } else if (typeof data === 'string') {
-        errorMsg = data;
-      }
-    } else {
-      errorMsg = `Error HTTP ${response.status}: ${response.statusText}`;
-    }
+      if (typeof data.detail === 'string') errorMsg = data.detail;
+      else if (Array.isArray(data.detail)) errorMsg = data.detail.map((d: any) => d.msg || d.message || JSON.stringify(d)).join(', ');
+      else if (data.error) errorMsg = typeof data.error === 'string' ? data.error : JSON.stringify(data.error);
+      else if (data.message) errorMsg = typeof data.message === 'string' ? data.message : JSON.stringify(data.message);
+      else if (typeof data === 'string') errorMsg = data;
+    } else errorMsg = `Error HTTP ${response.status}: ${response.statusText}`;
     throw new Error(errorMsg);
   }
 
