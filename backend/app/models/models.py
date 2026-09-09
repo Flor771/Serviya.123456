@@ -56,17 +56,15 @@ class User(Base):
     cedula = Column(String(20), nullable=True)
     password_hash = Column(String(255), nullable=False)
     @property
-    def hashed_password(self) -> str:
-        return self.password_hash
+    def hashed_password(self) -> str: return self.password_hash
     @hashed_password.setter
-    def hashed_password(self, value: str):
-        self.password_hash = value
+    def hashed_password(self, value: str): self.password_hash = value
     role = Column(Enum(UserRoleEnum), default=UserRoleEnum.CLIENTE)
     active_role = Column(String(20), default="CLIENTE")
     province = Column(String(100), nullable=False, default="Distrito Nacional")
     municipality = Column(String(100), nullable=False, default="Santo Domingo de Guzmán (DN)")
     bio = Column(Text, nullable=True)
-    avatar_url = Column(String(500), nullable=True)
+    avatar_url = Column(Text, nullable=True)
     is_active = Column(Boolean, default=True, nullable=True)
     is_verified = Column(Boolean, default=False)
     rating = Column(Float, default=5.0)
@@ -273,7 +271,7 @@ class Withdrawal(Base):
     account_number = Column(String(50), nullable=False)
     account_holder_name = Column(String(150), nullable=False)
     account_holder_cedula = Column(String(20), nullable=False)
-    status = Column(Enum(WithdrawalStatusEnum), default=VerificationStatusEnum.PENDIENTE)
+    status = Column(Enum(WithdrawalStatusEnum), default=WithdrawalStatusEnum.PENDIENTE)
     requested_at = Column(DateTime, default=datetime.utcnow)
     processed_at = Column(DateTime, nullable=True)
 
