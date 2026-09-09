@@ -36,7 +36,7 @@ def offer_price(service_id:str,data:PriceOfferSchema,current_user:User=Depends(g
     db.execute(text("UPDATE services SET negotiation_offer_rd=:p,negotiation_offer_by=:u,negotiation_offer_note=:n,negotiation_status='PENDIENTE_ACEPTACION',negotiated_price_rd=NULL,price_agreed_at=NULL WHERE id=:id"),{"p":data.price_rd,"u":current_user.id,"n":data.note,"id":service_id})
     receiver=s["worker_id"] if current_user.id==s["client_id"] else s["client_id"]; label="Cliente" if current_user.id==s["client_id"] else "Trabajador / Técnico"
     notify(db,receiver,"Nueva propuesta de precio",f"{label} propuso RD$ {data.price_rd:,.2f}. Revisa la negociación en SERVIYA.","PRICE_OFFER")
-    db.execute(text("INSERT INTO messages (id,service_id,sender_id,receiver_id,content,created_at) VALUES (:id,:sid,:sender,:receiver,:content,CURRENT_TIMESTAMP)"),{"id":str(uuid.uuid4()),"sid":service_id,"sender":current_user.id,"receiver":receiver,"content":f"PROPUESTA DE PRECIO: RD$ {data.price_rd:,.2f}" + (f" — {data.note}" if data.note else "")})
+    db.execute(text("INSERT INTO messages (service_id,sender_id,receiver_id,content,created_at) VALUES (:sid,:sender,:receiver,:content,CURRENT_TIMESTAMP)"),{"sid":service_id,"sender":current_user.id,"receiver":receiver,"content":f"PROPUESTA DE PRECIO: RD$ {data.price_rd:,.2f}" + (f" — {data.note}" if data.note else "")})
     db.commit(); return {"message":"Propuesta enviada. Espera la aceptación de la otra parte.","offer_rd":data.price_rd,"status":"PENDIENTE_ACEPTACION"}
 @router.post("/{service_id}/accept")
 def accept_price(service_id:str,current_user:User=Depends(get_current_active_user),db:Session=Depends(get_db)):
