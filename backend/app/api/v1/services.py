@@ -1,5 +1,4 @@
 from typing import Optional, List
-import uuid
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy import text
@@ -17,7 +16,7 @@ class CancelServiceSchema(BaseModel):
 def role(u): return u.role.value if hasattr(u.role,"value") else str(u.role)
 def tx(db,u,a,t,s,r,d): db.execute(text("INSERT INTO transactions (user_id,amount,type,status,reference_code,created_at) VALUES (:u,:a,:t,:s,:r,CURRENT_TIMESTAMP)"),{"u":u,"a":a,"t":t,"s":s,"r":r})
 def notify(db,u,title,msg,typ,related=None):
-    db.execute(text("INSERT INTO notifications (id,user_id,title,message,type,is_read,created_at) VALUES (:id,:u,:title,:msg,:typ,false,CURRENT_TIMESTAMP)"),{"id":uuid.uuid4().hex,"u":u,"title":title,"msg":msg,"typ":typ})
+    db.execute(text("INSERT INTO notifications (user_id,title,message,type,is_read,created_at) VALUES (:u,:title,:msg,:typ,false,CURRENT_TIMESTAMP)"),{"u":u,"title":title,"msg":msg,"typ":typ})
 
 def create_dispute(db, service_id, opened_by, against, reason, description):
     existing=db.execute(text("SELECT id FROM disputes WHERE service_id=:sid AND status IN ('ABIERTA','EN_REVISION') LIMIT 1"),{"sid":service_id}).scalar()
