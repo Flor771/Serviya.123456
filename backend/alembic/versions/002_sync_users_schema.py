@@ -4,17 +4,14 @@ from alembic import op
 import sqlalchemy as sa
 
 revision: str = '002_sync_users_schema'
-down_revision: Union[str, None] = '001_ensure_user_columns'
+down_revision: Union[str, None] = '001_initial_schema'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
-    bind = op.get_bind()
-    inspector = sa.inspect(bind)
-    tables = inspector.get_table_names()
+    bind = op.get_bind(); inspector = sa.inspect(bind); tables = inspector.get_table_names()
     if 'users' in tables:
-        columns = {col['name'] for col in inspector.get_columns('users')}
-        alter_sqls = []
+        columns = {col['name'] for col in inspector.get_columns('users')}; alter_sqls=[]
         if 'first_name' not in columns: alter_sqls.append("ADD COLUMN IF NOT EXISTS first_name VARCHAR(100) NOT NULL DEFAULT ''")
         if 'last_name' not in columns: alter_sqls.append("ADD COLUMN IF NOT EXISTS last_name VARCHAR(100) NOT NULL DEFAULT ''")
         if 'email' not in columns: alter_sqls.append("ADD COLUMN IF NOT EXISTS email VARCHAR(255)")
@@ -38,8 +35,6 @@ def upgrade() -> None:
             try: op.execute("UPDATE users SET hashed_password = password WHERE (hashed_password IS NULL OR hashed_password = '') AND password IS NOT NULL AND password != '';")
             except Exception as e: print(f"Notice migrating password column: {e}")
     else:
-        from app.database.base import Base
-        Base.metadata.create_all(bind=bind)
+        from app.database.base import Base; Base.metadata.create_all(bind=bind)
 
-def downgrade() -> None:
-    pass
+def downgrade() -> None: pass
