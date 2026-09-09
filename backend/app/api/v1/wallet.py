@@ -36,6 +36,7 @@ class WithdrawSchema(BaseModel):
     bank_name: str
     account_type: str
     account_number: str
+    confirm_account_number: Optional[str] = None
     account_holder_name: str
     account_holder_cedula: str
 
@@ -177,6 +178,20 @@ def withdraw(data: WithdrawSchema, current_user: User = Depends(get_current_acti
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Acceso denegado. Solamente los usuarios con rol TRABAJADOR pueden solicitar retiros de fondos."
+        )
+
+    allowed_banks = ["banco popular", "bhd", "banreservas", "banco de reservas"]
+    b_name_lower = (data.bank_name or "").strip().lower()
+    if not any(b in b_name_lower for b in allowed_banks):
+        raise HTTPException(
+            status_code=400,
+            detail="El banco debe ser Banco Popular, BHD o Banreservas."
+        )
+
+    if data.confirm_account_number is not None and data.confirm_account_number.strip() != data.account_number.strip():
+        raise HTTPException(
+            status_code=400,
+            detail="Los números de cuenta bancaria no coinciden."
         )
 
     if data.amount_rd < settings.MIN_WITHDRAWAL_RD:

@@ -62,28 +62,6 @@ def register(data: RegisterSchema, db: Session = Depends(get_db)):
                 detail="La cédula es obligatoria para registrarse como trabajador."
             )
 
-        allowed_banks = ["banco popular", "bhd", "banreservas"]
-        if not data.bank_name or data.bank_name.strip().lower() not in allowed_banks:
-            raise HTTPException(
-                status_code=400,
-                detail="El banco debe ser Banco Popular, BHD o Banreservas."
-            )
-
-        acc_num = data.bank_account_number or data.account_number
-        conf_acc_num = data.confirm_bank_account_number or data.confirm_account_number
-
-        if not acc_num or not acc_num.strip():
-            raise HTTPException(
-                status_code=400,
-                detail="El número de cuenta bancaria es obligatorio para el trabajador."
-            )
-
-        if not conf_acc_num or conf_acc_num.strip() != acc_num.strip():
-            raise HTTPException(
-                status_code=400,
-                detail="Los números de cuenta bancaria no coinciden."
-            )
-
     existing_user = db.query(User).filter(User.email == data.email).first()
     if existing_user:
         raise HTTPException(

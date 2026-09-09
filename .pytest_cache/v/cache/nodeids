@@ -1,0 +1,19 @@
+[
+  "tests/test_auth_registration.py::TestRegistrationAndAuth::test_1_cliente_registration_no_wallet",
+  "tests/test_auth_registration.py::TestRegistrationAndAuth::test_2_policies_not_accepted",
+  "tests/test_auth_registration.py::TestRegistrationAndAuth::test_3_password_mismatch",
+  "tests/test_auth_registration.py::TestRegistrationAndAuth::test_4_cliente_cannot_withdraw",
+  "tests/test_auth_registration.py::TestRegistrationAndAuth::test_5_trabajador_registration_bancos_and_accounts",
+  "tests/test_auth_registration.py::TestRegistrationAndAuth::test_6_trabajador_account_mismatch_rejected",
+  "tests/test_auth_registration.py::TestRegistrationAndAuth::test_7_trabajador_invalid_bank_rejected",
+  "tests/test_auth_registration.py::TestRegistrationAndAuth::test_8_login_after_registration",
+  "tests/test_e2e_full.py::TestFullSERVIYAEngine::test_full_serviya_e2e_lifecycle",
+  "tests/test_flow.py::TestPlatformFlow::test_admin_endpoint_authorization",
+  "tests/test_flow.py::TestPlatformFlow::test_commission_calculation",
+  "tests/test_flow.py::TestPlatformFlow::test_double_release_and_double_refund_prevention",
+  "tests/test_flow.py::TestPlatformFlow::test_escrow_lifecycle_simulation",
+  "tests/test_flow.py::TestPlatformFlow::test_role_security_withdrawal_permissions",
+  "tests/test_migration_users_id.py::TestUsersUUIDAndForeignKeys::test_user_uuid_and_fk_relations",
+  "tests/test_password_hash.py::TestPasswordSecurity::test_access_token_creation",
+  "tests/test_password_hash.py::TestPasswordSecurity::test_password_hashing_and_verification"
+]

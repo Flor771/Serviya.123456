@@ -51,6 +51,7 @@ export const WalletView: React.FC = () => {
   const [bankName, setBankName] = useState(DOMINICAN_BANKS[0]);
   const [accountType, setAccountType] = useState('AHORROS');
   const [accountNumber, setAccountNumber] = useState('789123456');
+  const [confirmAccountNumber, setConfirmAccountNumber] = useState('789123456');
   const [holderName, setHolderName] = useState('');
   const [holderCedula, setHolderCedula] = useState('');
   const [withdrawSubmitting, setWithdrawSubmitting] = useState(false);
@@ -95,8 +96,13 @@ export const WalletView: React.FC = () => {
       return;
     }
 
-    if (!holderName || !holderCedula || !accountNumber) {
+    if (!holderName || !holderCedula || !accountNumber || !confirmAccountNumber) {
       setMsgError('Por favor completa todos los datos bancarios.');
+      return;
+    }
+
+    if (accountNumber.trim() !== confirmAccountNumber.trim()) {
+      setMsgError('Los números de cuenta bancaria no coinciden.');
       return;
     }
 
@@ -394,25 +400,35 @@ export const WalletView: React.FC = () => {
                 </select>
               </div>
 
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Tipo Cuenta</label>
-                  <select
-                    value={accountType}
-                    onChange={(e) => setAccountType(e.target.value)}
-                    className="w-full text-xs p-3 bg-slate-50 border border-slate-200 rounded-xl"
-                  >
-                    <option value="AHORROS">Ahorros</option>
-                    <option value="CORRIENTE">Corriente</option>
-                  </select>
-                </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Tipo de Cuenta *</label>
+                <select
+                  value={accountType}
+                  onChange={(e) => setAccountType(e.target.value)}
+                  className="w-full text-xs p-3 bg-slate-50 border border-slate-200 rounded-xl"
+                >
+                  <option value="AHORROS">Cuenta de Ahorros</option>
+                  <option value="CORRIENTE">Cuenta Corriente</option>
+                </select>
+              </div>
 
+              <div className="grid grid-cols-2 gap-2">
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">Número Cuenta *</label>
                   <input
                     type="text"
                     value={accountNumber}
                     onChange={(e) => setAccountNumber(e.target.value)}
+                    className="w-full text-xs p-3 bg-slate-50 border border-slate-200 rounded-xl"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Confirmar Número *</label>
+                  <input
+                    type="text"
+                    value={confirmAccountNumber}
+                    onChange={(e) => setConfirmAccountNumber(e.target.value)}
                     className="w-full text-xs p-3 bg-slate-50 border border-slate-200 rounded-xl"
                     required
                   />

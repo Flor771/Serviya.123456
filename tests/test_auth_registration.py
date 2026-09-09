@@ -127,84 +127,38 @@ class TestRegistrationAndAuth(unittest.TestCase):
         self.assertEqual(w_resp.status_code, 403)
         self.assertIn("solamente los usuarios con rol trabajador", w_resp.json()["detail"].lower().replace("é", "e"))
 
-    def test_5_trabajador_registration_bancos_and_accounts(self):
-        allowed_banks = ["Banco Popular", "BHD", "Banreservas"]
-        for bank in allowed_banks:
-            test_email = f"worker_{bank.replace(' ', '_').lower()}_{uuid.uuid4().hex[:4]}@example.com"
-            payload = {
-                "first_name": "Pedro",
-                "last_name": "Ramírez",
-                "email": test_email,
-                "phone": "8095550200",
-                "password": "WorkerPassword123!",
-                "confirm_password": "WorkerPassword123!",
-                "role": "TRABAJADOR",
-                "cedula": "00112345678",
-                "bank_name": bank,
-                "account_number": "9876543210",
-                "confirm_account_number": "9876543210",
-                "accept_policies": True
-            }
-            response = self.client.post("/api/v1/auth/register", json=payload)
-            self.assertEqual(response.status_code, 200, f"Registration failed for bank {bank}: {response.text}")
-
-            # Verify in DB
-            db = TestingSessionLocal()
-            user = db.query(User).filter(User.email == test_email).first()
-            self.assertIsNotNone(user)
-            wp = db.query(WorkerProfile).filter(WorkerProfile.user_id == user.id).first()
-            self.assertIsNotNone(wp)
-            self.assertEqual(wp.bank_name, bank)
-            self.assertEqual(wp.account_number, "9876543210")
-
-            # Worker Wallet created with worker_id and initial balance 0
-            wallet = db.query(Wallet).filter(Wallet.worker_id == user.id).first()
-            self.assertIsNotNone(wallet)
-            self.assertEqual(wallet.worker_id, user.id)
-            self.assertEqual(wallet.available_balance, 0.0)
-            self.assertEqual(wallet.pending_custody_balance, 0.0)
-            db.close()
-
-    def test_6_trabajador_account_mismatch_rejected(self):
-        test_email = f"worker_mismatch_{uuid.uuid4().hex[:4]}@example.com"
+    def test_5_trabajador_registration_without_bank(self):
+        test_email = f"worker_nobank_{uuid.uuid4().hex[:6]}@example.com"
         payload = {
-            "first_name": "José",
-            "last_name": "Santos",
+            "first_name": "Pedro",
+            "last_name": "Ramírez",
             "email": test_email,
-            "phone": "8095550201",
+            "phone": "8095550200",
             "password": "WorkerPassword123!",
             "confirm_password": "WorkerPassword123!",
             "role": "TRABAJADOR",
-            "cedula": "00112345679",
-            "bank_name": "Banco Popular",
-            "account_number": "1112223334",
-            "confirm_account_number": "1112223335",
+            "cedula": "00112345678",
             "accept_policies": True
         }
         response = self.client.post("/api/v1/auth/register", json=payload)
-        self.assertEqual(response.status_code, 400)
-        self.assertIn("no coinciden", response.json()["detail"].lower())
+        self.assertEqual(response.status_code, 200, f"Registration failed: {response.text}")
 
-    def test_7_trabajador_invalid_bank_rejected(self):
-        test_email = f"worker_badbank_{uuid.uuid4().hex[:4]}@example.com"
-        payload = {
-            "first_name": "José",
-            "last_name": "Santos",
-            "email": test_email,
-            "phone": "8095550201",
-            "password": "WorkerPassword123!",
-            "confirm_password": "WorkerPassword123!",
-            "role": "TRABAJADOR",
-            "cedula": "00112345679",
-            "bank_name": "Banco Ficticio",
-            "account_number": "1112223334",
-            "confirm_account_number": "1112223334",
-            "accept_policies": True
-        }
-        response = self.client.post("/api/v1/auth/register", json=payload)
-        self.assertEqual(response.status_code, 400)
+        # Verify in DB
+        db = TestingSessionLocal()
+        user = db.query(User).filter(User.email == test_email).first()
+        self.assertIsNotNone(user)
+        wp = db.query(WorkerProfile).filter(WorkerProfile.user_id == user.id).first()
+        self.assertIsNotNone(wp)
 
-    def test_8_login_after_registration(self):
+        # Worker Wallet created with worker_id and initial balance RD$0.00
+        wallet = db.query(Wallet).filter(Wallet.worker_id == user.id).first()
+        self.assertIsNotNone(wallet)
+        self.assertEqual(wallet.worker_id, user.id)
+        self.assertEqual(wallet.available_balance, 0.0)
+        self.assertEqual(wallet.pending_custody_balance, 0.0)
+        db.close()
+
+    def test_6_login_after_registration(self):
         test_email = f"user_login_{uuid.uuid4().hex[:6]}@example.com"
         raw_password = "LoginPass2026!"
 
