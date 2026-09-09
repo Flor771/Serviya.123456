@@ -1,5 +1,4 @@
 from fastapi import APIRouter
-
 from app.api.v1.auth import router as auth_router
 from app.api.v1.users import router as users_router
 from app.api.v1.services import router as services_router
@@ -15,9 +14,8 @@ from app.api.v1.verification import router as verification_router
 from app.api.v1.portfolio_support import router as portfolio_support_router
 from app.api.v1.admin import router as admin_router
 from app.api.v1.admin_detailed import router as admin_detailed_router
-
+from app.api.v1.admin_financial import router as admin_financial_router
 api_router = APIRouter(prefix="/api/v1")
-
 api_router.include_router(auth_router)
 api_router.include_router(users_router)
 api_router.include_router(services_router)
@@ -33,3 +31,4 @@ api_router.include_router(verification_router)
 api_router.include_router(portfolio_support_router)
 api_router.include_router(admin_router)
 api_router.include_router(admin_detailed_router)
+api_router.include_router(admin_financial_router)
