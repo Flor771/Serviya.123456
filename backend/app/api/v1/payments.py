@@ -24,16 +24,8 @@ def _validate_voucher(v):
  if not v or not v.startswith("data:image/") or len(v)>900000: raise HTTPException(400,"Debes subir el recibo/voucher del depósito (JPG, PNG o WebP, máximo 900 KB).")
 def _agreed_price(db, service_id):
  row=db.execute(text("SELECT negotiated_price_rd,negotiation_status FROM services WHERE id=:id"),{"id":service_id}).mappings().first()
- if not row or row["negotiation_status"] != "ACORDADO" or row["negotiated_price_rd"] is None:
-  raise HTTPException(400,"Primero deben negociar y acordar el precio final. El presupuesto de publicación es solo orientativo.")
+ if not row or row["negotiation_status"] != "ACORDADO" or row["negotiated_price_rd"] is None: raise HTTPException(400,"Primero deben negociar y acordar el precio final. El presupuesto de publicación es solo orientativo.")
  return float(row["negotiated_price_rd"])
-def _ensure_warranty(db, service):
- existing=db.execute(text("SELECT id FROM service_warranties WHERE service_id=:sid LIMIT 1"),{"sid":service.id}).scalar()
- if existing:return existing
- wid=str(uuid.uuid4()); days=60; expires=datetime.utcnow()+timedelta(days=days); ref=f"GAR-SRV-{str(service.id)[:8].upper()}"
- db.execute(text("INSERT INTO service_warranties (id,service_id,client_id,worker_id,coverage_days,status,activated_at,expires_at,certificate_ref) VALUES (:id,:sid,:c,:w,:d,'ACTIVA',CURRENT_TIMESTAMP,:e,:ref)"),{"id":wid,"sid":service.id,"c":service.client_id,"w":service.worker_id,"d":days,"e":expires,"ref":ref})
- db.add(Notification(user_id=service.client_id,title="Garantía SERVIYA activada",message=f"Garantía de satisfacción activa por {days} días. Certificado {ref}.",type="WARRANTY_ACTIVATED",related_entity_id=service.id))
- return wid
 @router.post("/escrow")
 def pay_escrow(data:EscrowPaymentSchema,current_user:User=Depends(get_current_active_user),db:Session=Depends(get_db)):
  service=db.query(Service).filter(Service.id==data.service_id).with_for_update().first()
@@ -47,7 +39,7 @@ def pay_escrow(data:EscrowPaymentSchema,current_user:User=Depends(get_current_ac
  if available<amount: raise HTTPException(400,detail=f"Saldo insuficiente. Necesitas RD$ {amount:,.2f} y tienes RD$ {available:,.2f}.")
  rate=float(settings.PLATFORM_COMMISSION_PERCENT); commission=amount*rate/100; payout=amount-commission; otp=f"{random.randint(100000,999999)}"
  escrow=Escrow(service_id=service.id,client_id=current_user.id,worker_id=service.worker_id,total_amount_rd=amount,commission_rate_percent=rate,commission_amount_rd=commission,worker_payout_rd=payout,status="RETENIDO",release_otp=otp,otp_verified=False,payment_method="SALDO_BILLETERA"); db.add(escrow)
- db.execute(text("UPDATE client_wallets SET available_balance=available_balance-:a,total_spent=total_spent+:a,updated_at=CURRENT_TIMESTAMP WHERE id=:id"),{"a":amount,"id":wallet["id"]}); service.status=ServiceStatusEnum.EN_PROGRESO; ref=f"ESCROW-{uuid.uuid4().hex[:8].upper()}"; _tx(db,current_user.id,amount,"PAGO_CUSTODIA","RETENIDO",f"Pago acordado en Custodia para servicio #{service.id[:8]}",ref); db.add(Notification(user_id=service.worker_id,title="Precio acordado y pago en Custodia",message=f"El cliente depositó RD$ {amount:,.2f}. El trabajo ya está protegido en Custodia SERVIYA.",type="PAYMENT",related_entity_id=service.id)); db.commit(); return {"message":"Pago protegido en Custodia SERVIYA.","escrow_id":escrow.id,"reference":ref,"status":"RETENIDO","agreed_price_rd":amount}
+ db.execute(text("UPDATE client_wallets SET available_balance=available_balance-:a,total_spent=total_spent+:a,updated_at=CURRENT_TIMESTAMP WHERE id=:id"),{"a":amount,"id":wallet["id"]}); service.status=ServiceStatusEnum.EN_PROGRESO; ref=f"ESCROW-{uuid.uuid4().hex[:8].upper()}"; _tx(db,current_user.id,amount,"PAGO_CUSTODIA","RETENIDO",f"Pago acordado en Custodia para servicio #{service.id[:8]}",ref); db.add(Notification(user_id=service.worker_id,title="Precio acordado y pago en Custodia",message=f"El cliente depositó RD$ {amount:,.2f}. El trabajo ya está protegido en Custodia SERVIYA.",type="PAYMENT")); db.commit(); return {"message":"Pago protegido en Custodia SERVIYA.","escrow_id":escrow.id,"reference":ref,"status":"RETENIDO","agreed_price_rd":amount}
 @router.post("/escrow-bank-transfer")
 def bank_transfer_escrow(data:BankTransferEscrowSchema,current_user:User=Depends(get_current_active_user),db:Session=Depends(get_db)):
  service=db.query(Service).filter(Service.id==data.service_id).with_for_update().first()
@@ -61,8 +53,7 @@ def bank_transfer_escrow(data:BankTransferEscrowSchema,current_user:User=Depends
  if db.query(Escrow).filter(Escrow.service_id==service.id,Escrow.status.in_(["RETENIDO","EN_DISPUTA","PENDIENTE_APROBACION"])).first(): raise HTTPException(400,"Este servicio ya tiene un depósito en Custodia SERVIYA.")
  rate=float(settings.PLATFORM_COMMISSION_PERCENT); commission=amount*rate/100; payout=amount-commission; otp=f"{random.randint(100000,999999)}"
  escrow=Escrow(service_id=service.id,client_id=current_user.id,worker_id=service.worker_id,total_amount_rd=amount,commission_rate_percent=rate,commission_amount_rd=commission,worker_payout_rd=payout,status="RETENIDO",voucher_url=data.voucher_url,bank_account_id=data.bank_account_id,payment_method="TRANSFERENCIA_BANCARIA",release_otp=otp,otp_verified=False); db.add(escrow); service.status=ServiceStatusEnum.EN_PROGRESO
- ref=f"ESCROW-BANK-{uuid.uuid4().hex[:8].upper()}"; _tx(db,current_user.id,amount,"PAGO_CUSTODIA_TRANSFERENCIA","RETENIDO",f"Depósito bancario con voucher para servicio #{service.id[:8]}",ref,data.voucher_url,data.bank_account_id)
- db.add(Notification(user_id=service.worker_id,title="Depósito en Custodia SERVIYA",message=f"El cliente realizó el depósito acordado de RD$ {amount:,.2f} y adjuntó el voucher. Ya puedes iniciar el trabajo.",type="PAYMENT",related_entity_id=service.id)); db.commit(); return {"message":"Voucher recibido y fondos registrados en Custodia SERVIYA.","escrow_id":escrow.id,"reference":ref,"status":"RETENIDO","voucher_received":True,"agreed_price_rd":amount}
+ ref=f"ESCROW-BANK-{uuid.uuid4().hex[:8].upper()}"; _tx(db,current_user.id,amount,"PAGO_CUSTODIA_TRANSFERENCIA","RETENIDO",f"Depósito bancario con voucher para servicio #{service.id[:8]}",ref,data.voucher_url,data.bank_account_id); db.add(Notification(user_id=service.worker_id,title="Depósito en Custodia SERVIYA",message=f"El cliente realizó el depósito acordado de RD$ {amount:,.2f} y adjuntó el voucher. Ya puedes iniciar el trabajo.",type="PAYMENT")); db.commit(); return {"message":"Voucher recibido y fondos registrados en Custodia SERVIYA.","escrow_id":escrow.id,"reference":ref,"status":"RETENIDO","voucher_received":True,"agreed_price_rd":amount}
 @router.post("/release")
 def request_release_approval(data:EscrowReleaseSchema,current_user:User=Depends(get_current_active_user),db:Session=Depends(get_db)):
  escrow=db.query(Escrow).filter(Escrow.service_id==data.service_id).with_for_update().first()
@@ -73,10 +64,8 @@ def request_release_approval(data:EscrowReleaseSchema,current_user:User=Depends(
  if not row or not row["completion_submitted"]: raise HTTPException(400,"El técnico debe enviar primero la evidencia y el trabajo a revisión del cliente.")
  escrow.status="PENDIENTE_APROBACION"
  admins=db.execute(text("SELECT id FROM users WHERE role='ADMIN'" )).scalars().all()
- for admin_id in admins:
-  db.add(Notification(user_id=admin_id,title="Liberación pendiente de aprobación",message=f"El cliente confirmó el servicio #{data.service_id[:8]}. Revisa la Custodia y aprueba o resuelve la liberación.",type="ADMIN_RELEASE_PENDING",related_entity_id=data.service_id))
- db.commit()
- return {"message":"Confirmación recibida. La liberación queda pendiente de aprobación administrativa.","status":"PENDIENTE_APROBACION","approved_by_admin":False}
+ for admin_id in admins: db.add(Notification(user_id=admin_id,title="Liberación pendiente de aprobación",message=f"El cliente confirmó el servicio #{data.service_id[:8]}. Revisa la Custodia y aprueba o resuelve la liberación.",type="ADMIN_RELEASE_PENDING"))
+ db.commit(); return {"message":"Confirmación recibida. La liberación queda pendiente de aprobación administrativa.","status":"PENDIENTE_APROBACION","approved_by_admin":False}
 @router.post("/refund")
 def refund_escrow(data:RefundSchema,current_user:User=Depends(get_current_active_user),db:Session=Depends(get_db)):
  escrow=db.query(Escrow).filter(Escrow.service_id==data.service_id,Escrow.status=="RETENIDO").with_for_update().first()
