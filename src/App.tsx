@@ -21,18 +21,9 @@ import { Service, User } from './types';
 import { api } from './services/api';
 
 const MOCK_INITIAL_SERVICES: Service[] = [
-  {
-    id: 's-101', title: 'Instalación de Tinaco y Calentador Solar en Bella Vista',
-    description: 'Busco plomero con experiencia para instalar tinaco de 500 galones en techo de 3er nivel y conectar calentador solar de 150L. Incluye tubería de CPVC.', category_id: 'cat-plumber', category_name: 'Plomería y Tuberías', subcategory: 'Instalación de Tinacos', price_rd: 4500, province: 'Distrito Nacional', municipality: 'Bella Vista', address_approx: 'C/ Sarasota cerca de la Av. Núñez de Cáceres', service_date: '2026-09-10', service_time: '08:30 AM', estimated_duration: '4 horas', images: ['https://images.unsplash.com/photo-1581578731548-c64695cc6952?w=800'], requirements: ['Traer escaleras de 12 pies', 'Herramientas de corte CPVC', 'Puntualidad'], status: 'PUBLICADA', payment_type: 'CUSTODIA_SERVIYA', client_id: 'user-client-1', client_name: 'Ana Rosario', client_rating: 4.9, applications_count: 3, created_at: new Date().toISOString()
-  },
-  {
-    id: 's-102', title: 'Reparación de Cortocircuito y Panel de Breakers en Santiago',
-    description: 'El breaker principal de la casa se dispara al encender los aires acondicionados. Se requiere diagnóstico de carga y reemplazo de breakers defectuosos.', category_id: 'cat-electrician', category_name: 'Electricidad', subcategory: 'Cortocircuitos y Tableros', price_rd: 3200, province: 'Santiago', municipality: 'Santiago de los Caballeros', address_approx: 'Los Jardines Metropolitanos', service_date: '2026-09-08', service_time: '10:00 AM', estimated_duration: '3 horas', images: ['https://images.unsplash.com/photo-1621905251189-08b45d6a269e?w=800'], requirements: ['Certificación INFOTEP deseable', 'Probador de voltaje digital'], status: 'PUBLICADA', payment_type: 'CUSTODIA_SERVIYA', client_id: 'user-client-2', client_name: 'Roberto Méndez', client_rating: 4.8, applications_count: 2, created_at: new Date().toISOString()
-  },
-  {
-    id: 's-103', title: 'Mantenimiento Profundo de 3 Aires Inverter en Punta Cana',
-    description: 'Mantenimiento preventivo, limpieza de evaporador y condensador con hidrolavadora para 3 equipos Split Inverter de 12,000 y 18,000 BTU.', category_id: 'cat-hvac', category_name: 'Aires Acondicionados', subcategory: 'Limpieza y Mantenimiento Inverter', price_rd: 5500, province: 'La Altagracia', municipality: 'Higüey (Punta Cana)', address_approx: 'Residencial Bávaro Green', service_date: '2026-09-09', service_time: '02:00 PM', estimated_duration: '5 horas', images: ['https://images.unsplash.com/photo-1621905251189-08b45d6a269e?w=800'], requirements: ['Llevar lona de protección', 'Bomba de lavado a presión'], status: 'PUBLICADA', payment_type: 'CUSTODIA_SERVIYA', client_id: 'user-client-3', client_name: 'Hotelera Bávaro SRL', client_rating: 5.0, applications_count: 5, created_at: new Date().toISOString()
-  }
+  { id: 's-101', title: 'Instalación de Tinaco y Calentador Solar en Bella Vista', description: 'Busco plomero con experiencia para instalar tinaco de 500 galones en techo de 3er nivel y conectar calentador solar de 150L. Incluye tubería de CPVC.', category_id: 'cat-plumber', category_name: 'Plomería y Tuberías', subcategory: 'Instalación de Tinacos', price_rd: 4500, province: 'Distrito Nacional', municipality: 'Bella Vista', address_approx: 'C/ Sarasota cerca de la Av. Núñez de Cáceres', service_date: '2026-09-10', service_time: '08:30 AM', estimated_duration: '4 horas', images: ['https://images.unsplash.com/photo-1581578731548-c64695cc6952?w=800'], requirements: ['Traer escaleras de 12 pies', 'Herramientas de corte CPVC', 'Puntualidad'], status: 'PUBLICADA', payment_type: 'CUSTODIA_SERVIYA', client_id: 'user-client-1', client_name: 'Ana Rosario', client_rating: 4.9, applications_count: 3, created_at: new Date().toISOString() },
+  { id: 's-102', title: 'Reparación de Cortocircuito y Panel de Breakers en Santiago', description: 'El breaker principal de la casa se dispara al encender los aires acondicionados. Se requiere diagnóstico de carga y reemplazo de breakers defectuosos.', category_id: 'cat-electrician', category_name: 'Electricidad', subcategory: 'Cortocircuitos y Tableros', price_rd: 3200, province: 'Santiago', municipality: 'Santiago de los Caballeros', address_approx: 'Los Jardines Metropolitanos', service_date: '2026-09-08', service_time: '10:00 AM', estimated_duration: '3 horas', images: ['https://images.unsplash.com/photo-1621905251189-08b45d6a269e?w=800'], requirements: ['Certificación INFOTEP deseable', 'Probador de voltaje digital'], status: 'PUBLICADA', payment_type: 'CUSTODIA_SERVIYA', client_id: 'user-client-2', client_name: 'Roberto Méndez', client_rating: 4.8, applications_count: 2, created_at: new Date().toISOString() },
+  { id: 's-103', title: 'Mantenimiento Profundo de 3 Aires Inverter en Punta Cana', description: 'Mantenimiento preventivo, limpieza de evaporador y condensador con hidrolavadora para 3 equipos Split Inverter de 12,000 y 18,000 BTU.', category_id: 'cat-hvac', category_name: 'Aires Acondicionados', subcategory: 'Limpieza y Mantenimiento Inverter', price_rd: 5500, province: 'La Altagracia', municipality: 'Higüey (Punta Cana)', address_approx: 'Residencial Bávaro Green', service_date: '2026-09-09', service_time: '02:00 PM', estimated_duration: '5 horas', images: ['https://images.unsplash.com/photo-1621905251189-08b45d6a269e?w=800'], requirements: ['Llevar lona de protección', 'Bomba de lavado a presión'], status: 'PUBLICADA', payment_type: 'CUSTODIA_SERVIYA', client_id: 'user-client-3', client_name: 'Hotelera Bávaro SRL', client_rating: 5.0, applications_count: 5, created_at: new Date().toISOString() }
 ];
 
 const MOCK_INITIAL_WORKERS: User[] = [
@@ -58,9 +49,7 @@ const AppContent: React.FC = () => {
     try {
       const data = await api.get<{ services: Service[] }>('/services');
       if (data?.services) setServices(data.services);
-    } catch (err) {
-      console.log('Using initial services');
-    }
+    } catch (err) { console.log('Using initial services'); }
   };
 
   useEffect(() => { fetchServices(); }, []);
@@ -76,7 +65,7 @@ const AppContent: React.FC = () => {
         onOpenProfile={() => setActiveTab('perfil')}
         onOpenAdmin={() => setActiveTab('admin')}
         onOpenVerification={() => setShowVerificationModal(true)}
-        onOpenDisputes={() => setDisputeServiceId(null)}
+        onOpenDisputes={() => setDisputeServiceId('')}
         onNavigateTab={(tab) => setActiveTab(tab)}
         activeTab={activeTab}
       />
@@ -84,12 +73,7 @@ const AppContent: React.FC = () => {
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 pt-6 pb-20 md:pb-12">
         {activeTab === 'inicio' && <LandingSection services={services} workers={workers} onSelectCategory={() => setActiveTab('buscar')} onSelectService={(service) => setSelectedService(service)} onOpenPublish={() => { if (user) setShowPublishModal(true); else setAuthModalMode('login'); }} onNavigateTab={(tab) => setActiveTab(tab)} />}
         {activeTab === 'buscar' && <ServicesView services={services} onSelectService={(s) => setSelectedService(s)} onOpenPublish={() => { if (user) setShowPublishModal(true); else setAuthModalMode('login'); }} />}
-        {activeTab === 'trabajadores' && (
-          <div className="space-y-6 pb-12">
-            <div className="bg-slate-900 text-white p-6 rounded-3xl shadow-xl"><h1 className="text-2xl font-black">Trabajadores Certificados en República Dominicana 🇩🇴</h1><p className="text-xs text-slate-300">Profesionales con Cédula verificada y garantía en sus trabajos</p></div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">{workers.map(w => <div key={w.id} className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm flex items-start gap-4"><img src={w.avatar_url} alt={w.first_name} className="w-16 h-16 rounded-2xl object-cover border-2 border-blue-500 shrink-0" /><div className="space-y-1"><div className="flex items-center gap-1.5"><h3 className="font-bold text-slate-900 text-base">{w.first_name} {w.last_name}</h3>{w.is_verified && <span className="text-xs text-blue-600 font-bold">✓ Verificado</span>}</div><p className="text-xs font-semibold text-blue-700">{w.worker_profile?.profession}</p><p className="text-xs text-slate-600">{w.worker_profile?.bio}</p><div className="text-xs font-bold text-slate-800 pt-1">Tarifa: RD$ {w.worker_profile?.hourly_rate_rd}/hora • {w.province}</div></div></div>)}</div>
-          </div>
-        )}
+        {activeTab === 'trabajadores' && <div className="space-y-6 pb-12"><div className="bg-slate-900 text-white p-6 rounded-3xl shadow-xl"><h1 className="text-2xl font-black">Trabajadores Certificados en República Dominicana 🇩🇴</h1><p className="text-xs text-slate-300">Profesionales con Cédula verificada y garantía en sus trabajos</p></div><div className="grid grid-cols-1 md:grid-cols-2 gap-4">{workers.map(w => <div key={w.id} className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm flex items-start gap-4"><img src={w.avatar_url} alt={w.first_name} className="w-16 h-16 rounded-2xl object-cover border-2 border-blue-500 shrink-0" /><div className="space-y-1"><div className="flex items-center gap-1.5"><h3 className="font-bold text-slate-900 text-base">{w.first_name} {w.last_name}</h3>{w.is_verified && <span className="text-xs text-blue-600 font-bold">✓ Verificado</span>}</div><p className="text-xs font-semibold text-blue-700">{w.worker_profile?.profession}</p><p className="text-xs text-slate-600">{w.worker_profile?.bio}</p><div className="text-xs font-bold text-slate-800 pt-1">Tarifa: RD$ {w.worker_profile?.hourly_rate_rd}/hora • {w.province}</div></div></div>)}</div></div>}
         {activeTab === 'billetera' && <WalletView />}
         {activeTab === 'perfil' && <ProfileView onOpenVerification={() => setShowVerificationModal(true)} />}
         {activeTab === 'admin' && <AdminPanel />}
