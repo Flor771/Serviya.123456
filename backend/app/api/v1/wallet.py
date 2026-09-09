@@ -70,7 +70,12 @@ def get_wallet(current_user: User = Depends(get_current_active_user), db: Sessio
     withdrawals = [{"id": r["id"], "amount_rd": float(r["amount"]), "bank_name": r["method"], "account_type": r["account_type"], "account_number": r["account_number"], "status": r["status"], "requested_at": str(r["created_at"])} for r in withdrawal_rows]
     if not wallet:
         return {"wallet": {"id": None, "user_id": current_user.id, "worker_id": None, "available_rd": 0.0, "escrow_rd": 0.0, "pending_rd": 0.0, "total_received_rd": 0.0, "total_spent_rd": 0.0, "can_withdraw": False}, "transactions": transactions, "withdrawals": withdrawals}
-    return {"wallet": {"id": wallet.id, "user_id": wallet.worker_id, "worker_id": wallet.worker_id, "available_rd": float(wallet.available_balance or 0), "escrow_rd": float(wallet.pending_custody_balance or 0), "pending_rd": float(wallet.pending_custody_balance or 0), "total_received_rd": float(wallet.total_earnings or 0), "total_spent_rd": float(wallet.total_withdrawn or 0), "can_withdraw": role_str == "TRABAJADOR"}, "transactions": transactions, "withdrawals": withdrawals}
+
+    # Custodia pertenece al registro Escrow, no a la billetera del trabajador.
+    # pending_custody_balance se mantiene por compatibilidad histórica, pero en este flujo
+    # representa únicamente retiros pendientes de procesamiento administrativo.
+    pending_withdrawal = float(wallet.pending_custody_balance or 0)
+    return {"wallet": {"id": wallet.id, "user_id": wallet.worker_id, "worker_id": wallet.worker_id, "available_rd": float(wallet.available_balance or 0), "escrow_rd": 0.0, "pending_rd": pending_withdrawal, "total_received_rd": float(wallet.total_earnings or 0), "total_spent_rd": float(wallet.total_withdrawn or 0), "can_withdraw": role_str == "TRABAJADOR"}, "transactions": transactions, "withdrawals": withdrawals}
 
 
 @router.post("/deposit")
@@ -113,6 +118,7 @@ def withdraw(data: WithdrawSchema, current_user: User = Depends(get_current_acti
     if not wallet or float(wallet.available_balance or 0) < data.amount_rd:
         raise HTTPException(status_code=400, detail="Saldo insuficiente en Billetera disponible.")
     wallet.available_balance -= data.amount_rd
+    # Este campo histórico funciona como bolsa de retiros pendientes; la custodia real vive en escrows.
     wallet.pending_custody_balance += data.amount_rd
     withdrawal = db.execute(text("INSERT INTO withdrawals (worker_id, amount, method, account_number, account_type, status, created_at) VALUES (:worker_id,:amount,:method,:account_number,:account_type,:status,CURRENT_TIMESTAMP) RETURNING id"), {"worker_id": current_user.id, "amount": data.amount_rd, "method": data.bank_name, "account_number": data.account_number, "account_type": data.account_type, "status": "PENDIENTE"}).scalar_one()
     ref = f"WITH-{uuid.uuid4().hex[:8].upper()}"
