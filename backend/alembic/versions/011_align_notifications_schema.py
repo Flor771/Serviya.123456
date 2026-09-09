@@ -1,9 +1,4 @@
-"""Align notifications schema used by the backend.
-
-The production table uses integer IDs and is_read, while older backend routes
-use string UUID IDs plus read/related_entity_id. Keep both read flags during
-migration and synchronize them so old and current routes remain compatible.
-"""
+"""Align notifications schema used by the backend."""
 from alembic import op
 import sqlalchemy as sa
 
@@ -20,17 +15,22 @@ def upgrade():
         return
 
     columns = {c["name"]: c for c in inspector.get_columns("notifications")}
-
-    # The ORM model and older notification writers use string UUID ids.
-    if columns.get("id", {}).get("type") is not None:
-        id_type = str(columns["id"]["type"]).lower()
+    id_column = columns.get("id")
+    if id_column:
+        id_type = str(id_column["type"]).lower()
         if "integer" in id_type or "bigint" in id_type:
+            # Drop a serial/identity default before changing the column type.
+            op.execute(sa.text("ALTER TABLE notifications ALTER COLUMN id DROP DEFAULT"))
             op.alter_column(
                 "notifications", "id",
                 existing_type=sa.Integer(),
                 type_=sa.String(),
                 postgresql_using="id::text",
                 existing_nullable=False,
+            )
+            op.alter_column(
+                "notifications", "id",
+                server_default=sa.text("gen_random_uuid()::text"),
             )
 
     columns = {c["name"] for c in sa.inspect(bind).get_columns("notifications")}
@@ -39,13 +39,15 @@ def upgrade():
     if "related_entity_id" not in columns:
         op.add_column("notifications", sa.Column("related_entity_id", sa.String(), nullable=True))
 
-    # Synchronize the legacy is_read field with the ORM's read field.
     op.execute(sa.text("UPDATE notifications SET read = COALESCE(is_read, false)"))
     op.execute(sa.text("""
         CREATE OR REPLACE FUNCTION sync_notification_read_flags()
         RETURNS trigger AS $$
         BEGIN
-            IF NEW.read IS DISTINCT FROM OLD.read THEN
+            IF TG_OP = 'INSERT' THEN
+                NEW.read := COALESCE(NEW.read, NEW.is_read, false);
+                NEW.is_read := NEW.read;
+            ELSIF NEW.read IS DISTINCT FROM OLD.read THEN
                 NEW.is_read := NEW.read;
             ELSE
                 NEW.read := COALESCE(NEW.is_read, false);
