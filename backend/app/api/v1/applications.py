@@ -4,7 +4,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_db, get_current_active_user
-from app.models.models import Application, Service, ServiceStatusEnum, ApplicationStatusEnum, User
+from app.models.models import Application, Service, ServiceStatusEnum, ApplicationStatusEnum, Notification, User, UserRoleEnum
 
 router = APIRouter(prefix="/applications", tags=["Postulaciones"])
 
@@ -20,11 +20,23 @@ def apply_to_service(
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db)
 ):
+    role_str = current_user.role.value if hasattr(current_user.role, "value") else str(current_user.role)
+    if role_str != UserRoleEnum.TRABAJADOR.value:
+        raise HTTPException(status_code=403, detail="Solo los trabajadores pueden postularse a servicios")
+
     service = db.query(Service).filter(Service.id == data.service_id).first()
     if not service:
         raise HTTPException(status_code=404, detail="Servicio no encontrado")
-    
-    # Check for duplicate application
+
+    if service.client_id == current_user.id:
+        raise HTTPException(status_code=400, detail="No puedes postularte a tu propio servicio")
+
+    if service.status not in (ServiceStatusEnum.PUBLICADA, ServiceStatusEnum.RECIBIENDO_POSTULACIONES):
+        raise HTTPException(status_code=400, detail="Este servicio ya no está recibiendo postulaciones")
+
+    if data.offered_price_rd <= 0:
+        raise HTTPException(status_code=400, detail="El precio ofrecido debe ser mayor que RD$0")
+
     existing = db.query(Application).filter(
         Application.service_id == data.service_id,
         Application.worker_id == current_user.id
@@ -41,7 +53,7 @@ def apply_to_service(
         status=ApplicationStatusEnum.PENDIENTE
     )
     db.add(application)
-    
+
     if service.status == ServiceStatusEnum.PUBLICADA:
         service.status = ServiceStatusEnum.RECIBIENDO_POSTULACIONES
 
@@ -75,9 +87,31 @@ def select_application(
     if service.client_id != current_user.id:
         raise HTTPException(status_code=403, detail="Solamente el cliente creador puede seleccionar técnico")
 
+    if service.worker_id:
+        raise HTTPException(status_code=400, detail="Este servicio ya tiene un técnico seleccionado")
+
+    if app_item.status != ApplicationStatusEnum.PENDIENTE:
+        raise HTTPException(status_code=400, detail="Esta postulación ya no está disponible para selección")
+
     app_item.status = ApplicationStatusEnum.SELECCIONADO
     service.worker_id = app_item.worker_id
     service.status = ServiceStatusEnum.TRABAJADOR_SELECCIONADO
+
+    notification = Notification(
+        user_id=app_item.worker_id,
+        title="Has sido seleccionado",
+        message=f"Fuiste seleccionado para el servicio: {service.title}",
+        type="TRABAJADOR_SELECCIONADO",
+        read=False,
+        related_entity_id=service.id
+    )
+    db.add(notification)
+
+    db.query(Application).filter(
+        Application.service_id == service.id,
+        Application.id != app_item.id,
+        Application.status == ApplicationStatusEnum.PENDIENTE
+    ).update({Application.status: ApplicationStatusEnum.RECHAZADO}, synchronize_session=False)
 
     db.commit()
     return {
