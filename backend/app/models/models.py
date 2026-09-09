@@ -71,7 +71,7 @@ class Escrow(Base):
 class Review(Base):
  __tablename__="reviews"; id=Column(String,primary_key=True,default=generate_uuid); service_id=Column(String,ForeignKey("services.id"),nullable=False); reviewer_id=Column(String,ForeignKey("users.id"),nullable=False); target_user_id=Column(String,ForeignKey("users.id"),nullable=False); rating=Column(Integer,nullable=False); comment=Column(Text,nullable=False); created_at=Column(DateTime,default=datetime.utcnow)
 class Notification(Base):
- __tablename__="notifications"; id=Column(String,primary_key=True,default=generate_uuid); user_id=Column(String,ForeignKey("users.id"),nullable=False); title=Column(String(200),nullable=False); message=Column(Text,nullable=False); type=Column(String(50),nullable=False); read=Column(Boolean,default=False); created_at=Column(DateTime,default=datetime.utcnow)
+ __tablename__="notifications"; id=Column(String,primary_key=True,default=generate_uuid); user_id=Column(String,ForeignKey("users.id"),nullable=False); title=Column(String(200),nullable=False); message=Column(Text,nullable=False); type=Column(String(50),nullable=False); related_entity_id=Column(String,nullable=True); read=Column(Boolean,default=False); created_at=Column(DateTime,default=datetime.utcnow)
 class Message(Base):
  __tablename__="messages"; id=Column(Integer,primary_key=True,autoincrement=True); conversation_id=Column(Integer,nullable=True); service_id=Column(String,nullable=True); sender_id=Column(String,ForeignKey("users.id"),nullable=False); receiver_id=Column(String,ForeignKey("users.id"),nullable=True); text=Column(Text,nullable=False); content=Column(Text,nullable=True); is_read=Column(Boolean,default=False); created_at=Column(DateTime,default=datetime.utcnow)
 class VerificationDocument(Base):
