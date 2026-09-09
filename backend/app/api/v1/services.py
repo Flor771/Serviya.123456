@@ -1,6 +1,6 @@
-from typing import Optional
+from typing import Optional, List
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_db, get_current_active_user
@@ -20,6 +20,9 @@ class CreateServiceSchema(BaseModel):
     service_date: str
     service_time: str
     estimated_duration: Optional[str] = None
+    images: List[str] = Field(default_factory=list)
+    photos: List[str] = Field(default_factory=list)
+    requirements: List[str] = Field(default_factory=list)
 
 @router.get("")
 def list_services(
@@ -50,8 +53,12 @@ def list_services(
             "price_rd": s.price_rd,
             "province": s.province,
             "municipality": s.municipality,
+            "address_approx": s.address_approx,
             "service_date": s.service_date,
             "service_time": s.service_time,
+            "estimated_duration": s.estimated_duration,
+            "images": s.images or [],
+            "requirements": s.requirements or [],
             "status": status_str,
             "client_id": s.client_id,
             "client_name": f"{client.first_name} {client.last_name}" if client else "Cliente SERVIYA",
@@ -84,6 +91,8 @@ def create_service(
         service_date=data.service_date,
         service_time=data.service_time,
         estimated_duration=data.estimated_duration,
+        images=list(dict.fromkeys(data.images + data.photos)),
+        requirements=data.requirements,
         client_id=current_user.id,
         status=ServiceStatusEnum.PUBLICADA
     )
@@ -97,6 +106,8 @@ def create_service(
             "id": service.id,
             "title": service.title,
             "price_rd": service.price_rd,
+            "images": service.images or [],
+            "requirements": service.requirements or [],
             "status": service.status.value if hasattr(service.status, "value") else str(service.status)
         }
     }
@@ -117,11 +128,16 @@ def get_service(id: str, db: Session = Depends(get_db)):
             "title": service.title,
             "description": service.description,
             "category_name": service.category_name,
+            "subcategory": service.subcategory,
             "price_rd": service.price_rd,
             "province": service.province,
             "municipality": service.municipality,
+            "address_approx": service.address_approx,
             "service_date": service.service_date,
             "service_time": service.service_time,
+            "estimated_duration": service.estimated_duration,
+            "images": service.images or [],
+            "requirements": service.requirements or [],
             "status": status_str,
             "client_id": service.client_id,
             "client_name": f"{client.first_name} {client.last_name}" if client else "Cliente SERVIYA",
@@ -154,6 +170,7 @@ def get_service_applications(id: str, current_user: User = Depends(get_current_a
             "worker_verified": worker.is_verified if worker else False,
             "message": a.message,
             "offered_price_rd": a.offered_price_rd,
+            "availability_note": a.availability_note,
             "status": status_str,
             "created_at": str(a.created_at)
         })
