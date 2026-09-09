@@ -23,21 +23,17 @@ class ServiceModerationBody(BaseModel):
     status: str
     reason: Optional[str] = None
 
+class PortfolioModerationBody(BaseModel):
+    action: str
+    reason: Optional[str] = None
+
 def audit(db: Session, admin_id: str, action: str, resource: str, target_id=None, details: str = ""):
-    db.execute(text("""
-        INSERT INTO admin_audit_logs (admin_id, action, resource, target_id, details, timestamp)
-        VALUES (:admin_id, :action, :resource, :target_id, :details, :timestamp)
-    """), {"admin_id": admin_id, "action": action, "resource": resource, "target_id": target_id, "details": details, "timestamp": datetime.utcnow()})
+    db.execute(text("INSERT INTO admin_audit_logs (admin_id, action, resource, target_id, details, timestamp) VALUES (:admin_id, :action, :resource, :target_id, :details, :timestamp)"), {"admin_id": admin_id, "action": action, "resource": resource, "target_id": target_id, "details": details, "timestamp": datetime.utcnow()})
 
 @router.get("/overview")
 def overview(admin_user: User = Depends(require_admin), db: Session = Depends(get_db)):
     q = lambda sql: db.execute(text(sql)).scalar() or 0
-    return {
-        "users": {"total": int(q("SELECT COUNT(*) FROM users")), "clients": int(q("SELECT COUNT(*) FROM users WHERE role = 'CLIENTE'")), "workers": int(q("SELECT COUNT(*) FROM users WHERE role = 'TRABAJADOR'")), "admins": int(q("SELECT COUNT(*) FROM users WHERE role = 'ADMIN'")), "inactive": int(q("SELECT COUNT(*) FROM users WHERE COALESCE(is_active,false) = false")), "verified": int(q("SELECT COUNT(*) FROM users WHERE COALESCE(is_verified,false) = true"))},
-        "services": {"total": int(q("SELECT COUNT(*) FROM services")), "published": int(q("SELECT COUNT(*) FROM services WHERE status IN ('PUBLICADA','RECIBIENDO_POSTULACIONES')")), "in_progress": int(q("SELECT COUNT(*) FROM services WHERE status = 'EN_PROGRESO'")), "completed": int(q("SELECT COUNT(*) FROM services WHERE status = 'COMPLETADA'")), "disputed": int(q("SELECT COUNT(*) FROM services WHERE status = 'EN_DISPUTA'"))},
-        "finance": {"custody_rd": float(q("SELECT COALESCE(SUM(total_amount_rd),0) FROM escrows WHERE status IN ('RETENIDO','EN_DISPUTA')")), "released_rd": float(q("SELECT COALESCE(SUM(total_amount_rd),0) FROM escrows WHERE status = 'LIBERADO'")), "commission_rd": float(q("SELECT COALESCE(SUM(commission_amount_rd),0) FROM escrows WHERE status = 'LIBERADO'")), "pending_withdrawals": int(q("SELECT COUNT(*) FROM withdrawals WHERE status = 'PENDIENTE'")), "withdrawals_rd": float(q("SELECT COALESCE(SUM(amount),0) FROM withdrawals WHERE status = 'PENDIENTE'"))},
-        "moderation": {"pending_verifications": int(q("SELECT COUNT(*) FROM verifications WHERE status = 'PENDIENTE'")), "open_disputes": int(q("SELECT COUNT(*) FROM disputes WHERE status IN ('ABIERTA','EN_REVISION') AND service_id IS NOT NULL")), "open_tickets": int(q("SELECT COUNT(*) FROM support_tickets WHERE status NOT IN ('CERRADO','RESUELTO')")), "portfolio_items": int(q("SELECT COUNT(*) FROM portfolio_items")), "reviews": int(q("SELECT COUNT(*) FROM reviews"))}
-    }
+    return {"users": {"total": int(q("SELECT COUNT(*) FROM users")), "clients": int(q("SELECT COUNT(*) FROM users WHERE role = 'CLIENTE'")), "workers": int(q("SELECT COUNT(*) FROM users WHERE role = 'TRABAJADOR'")), "admins": int(q("SELECT COUNT(*) FROM users WHERE role = 'ADMIN'")), "inactive": int(q("SELECT COUNT(*) FROM users WHERE COALESCE(is_active,false) = false")), "verified": int(q("SELECT COUNT(*) FROM users WHERE COALESCE(is_verified,false) = true"))}, "services": {"total": int(q("SELECT COUNT(*) FROM services")), "published": int(q("SELECT COUNT(*) FROM services WHERE status IN ('PUBLICADA','RECIBIENDO_POSTULACIONES')")), "in_progress": int(q("SELECT COUNT(*) FROM services WHERE status = 'EN_PROGRESO'")), "completed": int(q("SELECT COUNT(*) FROM services WHERE status = 'COMPLETADA'")), "disputed": int(q("SELECT COUNT(*) FROM services WHERE status = 'EN_DISPUTA'"))}, "finance": {"custody_rd": float(q("SELECT COALESCE(SUM(total_amount_rd),0) FROM escrows WHERE status IN ('RETENIDO','EN_DISPUTA')")), "released_rd": float(q("SELECT COALESCE(SUM(total_amount_rd),0) FROM escrows WHERE status = 'LIBERADO'")), "commission_rd": float(q("SELECT COALESCE(SUM(commission_amount_rd),0) FROM escrows WHERE status = 'LIBERADO'")), "pending_withdrawals": int(q("SELECT COUNT(*) FROM withdrawals WHERE status = 'PENDIENTE'")), "withdrawals_rd": float(q("SELECT COALESCE(SUM(amount),0) FROM withdrawals WHERE status = 'PENDIENTE'"))}, "moderation": {"pending_verifications": int(q("SELECT COUNT(*) FROM verifications WHERE status = 'PENDIENTE'")), "open_disputes": int(q("SELECT COUNT(*) FROM disputes WHERE status IN ('ABIERTA','EN_REVISION') AND service_id IS NOT NULL")), "open_tickets": int(q("SELECT COUNT(*) FROM support_tickets WHERE status NOT IN ('CERRADO','RESUELTO')")), "portfolio_items": int(q("SELECT COUNT(*) FROM portfolio_items")), "reviews": int(q("SELECT COUNT(*) FROM reviews"))}}
 
 @router.get("/users")
 def users(admin_user: User = Depends(require_admin), db: Session = Depends(get_db)):
@@ -89,8 +85,7 @@ def support(admin_user: User = Depends(require_admin), db: Session = Depends(get
 def update_support(ticket_id: int, data: TicketBody, admin_user: User = Depends(require_admin), db: Session = Depends(get_db)):
     row = db.execute(text("SELECT id, user_id, subject FROM support_tickets WHERE id = :id"), {"id": ticket_id}).mappings().first()
     if not row: raise HTTPException(status_code=404, detail="Ticket no encontrado")
-    if data.status is not None and data.status not in {"ABIERTO", "EN_REVISION", "RESUELTO", "CERRADO"}:
-        raise HTTPException(status_code=400, detail="Estado de ticket no válido")
+    if data.status is not None and data.status not in {"ABIERTO", "EN_REVISION", "RESUELTO", "CERRADO"}: raise HTTPException(status_code=400, detail="Estado de ticket no válido")
     db.execute(text("UPDATE support_tickets SET status = COALESCE(:status, status), admin_response = COALESCE(:response, admin_response) WHERE id = :id"), {"id": ticket_id, "status": data.status, "response": data.admin_response})
     if data.admin_response or data.status in {"RESUELTO", "CERRADO"}:
         db.execute(text("INSERT INTO notifications (user_id, title, message, type, is_read, created_at) VALUES (:user_id, :title, :message, 'SUPPORT', false, CURRENT_TIMESTAMP)"), {"user_id": row["user_id"], "title": "Actualización de soporte", "message": f"Tu ticket #{ticket_id} ({row['subject']}) fue actualizado por soporte. Revisa la respuesta dentro de SERVIYA."})
@@ -102,6 +97,18 @@ def update_support(ticket_id: int, data: TicketBody, admin_user: User = Depends(
 def portfolio(admin_user: User = Depends(require_admin), db: Session = Depends(get_db)):
     rows = db.execute(text("SELECT p.id, p.worker_id, p.title, p.description, p.category_id, p.photo_url, p.created_at, COALESCE(u.full_name, CONCAT(COALESCE(u.first_name,''),' ',COALESCE(u.last_name,''))) AS worker_name FROM portfolio_items p LEFT JOIN users u ON u.id = p.worker_id ORDER BY p.created_at DESC")).mappings().all()
     return {"portfolio": [dict(r) for r in rows]}
+
+@router.patch("/portfolio/{portfolio_id}/moderation")
+def moderate_portfolio(portfolio_id: int, data: PortfolioModerationBody, admin_user: User = Depends(require_admin), db: Session = Depends(get_db)):
+    if data.action not in {"APPROVE", "REMOVE"}: raise HTTPException(status_code=400, detail="Acción de moderación no válida")
+    row = db.execute(text("SELECT p.id, p.worker_id, p.title FROM portfolio_items p WHERE p.id = :id"), {"id": portfolio_id}).mappings().first()
+    if not row: raise HTTPException(status_code=404, detail="Trabajo del portafolio no encontrado")
+    if data.action == "REMOVE":
+        db.execute(text("DELETE FROM portfolio_items WHERE id = :id"), {"id": portfolio_id})
+        db.execute(text("INSERT INTO notifications (user_id,title,message,type,is_read,created_at) VALUES (:user_id,'Portafolio moderado',:message,'PORTFOLIO_MODERATION',false,CURRENT_TIMESTAMP)"), {"user_id": row["worker_id"], "message": f"Tu trabajo de portafolio '{row['title']}' fue retirado por moderación. Motivo: {data.reason or 'incumplimiento de las reglas de SERVIYA.'}"})
+    audit(db, admin_user.id, "PORTFOLIO_APPROVED" if data.action == "APPROVE" else "PORTFOLIO_REMOVED", "portfolio_items", portfolio_id, f"{row['title']}; motivo: {data.reason or 'sin motivo'}")
+    db.commit()
+    return {"message": "Trabajo aprobado" if data.action == "APPROVE" else "Trabajo retirado", "action": data.action}
 
 @router.get("/reviews")
 def reviews(admin_user: User = Depends(require_admin), db: Session = Depends(get_db)):
