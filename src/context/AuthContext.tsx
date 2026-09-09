@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import { User } from '../types';
 import { api, apiFetch, setAuthToken, removeAuthToken, getAuthToken } from '../services/api';
 
-interface AuthContextType { user: User | null; loading: boolean; login: (email: string, pass: string) => Promise<void>; register: (data: any) => Promise<void>; logout: () => void; toggleRole: () => Promise<void>; updateProfile: (data: Partial<User>) => Promise<void>; refreshUser: () => Promise<void>; }
+interface AuthContextType { user: User | null; loading: boolean; login: (email: string, pass: string, expectedRole?: 'CLIENTE' | 'TRABAJADOR') => Promise<void>; register: (data: any) => Promise<void>; logout: () => void; toggleRole: () => Promise<void>; updateProfile: (data: Partial<User>) => Promise<void>; refreshUser: () => Promise<void>; }
 
 const normalizeUser = (userObj: any): User | null => {
   if (!userObj) return null;
@@ -42,14 +42,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   useEffect(() => { fetchCurrentUser(); }, []);
 
-  const login = async (email: string, pass: string) => {
+  const login = async (email: string, pass: string, expectedRole?: 'CLIENTE' | 'TRABAJADOR') => {
     const data = await api.post<any>('/auth/login', { email, password: pass });
     const token = data.token || data.access_token;
     if (token) setAuthToken(token);
     try {
       const me = await apiFetch('/auth/me');
+      const normalized = normalizeUser(me);
       if (isAdminUser(me) || isAdminUser(data.user || data)) { rejectAdminSession(); }
-      setUser(normalizeUser(me));
+      if (expectedRole && normalized?.role !== expectedRole) {
+        removeAuthToken();
+        throw new Error(expectedRole === 'CLIENTE' ? 'Esta cuenta es de TRABAJADOR / TÉCNICO. Selecciona ese rol para ingresar.' : 'Esta cuenta es de CLIENTE. Selecciona ese rol para ingresar.');
+      }
+      setUser(normalized);
     } catch (err) {
       removeAuthToken();
       if (isAdminUser(data.user || data)) rejectAdminSession();
