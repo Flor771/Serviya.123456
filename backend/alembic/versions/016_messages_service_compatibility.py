@@ -1,13 +1,9 @@
-"""Align message storage with SERVIYA service-based chat.
-
-The production database still has the legacy conversation schema. The current
-SERVIYA chat is keyed by service_id and needs an explicit receiver_id, while
-legacy messages remain readable through the existing text column.
-"""
+"""Align message storage with SERVIYA service-based chat."""
 from alembic import op
 import sqlalchemy as sa
 
-revision = "016_messages_service_compatibility"
+# Alembic's production version_num column is VARCHAR(32).
+revision = "016_msg_service_compat"
 down_revision = "015_negotiation_flow"
 branch_labels = None
 depends_on = None
@@ -16,8 +12,7 @@ depends_on = None
 def upgrade():
     bind = op.get_bind()
     inspector = sa.inspect(bind)
-    tables = inspector.get_table_names()
-    if "messages" not in tables:
+    if "messages" not in inspector.get_table_names():
         return
 
     cols = {c["name"] for c in inspector.get_columns("messages")}
@@ -28,10 +23,7 @@ def upgrade():
     if "content" not in cols:
         op.add_column("messages", sa.Column("content", sa.Text(), nullable=True))
 
-    # Keep legacy messages readable through the new field.
     op.execute(sa.text("UPDATE messages SET content = text WHERE content IS NULL"))
-
-    # New service messages do not require the legacy conversation relation.
     try:
         op.alter_column("messages", "conversation_id", existing_type=sa.Integer(), nullable=True)
     except Exception:
