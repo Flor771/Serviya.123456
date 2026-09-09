@@ -44,7 +44,7 @@ def approve_release(service_id: str, data: ReleaseApproval, admin_user: User = D
     db.execute(text("UPDATE escrows SET status='LIBERADO',released_at=:now,otp_verified=true WHERE id=:id"), {"id": escrow["id"], "now": now})
     db.execute(text("UPDATE wallets SET available_balance=COALESCE(available_balance,0)+:p,total_earnings=COALESCE(total_earnings,0)+:p,total_commissions=COALESCE(total_commissions,0)+:c WHERE id=:id"), {"id": worker_wallet["id"], "p": payout, "c": commission})
     db.execute(text("INSERT INTO financial_movements (wallet_id,contract_id,movement_type,amount_dop,description,created_at) VALUES (:w,NULL,'LIBERACION_ADMIN',:p,:d,CURRENT_TIMESTAMP)"), {"w": worker_wallet["id"], "p": payout, "d": f"Liberación administrativa del servicio {service_id}"})
-    db.execute(text("INSERT INTO transactions (user_id,amount,type,status,reference_code,created_at) VALUES (:u,:p,'LIBERACION_ADMIN','COMPLETADO,:ref,CURRENT_TIMESTAMP)"), {"u": escrow["worker_id"], "p": payout, "ref": f"ADMIN-RELEASE-{service_id[:8].upper()}"})
+    db.execute(text("INSERT INTO transactions (user_id,amount,type,status,reference_code,created_at) VALUES (:u,:p,'LIBERACION_ADMIN','COMPLETADO',:ref,CURRENT_TIMESTAMP)"), {"u": escrow["worker_id"], "p": payout, "ref": f"ADMIN-RELEASE-{service_id[:8].upper()}"})
     db.execute(text("UPDATE services SET status='COMPLETADA' WHERE id=:sid"), {"sid": service_id})
     _notify(db, escrow["worker_id"], "Pago liberado por administración", f"Administración aprobó la liberación de RD$ {payout:,.2f}.", "PAYMENT_RELEASED")
     _notify(db, escrow["client_id"], "Pago aprobado y servicio cerrado", "Administración aprobó la liquidación del servicio y activó la garantía SERVIYA.", "PAYMENT_ADMIN_APPROVED")
