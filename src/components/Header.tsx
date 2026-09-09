@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNotifications } from '../context/NotificationContext';
+import { PWAInstallPrompt } from './PWAInstallPrompt';
 import {
   Bell, User as UserIcon, PlusCircle, ShieldCheck, LogOut, Layers,
   Menu, X, ChevronDown, MessageSquare, FileText, Search, BriefcaseBusiness
@@ -44,6 +45,7 @@ export const Header: React.FC<HeaderProps> = ({
 
   return (
     <header className="sticky top-0 z-40 bg-slate-900 text-white border-b border-slate-800 shadow-lg overflow-x-clip">
+      <PWAInstallPrompt />
       <div className="w-full max-w-7xl mx-auto px-2 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between min-h-14 sm:min-h-20 gap-1">
           <button
