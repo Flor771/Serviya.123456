@@ -59,10 +59,9 @@ def financial_resolution(dispute_id: int, data: FinancialResolution, admin_user:
             db.execute(text("INSERT INTO client_wallets (client_id) VALUES (:c) ON CONFLICT (client_id) DO NOTHING"), {"c":escrow["client_id"]})
             client_wallet = db.execute(text("SELECT id FROM client_wallets WHERE client_id=:c FOR UPDATE"), {"c":escrow["client_id"]}).mappings().one()
 
+        worker_release = 0.0
         if data.action == "REFUND_FULL":
             db.execute(text("UPDATE escrows SET status='REEMBOLSADO', released_at=CURRENT_TIMESTAMP WHERE id=:e"), {"e":escrow["id"]})
-            worker_release = 0.0
-            commission_refund = 0.0
         else:
             # Final settlement: refund the requested amount to the client and release
             # the remaining custody to the worker after proportional platform commission.
@@ -77,7 +76,7 @@ def financial_resolution(dispute_id: int, data: FinancialResolution, admin_user:
                 raise HTTPException(400, "El trabajador no tiene billetera")
             db.execute(text("UPDATE wallets SET available_balance=COALESCE(available_balance,0)+:p,total_earnings=COALESCE(total_earnings,0)+:p,total_commissions=COALESCE(total_commissions,0)+:c WHERE id=:w"), {"p":worker_release,"c":commission_remaining,"w":worker_wallet["id"]})
             db.execute(text("INSERT INTO financial_movements (wallet_id,contract_id,movement_type,amount_dop,description,created_at) VALUES (:w,NULL,'LIBERACION_PARCIAL_DISPUTA',:p,:d,CURRENT_TIMESTAMP)"), {"w":worker_wallet["id"],"p":worker_release,"d":f"Liquidación parcial de disputa {dispute_id}"})
-            db.execute(text("INSERT INTO transactions (user_id,amount,type,status,reference_code,created_at) VALUES (:u,:p,'LIBERACION_PARCIAL_ADMIN','COMPLETADO,:ref,CURRENT_TIMESTAMP)"), {"u":escrow["worker_id"],"p":worker_release,"ref":f"ADMIN-PARTIAL-RELEASE-{dispute_id}"})
+            db.execute(text("INSERT INTO transactions (user_id,amount,type,status,reference_code,created_at) VALUES (:u,:p,'LIBERACION_PARCIAL_ADMIN','COMPLETADO',:ref,CURRENT_TIMESTAMP)"), {"u":escrow["worker_id"],"p":worker_release,"ref":f"ADMIN-PARTIAL-RELEASE-{dispute_id}"})
             _notify(db,escrow["worker_id"],"Liquidación del servicio","Administración liberó el saldo restante del servicio después del reembolso.","PAYMENT_PARTIAL_RELEASED")
 
         ref = f"ADMIN-REFUND-{dispute_id}-{int(datetime.utcnow().timestamp())}"
