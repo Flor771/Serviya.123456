@@ -1,43 +1,20 @@
 import React from 'react';
 import { X, ShieldCheck } from 'lucide-react';
-
-interface PoliciesModalProps {
-  onClose: () => void;
-}
-
+interface PoliciesModalProps { onClose: () => void; }
 export const PoliciesModal: React.FC<PoliciesModalProps> = ({ onClose }) => {
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/70 backdrop-blur-sm p-4 overflow-y-auto">
-      <div className="bg-white rounded-3xl max-w-2xl w-full p-6 sm:p-8 shadow-2xl border border-slate-200 relative my-8 max-h-[90vh] overflow-y-auto">
-        <button onClick={onClose} className="absolute top-5 right-5 text-slate-400 hover:text-slate-600 p-1.5 rounded-full hover:bg-slate-100 transition">
-          <X className="w-5 h-5" />
-        </button>
-        <div className="flex items-center gap-2 mb-1">
-          <ShieldCheck className="w-6 h-6 text-blue-600" />
-          <h2 className="text-xl font-black text-slate-900">Políticas y Reglas SERVIYA.do</h2>
-        </div>
-        <p className="text-xs text-slate-500 mb-5">Reglas básicas para contratar, ofrecer servicios y proteger los fondos.</p>
-
-        <div className="space-y-3 text-xs text-slate-700">
-          {[
-            ['1. Custodia SERVIYA', 'El pago de un servicio se mantiene en custodia hasta que el cliente confirme la finalización o exista una resolución administrativa.'],
-            ['2. Cliente y fondos', 'El cliente puede depositar fondos en SERVIYA y utilizarlos para pagar servicios. El cliente no puede solicitar retiros normales.'],
-            ['3. Trabajador y retiros', 'El trabajador puede solicitar retiros de sus fondos disponibles. Los retiros están sujetos a validación y procesamiento administrativo.'],
-            ['4. Servicio contratado', 'El trabajador seleccionado debe realizar el servicio según la descripción, requisitos, fecha y condiciones acordadas.'],
-            ['5. Cancelaciones', 'Una cancelación con fondos en custodia puede requerir revisión cuando existan intereses o posibles incumplimientos de las partes.'],
-            ['6. No presentación', 'Si el trabajador no se presenta, el cliente puede reportarlo cuando exista un pago activo en custodia.'],
-            ['7. Disputas', 'Cliente o trabajador pueden abrir una disputa cuando corresponda. Los fondos en custodia quedan protegidos mientras se revisa el caso.'],
-            ['8. Reembolsos y resolución', 'La administración puede resolver una disputa con reembolso total, reembolso parcial o liberación de fondos al trabajador según la evidencia disponible.'],
-            ['9. Verificación', 'La verificación de identidad y certificaciones puede ser requerida para ofrecer servicios como trabajador.'],
-            ['10. Conducta', 'No se permite fraude, información falsa, abuso, daño intencional, suplantación ni uso indebido de la plataforma. SERVIYA puede suspender cuentas conforme a sus procedimientos.']
-          ].map(([title, text]) => (
-            <div key={title} className="bg-slate-50 border border-slate-100 rounded-2xl p-3.5">
-              <p className="font-bold text-slate-900 mb-1">{title}</p>
-              <p className="leading-relaxed text-slate-600">{text}</p>
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
+ const rules=[
+  ['1. Custodia SERVIYA','El pago solo entra en Custodia SERVIYA después de que cliente y trabajador hayan acordado el precio final. El presupuesto publicado es orientativo y no significa dinero depositado ni retenido.'],
+  ['2. Cliente y fondos','El cliente puede depositar fondos para pagar servicios. No existe retiro normal para clientes. El cliente conserva la decisión de aprobar la finalización, salvo resolución de una disputa conforme a las reglas.'],
+  ['3. Trabajador y retiros','El trabajador puede solicitar retiros de fondos disponibles. Los retiros quedan sujetos a validación y procesamiento administrativo.'],
+  ['4. Negociación y precio final','Cliente y trabajador pueden intercambiar propuestas y condiciones mediante el sistema. El pago se realiza por el precio acordado, no automáticamente por el presupuesto inicial.'],
+  ['5. Ejecución y evidencia','El trabajador debe cumplir las condiciones acordadas y puede presentar fotos y resumen del trabajo. Las evidencias pueden utilizarse para conformidad o mediación.'],
+  ['6. Garantía SERVIYA: qué incluye','Cuando el cliente aprueba el trabajo y se libera el pago, se activa la garantía indicada en el servicio. La cobertura estándar definida por SERVIYA es de 60 días. Puede incluir una re-visita para corregir un defecto relacionado con el trabajo contratado, cuando corresponda.'],
+  ['7. Garantía: qué NO incluye','La garantía no es ilimitada. No cubre daños por mal uso, accidentes, modificaciones o reparaciones realizadas por terceros, desgaste normal, nuevas fallas no relacionadas con el trabajo contratado ni condiciones que el trabajador no hubiera podido prever razonablemente y que no formen parte del servicio acordado.'],
+  ['8. Responsabilidades durante la garantía','El cliente debe conservar evidencia del problema, permitir la revisión cuando sea razonable y no alterar el trabajo antes de la evaluación. El trabajador debe responder a una reclamación válida y realizar la corrección o re-visita cuando corresponda.'],
+  ['9. Re-visita y mediación','El cliente puede solicitar una re-visita durante una garantía activa. Si existe desacuerdo, cliente o trabajador pueden abrir una disputa. SERVIYA revisará evidencias, mensajes, condiciones acordadas y demás información disponible.'],
+  ['10. Resolución de disputas','La administración puede determinar corrección/re-visita, liberación, reembolso total o parcial u otra resolución permitida por las reglas y evidencias del caso. Mientras corresponda, los fondos en custodia permanecen protegidos.'],
+  ['11. Cancelaciones y no presentación','Las cancelaciones se evalúan según el estado del servicio y si existen fondos en custodia. El cliente puede reportar una no presentación cuando exista un pago activo en custodia.'],
+  ['12. Verificación y conducta','La verificación de identidad y certificaciones puede ser requerida para trabajadores. No se permite fraude, información falsa, suplantación, abuso, daño intencional ni uso indebido de SERVIYA.']
+ ];
+ return <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/70 backdrop-blur-sm p-3 sm:p-4 overflow-y-auto"><div className="bg-white rounded-3xl max-w-3xl w-full p-5 sm:p-8 shadow-2xl border border-slate-200 relative my-4 max-h-[92vh] overflow-y-auto"><button onClick={onClose} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 p-2 rounded-full hover:bg-slate-100" aria-label="Cerrar"><X className="w-5 h-5"/></button><div className="flex items-start gap-2 mb-1 pr-8"><ShieldCheck className="w-6 h-6 text-blue-600 shrink-0"/><div><h2 className="text-xl font-black text-slate-900">Políticas y Reglas SERVIYA</h2><p className="text-xs text-slate-500 mt-1">Condiciones de contratación, Custodia, garantía, re-visitas, disputas y retiros.</p></div></div><div className="mt-5 grid grid-cols-1 lg:grid-cols-2 gap-3 text-xs text-slate-700">{rules.map(([title,text])=><div key={title} className="bg-slate-50 border border-slate-100 rounded-2xl p-4"><p className="font-bold text-slate-900 mb-1">{title}</p><p className="leading-relaxed text-slate-600">{text}</p></div>)}</div></div></div>;
 };
