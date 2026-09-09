@@ -89,17 +89,17 @@ def register(data: RegisterSchema, db: Session = Depends(get_db)):
     db.flush()
 
     if role_str == "TRABAJADOR":
-        acc_num = (data.bank_account_number or data.account_number or "").strip()
-        # Create WorkerProfile with bank details
+        spec_text = data.profession or "Servicios Generales"
         profile = WorkerProfile(
             user_id=user.id,
-            profession=data.profession or "Técnico General",
-            specialties=["Servicios Generales"],
-            experience_years=2,
-            hourly_rate_rd=600.0,
+            cedula=data.cedula,
+            specialties=spec_text,
+            hourly_rate=600.0,
             availability="TIEMPO_COMPLETO",
-            bank_name=data.bank_name.strip() if data.bank_name else None,
-            account_number=acc_num
+            has_infotep=False,
+            rating=5.0,
+            review_count=0,
+            is_approved=False
         )
         db.add(profile)
 

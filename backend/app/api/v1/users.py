@@ -66,13 +66,13 @@ def update_profile(data: UpdateProfileSchema, current_user: User = Depends(get_c
         if not worker_prof:
             worker_prof = WorkerProfile(
                 user_id=current_user.id,
-                profession=data.profession or "Técnico General",
-                hourly_rate_rd=data.hourly_rate_rd or 500.0
+                specialties=data.profession or "Técnico General",
+                hourly_rate=data.hourly_rate_rd or 500.0
             )
             db.add(worker_prof)
         else:
-            if data.profession: worker_prof.profession = data.profession
-            if data.hourly_rate_rd is not None: worker_prof.hourly_rate_rd = data.hourly_rate_rd
+            if data.profession: worker_prof.specialties = data.profession
+            if data.hourly_rate_rd is not None: worker_prof.hourly_rate = data.hourly_rate_rd
 
     db.commit()
     db.refresh(current_user)

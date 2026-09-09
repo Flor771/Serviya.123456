@@ -208,5 +208,62 @@ class TestRegistrationAndAuth(unittest.TestCase):
         from sqlalchemy import Integer
         self.assertIsInstance(id_col.type, Integer, "wallets.id column must be Integer")
 
+    def test_8_worker_profile_production_schema_compatibility(self):
+        col_names = [c.name for c in WorkerProfile.__table__.columns]
+        # Real production columns
+        self.assertIn("id", col_names)
+        self.assertIn("user_id", col_names)
+        self.assertIn("cedula", col_names)
+        self.assertIn("bio", col_names)
+        self.assertIn("specialties", col_names)
+        self.assertIn("has_infotep", col_names)
+        self.assertIn("rating", col_names)
+        self.assertIn("review_count", col_names)
+        self.assertIn("hourly_rate", col_names)
+        self.assertIn("availability", col_names)
+        self.assertIn("is_approved", col_names)
+        self.assertIn("cedula_front_url", col_names)
+        self.assertIn("cedula_back_url", col_names)
+        self.assertIn("selfie_url", col_names)
+        self.assertIn("certificate_url", col_names)
+
+        # Prohibited/Nonexistent columns in worker_profiles table
+        self.assertNotIn("profession", col_names, "profession column does NOT exist in production worker_profiles")
+        self.assertNotIn("experience_years", col_names, "experience_years column does NOT exist in production worker_profiles")
+        self.assertNotIn("hourly_rate_rd", col_names, "hourly_rate_rd column does NOT exist in production worker_profiles")
+        self.assertNotIn("portfolio_images", col_names, "portfolio_images column does NOT exist in production worker_profiles")
+        self.assertNotIn("certifications", col_names, "certifications column does NOT exist in production worker_profiles")
+        self.assertNotIn("verification_status", col_names, "verification_status column does NOT exist in production worker_profiles")
+        self.assertNotIn("bank_name", col_names, "bank_name column does NOT exist in production worker_profiles")
+        self.assertNotIn("account_number", col_names, "account_number column does NOT exist in production worker_profiles")
+
+        id_col = WorkerProfile.__table__.columns["id"]
+        from sqlalchemy import Integer
+        self.assertIsInstance(id_col.type, Integer, "worker_profiles.id column must be Integer")
+
+    def test_9_cliente_no_worker_profile_or_wallet(self):
+        test_email = f"pure_client_{uuid.uuid4().hex[:6]}@example.com"
+        payload = {
+            "first_name": "Juan",
+            "last_name": "Pérez",
+            "email": test_email,
+            "phone": "8095550101",
+            "password": "ClientPassword123!",
+            "confirm_password": "ClientPassword123!",
+            "role": "CLIENTE",
+            "accept_policies": True
+        }
+        resp = self.client.post("/api/v1/auth/register", json=payload)
+        self.assertEqual(resp.status_code, 200)
+
+        db = TestingSessionLocal()
+        user = db.query(User).filter(User.email == test_email).first()
+        self.assertIsNotNone(user)
+        wp = db.query(WorkerProfile).filter(WorkerProfile.user_id == user.id).first()
+        self.assertIsNone(wp, "CLIENTE must NOT have a WorkerProfile")
+        wallet = db.query(Wallet).filter(Wallet.worker_id == user.id).first()
+        self.assertIsNone(wallet, "CLIENTE must NOT have a Worker Wallet")
+        db.close()
+
 if __name__ == "__main__":
     unittest.main()

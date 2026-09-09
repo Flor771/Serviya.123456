@@ -20,6 +20,26 @@ def upgrade() -> None:
     tables = inspector.get_table_names()
 
     # 1. Ensure services table exists safely without category_id FK constraint
+    if 'worker_profiles' not in tables:
+        op.create_table(
+            'worker_profiles',
+            sa.Column('id', sa.Integer(), primary_key=True, autoincrement=True),
+            sa.Column('user_id', sa.String(), sa.ForeignKey('users.id'), nullable=False, unique=True),
+            sa.Column('cedula', sa.String(length=20), nullable=True),
+            sa.Column('bio', sa.Text(), nullable=True),
+            sa.Column('specialties', sa.String(), nullable=True),
+            sa.Column('has_infotep', sa.Boolean(), server_default='false'),
+            sa.Column('rating', sa.Float(), server_default='5.0'),
+            sa.Column('review_count', sa.Integer(), server_default='0'),
+            sa.Column('hourly_rate', sa.Float(), nullable=True),
+            sa.Column('availability', sa.String(length=50), nullable=True),
+            sa.Column('is_approved', sa.Boolean(), server_default='false'),
+            sa.Column('cedula_front_url', sa.String(length=500), nullable=True),
+            sa.Column('cedula_back_url', sa.String(length=500), nullable=True),
+            sa.Column('selfie_url', sa.String(length=500), nullable=True),
+            sa.Column('certificate_url', sa.String(length=500), nullable=True)
+        )
+
     if 'wallets' not in tables:
         op.create_table(
             'wallets',

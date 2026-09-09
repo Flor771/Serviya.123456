@@ -81,28 +81,43 @@ class User(Base):
 class WorkerProfile(Base):
     __tablename__ = "worker_profiles"
 
-    id = Column(String, primary_key=True, default=generate_uuid)
+    id = Column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(String, ForeignKey("users.id"), nullable=False, unique=True)
-    profession = Column(String(150), nullable=False)
-    specialties = Column(JSON, default=[])
-    experience_years = Column(Integer, default=1)
-    hourly_rate_rd = Column(Float, default=500.0)
-    availability = Column(String(50), default="TIEMPO_COMPLETO")
-    portfolio_images = Column(JSON, default=[])
-    certifications = Column(JSON, default=[])
-    verification_status = Column(Enum(VerificationStatusEnum), default=VerificationStatusEnum.SIN_VERIFICAR)
-    bank_name = Column(String(100), nullable=True)
-    account_number = Column(String(50), nullable=True)
+    cedula = Column(String(20), nullable=True)
+    bio = Column(Text, nullable=True)
+    specialties = Column(String(255), nullable=True)
+    has_infotep = Column(Boolean, nullable=True, default=False)
+    rating = Column(Float, nullable=True, default=5.0)
+    review_count = Column(Integer, nullable=True, default=0)
+    hourly_rate = Column(Float, nullable=True)
+    availability = Column(String(50), nullable=True)
+    is_approved = Column(Boolean, nullable=True, default=False)
+    cedula_front_url = Column(String(500), nullable=True)
+    cedula_back_url = Column(String(500), nullable=True)
+    selfie_url = Column(String(500), nullable=True)
+    certificate_url = Column(String(500), nullable=True)
 
     user = relationship("User", back_populates="worker_profile")
 
     @property
-    def bank_account_number(self) -> Optional[str]:
-        return self.account_number
+    def profession(self) -> Optional[str]:
+        return self.specialties
 
-    @bank_account_number.setter
-    def bank_account_number(self, value: Optional[str]):
-        self.account_number = value
+    @profession.setter
+    def profession(self, value: Optional[str]):
+        self.specialties = value
+
+    @property
+    def hourly_rate_rd(self) -> Optional[float]:
+        return self.hourly_rate
+
+    @hourly_rate_rd.setter
+    def hourly_rate_rd(self, value: Optional[float]):
+        self.hourly_rate = value
+
+    @property
+    def experience_years(self) -> int:
+        return 1
 
 class Category(Base):
     __tablename__ = "categories"

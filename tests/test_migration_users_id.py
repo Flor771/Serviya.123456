@@ -34,9 +34,8 @@ class TestUsersUUIDAndForeignKeys(unittest.TestCase):
         )
 
         worker_profile = WorkerProfile(
-            id=str(uuid.uuid4()),
             user_id=user_uuid,
-            profession="Electricista Certificado"
+            specialties="Electricista Certificado"
         )
 
         wallet = Wallet(

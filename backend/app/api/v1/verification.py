@@ -30,7 +30,7 @@ def upload_verification(
 
     worker_prof = db.query(WorkerProfile).filter(WorkerProfile.user_id == current_user.id).first()
     if worker_prof:
-        worker_prof.verification_status = VerificationStatusEnum.PENDIENTE
+        worker_prof.is_approved = False
 
     db.commit()
     db.refresh(doc)
