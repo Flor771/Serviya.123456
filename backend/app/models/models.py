@@ -48,7 +48,6 @@ class WithdrawalStatusEnum(str, enum.Enum):
 
 class User(Base):
     __tablename__ = "users"
-
     id = Column(String, primary_key=True, default=generate_uuid)
     first_name = Column(String(100), nullable=False)
     last_name = Column(String(100), nullable=False)
@@ -56,11 +55,9 @@ class User(Base):
     phone = Column(String(50), nullable=False)
     cedula = Column(String(20), nullable=True)
     password_hash = Column(String(255), nullable=False)
-
     @property
     def hashed_password(self) -> str:
         return self.password_hash
-
     @hashed_password.setter
     def hashed_password(self, value: str):
         self.password_hash = value
@@ -70,17 +67,16 @@ class User(Base):
     municipality = Column(String(100), nullable=False, default="Santo Domingo de Guzmán (DN)")
     bio = Column(Text, nullable=True)
     avatar_url = Column(String(500), nullable=True)
+    is_active = Column(Boolean, default=True, nullable=True)
     is_verified = Column(Boolean, default=False)
     rating = Column(Float, default=5.0)
     jobs_completed = Column(Integer, default=0)
     created_at = Column(DateTime, default=datetime.utcnow)
-
     worker_profile = relationship("WorkerProfile", back_populates="user", uselist=False)
     wallet = relationship("Wallet", back_populates="worker", uselist=False, foreign_keys="Wallet.worker_id")
 
 class WorkerProfile(Base):
     __tablename__ = "worker_profiles"
-
     id = Column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(String, ForeignKey("users.id"), nullable=False, unique=True)
     cedula = Column(String(20), nullable=True)
@@ -96,32 +92,20 @@ class WorkerProfile(Base):
     cedula_back_url = Column(String(500), nullable=True)
     selfie_url = Column(String(500), nullable=True)
     certificate_url = Column(String(500), nullable=True)
-
     user = relationship("User", back_populates="worker_profile")
-
     @property
-    def profession(self) -> Optional[str]:
-        return self.specialties
-
+    def profession(self) -> Optional[str]: return self.specialties
     @profession.setter
-    def profession(self, value: Optional[str]):
-        self.specialties = value
-
+    def profession(self, value: Optional[str]): self.specialties = value
     @property
-    def hourly_rate_rd(self) -> Optional[float]:
-        return self.hourly_rate
-
+    def hourly_rate_rd(self) -> Optional[float]: return self.hourly_rate
     @hourly_rate_rd.setter
-    def hourly_rate_rd(self, value: Optional[float]):
-        self.hourly_rate = value
-
+    def hourly_rate_rd(self, value: Optional[float]): self.hourly_rate = value
     @property
-    def experience_years(self) -> int:
-        return 1
+    def experience_years(self) -> int: return 1
 
 class Category(Base):
     __tablename__ = "categories"
-
     id = Column(String, primary_key=True, default=generate_uuid)
     name = Column(String(100), unique=True, nullable=False)
     slug = Column(String(100), unique=True, nullable=False)
@@ -131,7 +115,6 @@ class Category(Base):
 
 class Service(Base):
     __tablename__ = "services"
-
     id = Column(String, primary_key=True, default=generate_uuid)
     title = Column(String(200), nullable=False)
     description = Column(Text, nullable=False)
@@ -155,7 +138,6 @@ class Service(Base):
 
 class Application(Base):
     __tablename__ = "applications"
-
     id = Column(String, primary_key=True, default=generate_uuid)
     service_id = Column(String, ForeignKey("services.id"), nullable=False)
     worker_id = Column(String, ForeignKey("users.id"), nullable=False)
@@ -167,7 +149,6 @@ class Application(Base):
 
 class Wallet(Base):
     __tablename__ = "wallets"
-
     id = Column(Integer, primary_key=True, autoincrement=True)
     worker_id = Column(String, ForeignKey("users.id"), nullable=False, unique=True)
     available_balance = Column(Float, default=0.0)
@@ -175,68 +156,40 @@ class Wallet(Base):
     total_earnings = Column(Float, default=0.0)
     total_commissions = Column(Float, default=0.0)
     total_withdrawn = Column(Float, default=0.0)
-
     worker = relationship("User", back_populates="wallet")
-
     @property
-    def user(self):
-        return self.worker
-
+    def user(self): return self.worker
     @property
-    def user_id(self) -> str:
-        return self.worker_id
-
+    def user_id(self) -> str: return self.worker_id
     @user_id.setter
-    def user_id(self, value: str):
-        self.worker_id = value
-
+    def user_id(self, value: str): self.worker_id = value
     @property
-    def available_rd(self) -> float:
-        return self.available_balance
-
+    def available_rd(self) -> float: return self.available_balance
     @available_rd.setter
-    def available_rd(self, value: float):
-        self.available_balance = value
-
+    def available_rd(self, value: float): self.available_balance = value
     @property
-    def escrow_rd(self) -> float:
-        return self.pending_custody_balance
-
+    def escrow_rd(self) -> float: return self.pending_custody_balance
     @escrow_rd.setter
-    def escrow_rd(self, value: float):
-        self.pending_custody_balance = value
-
+    def escrow_rd(self, value: float): self.pending_custody_balance = value
     @property
-    def pending_rd(self) -> float:
-        return self.pending_custody_balance
-
+    def pending_rd(self) -> float: return self.pending_custody_balance
     @pending_rd.setter
-    def pending_rd(self, value: float):
-        self.pending_custody_balance = value
-
+    def pending_rd(self, value: float): self.pending_custody_balance = value
     @property
-    def total_received_rd(self) -> float:
-        return self.total_earnings
-
+    def total_received_rd(self) -> float: return self.total_earnings
     @total_received_rd.setter
-    def total_received_rd(self, value: float):
-        self.total_earnings = value
-
+    def total_received_rd(self, value: float): self.total_earnings = value
     @property
-    def total_spent_rd(self) -> float:
-        return self.total_withdrawn
-
+    def total_spent_rd(self) -> float: return self.total_withdrawn
     @total_spent_rd.setter
-    def total_spent_rd(self, value: float):
-        self.total_withdrawn = value
+    def total_spent_rd(self, value: float): self.total_withdrawn = value
 
 class WalletTransaction(Base):
     __tablename__ = "wallet_transactions"
-
     id = Column(String, primary_key=True, default=generate_uuid)
     wallet_id = Column(String, ForeignKey("wallets.id"), nullable=False)
     user_id = Column(String, ForeignKey("users.id"), nullable=False)
-    type = Column(String(50), nullable=False) # depósito, pago, comisión, liberación, retiro
+    type = Column(String(50), nullable=False)
     amount_rd = Column(Float, nullable=False)
     description = Column(String(255), nullable=False)
     reference = Column(String(100), nullable=False)
@@ -245,7 +198,6 @@ class WalletTransaction(Base):
 
 class Escrow(Base):
     __tablename__ = "escrows"
-
     id = Column(String, primary_key=True, default=generate_uuid)
     service_id = Column(String, ForeignKey("services.id"), nullable=False)
     client_id = Column(String, ForeignKey("users.id"), nullable=False)
@@ -254,13 +206,12 @@ class Escrow(Base):
     commission_rate_percent = Column(Float, default=8.0)
     commission_amount_rd = Column(Float, nullable=False)
     worker_payout_rd = Column(Float, nullable=False)
-    status = Column(String(50), default="RETENIDO") # RETENIDO, LIBERADO, REEMBOLSADO, EN_DISPUTA
+    status = Column(String(50), default="RETENIDO")
     created_at = Column(DateTime, default=datetime.utcnow)
     released_at = Column(DateTime, nullable=True)
 
 class Review(Base):
     __tablename__ = "reviews"
-
     id = Column(String, primary_key=True, default=generate_uuid)
     service_id = Column(String, ForeignKey("services.id"), nullable=False)
     reviewer_id = Column(String, ForeignKey("users.id"), nullable=False)
@@ -271,7 +222,6 @@ class Review(Base):
 
 class Notification(Base):
     __tablename__ = "notifications"
-
     id = Column(String, primary_key=True, default=generate_uuid)
     user_id = Column(String, ForeignKey("users.id"), nullable=False)
     title = Column(String(200), nullable=False)
@@ -283,7 +233,6 @@ class Notification(Base):
 
 class Message(Base):
     __tablename__ = "messages"
-
     id = Column(String, primary_key=True, default=generate_uuid)
     service_id = Column(String, ForeignKey("services.id"), nullable=False)
     sender_id = Column(String, ForeignKey("users.id"), nullable=False)
@@ -293,7 +242,6 @@ class Message(Base):
 
 class VerificationDocument(Base):
     __tablename__ = "verification_documents"
-
     id = Column(String, primary_key=True, default=generate_uuid)
     user_id = Column(String, ForeignKey("users.id"), nullable=False)
     document_type = Column(String(50), nullable=False)
@@ -304,7 +252,6 @@ class VerificationDocument(Base):
 
 class Dispute(Base):
     __tablename__ = "disputes"
-
     id = Column(String, primary_key=True, default=generate_uuid)
     service_id = Column(String, ForeignKey("services.id"), nullable=False)
     opened_by_user_id = Column(String, ForeignKey("users.id"), nullable=False)
@@ -318,7 +265,6 @@ class Dispute(Base):
 
 class Withdrawal(Base):
     __tablename__ = "withdrawals"
-
     id = Column(String, primary_key=True, default=generate_uuid)
     user_id = Column(String, ForeignKey("users.id"), nullable=False)
     amount_rd = Column(Float, nullable=False)
@@ -333,7 +279,6 @@ class Withdrawal(Base):
 
 class BankAccount(Base):
     __tablename__ = "bank_accounts"
-
     id = Column(Integer, primary_key=True, autoincrement=True)
     bank_name = Column(String(100), nullable=False)
     account_number = Column(String(100), nullable=False)
@@ -346,7 +291,6 @@ class BankAccount(Base):
 
 class AuditLog(Base):
     __tablename__ = "audit_logs"
-
     id = Column(String, primary_key=True, default=generate_uuid)
     user_id = Column(String, nullable=True)
     action = Column(String(100), nullable=False)
