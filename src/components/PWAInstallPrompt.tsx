@@ -10,72 +10,81 @@ export const PWAInstallPrompt: React.FC = () => {
 
   return (
     <>
-      {/* Prominent Header / Top Banner button */}
-      <div className="flex items-center gap-2">
-        {isInstallable && (
+      {/* Compact floating installer: does not occupy header space */}
+      <div className="fixed right-3 bottom-20 sm:right-5 sm:bottom-5 z-40">
+        {isInstallable ? (
           <button
             onClick={install}
-            className="flex items-center gap-2 bg-gradient-to-r from-red-600 to-blue-700 hover:from-red-700 hover:to-blue-800 text-white font-semibold text-xs sm:text-sm px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl shadow-md transition-all transform active:scale-95"
+            className="w-11 h-11 sm:w-12 sm:h-12 rounded-full bg-gradient-to-r from-red-600 to-blue-700 text-white flex items-center justify-center shadow-xl border-2 border-white/80 active:scale-95 transition"
+            title="Instalar SERVIYA"
+            aria-label="Instalar SERVIYA"
           >
-            <Download className="w-4 h-4 animate-bounce" />
-            <span>📲 INSTALAR SERVIYA</span>
+            <Download className="w-5 h-5 sm:w-6 sm:h-6" />
           </button>
-        )}
-
-        {!isInstallable && (
+        ) : (
           <button
             onClick={() => setShowGuide(true)}
-            className="flex items-center gap-1.5 bg-slate-800 hover:bg-slate-900 text-slate-100 font-medium text-xs px-3 py-1.5 rounded-xl border border-slate-700 shadow-sm transition"
+            className="w-11 h-11 sm:w-12 sm:h-12 rounded-full bg-slate-900 text-white flex items-center justify-center shadow-xl border border-slate-700 active:scale-95 transition"
+            title="Cómo instalar SERVIYA"
+            aria-label="Cómo instalar SERVIYA"
           >
-            <Smartphone className="w-3.5 h-3.5 text-blue-400" />
-            <span>¿Cómo instalar?</span>
+            <Smartphone className="w-5 h-5 sm:w-6 sm:h-6 text-blue-300" />
           </button>
         )}
       </div>
 
-      {/* Guide Modal */}
+      {/* Installation guide */}
       {showGuide && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/70 backdrop-blur-sm p-4">
           <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200 relative animate-in fade-in zoom-in duration-200">
             <button
               onClick={() => setShowGuide(false)}
               className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 p-1 rounded-full hover:bg-slate-100 transition"
+              aria-label="Cerrar guía"
             >
               <X className="w-5 h-5" />
             </button>
 
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-blue-900 via-blue-800 to-red-600 flex items-center justify-center text-white shadow-md">
+            <div className="flex items-center gap-3 mb-4 pr-8">
+              <div className="w-12 h-12 shrink-0 rounded-2xl bg-gradient-to-br from-blue-900 via-blue-800 to-red-600 flex items-center justify-center text-white shadow-md">
                 <ShieldCheck className="w-7 h-7" />
               </div>
-              <div>
-                <h3 className="text-lg font-bold text-slate-900">Instala SERVIYA.do 🇩🇴</h3>
-                <p className="text-xs text-slate-500">Accede como aplicación en tu celular sin descargar en tienda</p>
+              <div className="min-w-0">
+                <h3 className="text-lg font-bold text-slate-900">Instalar SERVIYA</h3>
+                <p className="text-xs text-slate-500">Instálala en tu celular sin ocupar espacio en el encabezado.</p>
               </div>
             </div>
 
             <div className="space-y-4 text-xs sm:text-sm text-slate-700">
+              {isInstallable && (
+                <div className="p-3 bg-blue-50 rounded-xl border border-blue-100">
+                  <span className="font-bold text-blue-900 block mb-1">Instalación rápida:</span>
+                  <p className="text-slate-600">Toca el botón de descarga que aparece abajo y sigue la ventana de instalación.</p>
+                </div>
+              )}
+
               <div className="p-3 bg-blue-50 rounded-xl border border-blue-100">
-                <span className="font-bold text-blue-900 block mb-1">🤖 En Android (Google Chrome):</span>
+                <span className="font-bold text-blue-900 block mb-1">En Android (Google Chrome):</span>
                 <ol className="list-decimal list-inside space-y-1 text-slate-600">
-                  <li>Toca el botón <strong>"Instalar SERVIYA"</strong> arriba si aparece.</li>
-                  <li>O toca los 3 puntos superiores <strong>(⋮)</strong> de tu navegador.</li>
-                  <li>Selecciona <strong>"Instalar aplicación"</strong> o "Agregar a pantalla principal".</li>
+                  <li>Toca los 3 puntos superiores (⋮) del navegador.</li>
+                  <li>Selecciona “Instalar aplicación” o “Agregar a pantalla principal”.</li>
                 </ol>
               </div>
 
-              <div className="p-3 bg-red-50 rounded-xl border border-red-100">
-                <span className="font-bold text-red-900 block mb-1">🍎 En iPhone / iPad (Safari):</span>
-                <ol className="list-decimal list-inside space-y-1 text-slate-600">
-                  <li>Abre <strong>SERVIYA.do</strong> en el navegador Safari.</li>
-                  <li>Toca el botón <strong>Compartir ( Compartir )</strong> en la barra inferior.</li>
-                  <li>Desplázate hacia abajo y elige <strong>"Agregar al inicio"</strong>.</li>
-                </ol>
-              </div>
+              {isIOS && (
+                <div className="p-3 bg-red-50 rounded-xl border border-red-100">
+                  <span className="font-bold text-red-900 block mb-1">En iPhone / iPad (Safari):</span>
+                  <ol className="list-decimal list-inside space-y-1 text-slate-600">
+                    <li>Abre SERVIYA en Safari.</li>
+                    <li>Toca el botón Compartir.</li>
+                    <li>Elige “Agregar al inicio”.</li>
+                  </ol>
+                </div>
+              )}
 
               <div className="flex items-center gap-2 text-emerald-700 bg-emerald-50 p-2.5 rounded-xl border border-emerald-100 text-xs font-medium">
                 <Check className="w-4 h-4 shrink-0 text-emerald-600" />
-                <span>La PWA funciona como app nativa, es más liviana y guarda tus servicios en RD.</span>
+                <span>SERVIYA funciona como una aplicación web instalable.</span>
               </div>
             </div>
 
