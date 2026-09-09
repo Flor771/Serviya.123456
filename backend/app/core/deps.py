@@ -24,27 +24,19 @@ def get_current_user(
             return None
     except JWTError:
         return None
-    user = db.query(User).filter(User.id == user_id).first()
-    return user
+    return db.query(User).filter(User.id == user_id).first()
 
 def get_current_active_user(
     current_user: Optional[User] = Depends(get_current_user)
 ) -> User:
     if not current_user:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="No autenticado. Por favor inicie sesión.",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="No autenticado. Por favor inicie sesión.", headers={"WWW-Authenticate": "Bearer"})
+    if current_user.is_active is False:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Esta cuenta está suspendida. Contacte con soporte de SERVIYA.do.")
     return current_user
 
-def require_admin(
-    current_user: User = Depends(get_current_active_user)
-) -> User:
+def require_admin(current_user: User = Depends(get_current_active_user)) -> User:
     role_str = str(current_user.role.value) if hasattr(current_user.role, "value") else str(current_user.role)
     if role_str != "ADMIN":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Acceso denegado. Se requieren permisos de administrador."
-        )
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Acceso denegado. Se requieren permisos de administrador.")
     return current_user
