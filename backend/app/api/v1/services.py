@@ -1,10 +1,10 @@
-from typing import Optional, List
+from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from app.core.deps import get_db, get_current_active_user, get_current_user
-from app.models.models import Service, Application, ServiceStatusEnum, User
+from app.core.deps import get_db, get_current_active_user
+from app.models.models import Service, Application, ServiceStatusEnum, User, UserRoleEnum
 
 router = APIRouter(prefix="/services", tags=["Servicios y Trabajos"])
 
@@ -35,7 +35,7 @@ def list_services(
         query = query.filter(Service.category_name == category_name)
     if status:
         query = query.filter(Service.status == status)
-    
+
     services = query.order_by(Service.created_at.desc()).all()
     results = []
     for s in services:
@@ -65,6 +65,13 @@ def create_service(
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db)
 ):
+    role_str = current_user.role.value if hasattr(current_user.role, "value") else str(current_user.role)
+    if role_str != UserRoleEnum.CLIENTE.value:
+        raise HTTPException(status_code=403, detail="Solo los clientes pueden publicar servicios")
+
+    if data.price_rd <= 0:
+        raise HTTPException(status_code=400, detail="El precio del servicio debe ser mayor que RD$0")
+
     service = Service(
         title=data.title,
         description=data.description,
@@ -99,7 +106,7 @@ def get_service(id: str, db: Session = Depends(get_db)):
     service = db.query(Service).filter(Service.id == id).first()
     if not service:
         raise HTTPException(status_code=404, detail="Servicio no encontrado")
-    
+
     client = db.query(User).filter(User.id == service.client_id).first()
     worker = db.query(User).filter(User.id == service.worker_id).first() if service.worker_id else None
 
@@ -126,6 +133,13 @@ def get_service(id: str, db: Session = Depends(get_db)):
 
 @router.get("/{id}/applications")
 def get_service_applications(id: str, current_user: User = Depends(get_current_active_user), db: Session = Depends(get_db)):
+    service = db.query(Service).filter(Service.id == id).first()
+    if not service:
+        raise HTTPException(status_code=404, detail="Servicio no encontrado")
+    role_str = current_user.role.value if hasattr(current_user.role, "value") else str(current_user.role)
+    if role_str != UserRoleEnum.ADMIN.value and service.client_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Solo el cliente del servicio puede ver las postulaciones")
+
     apps = db.query(Application).filter(Application.service_id == id).all()
     results = []
     for a in apps:
