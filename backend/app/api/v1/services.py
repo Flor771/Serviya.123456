@@ -1,103 +1,103 @@
 from typing import Optional, List
+import uuid
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy import text
 from sqlalchemy.orm import Session
-
 from app.core.deps import get_db, get_current_active_user
 from app.models.models import Service, Application, Escrow, ServiceStatusEnum, User, UserRoleEnum
-
 router = APIRouter(prefix="/services", tags=["Servicios y Trabajos"])
-
 class CreateServiceSchema(BaseModel):
-    title: str
-    description: str
-    category_name: str
-    subcategory: Optional[str] = None
-    price_rd: float
-    province: str
-    municipality: str
-    address_approx: Optional[str] = None
-    service_date: str
-    service_time: str
-    estimated_duration: Optional[str] = None
-    images: List[str] = Field(default_factory=list)
-    photos: List[str] = Field(default_factory=list)
-    requirements: List[str] = Field(default_factory=list)
-
+    title:str; description:str; category_name:str; subcategory:Optional[str]=None; price_rd:float; province:str; municipality:str; address_approx:Optional[str]=None; service_date:str; service_time:str; estimated_duration:Optional[str]=None; images:List[str]=Field(default_factory=list); photos:List[str]=Field(default_factory=list); requirements:List[str]=Field(default_factory=list)
 class CancelServiceSchema(BaseModel):
-    reason: str = Field(default="Cancelación solicitada por el cliente", min_length=3, max_length=500)
+    reason:str=Field(default="Cancelación solicitada",min_length=3,max_length=500)
+
+def role(u): return u.role.value if hasattr(u.role,"value") else str(u.role)
+def tx(db,u,a,t,s,r,d): db.execute(text("INSERT INTO transactions (user_id,amount,type,status,reference_code,created_at) VALUES (:u,:a,:t,:s,:r,CURRENT_TIMESTAMP)"),{"u":u,"a":a,"t":t,"s":s,"r":r})
+def notify(db,u,title,msg,typ,related=None):
+    db.execute(text("INSERT INTO notifications (id,user_id,title,message,type,read,related_entity_id,created_at) VALUES (:id,:u,:title,:msg,:typ,false,:related,CURRENT_TIMESTAMP)"),{"id":uuid.uuid4().hex,"u":u,"title":title,"msg":msg,"typ":typ,"related":str(related) if related else None})
+def client_wallet(db,c):
+    row=db.execute(text("SELECT id,available_balance FROM client_wallets WHERE client_id=:c FOR UPDATE"),{"c":c}).mappings().first()
+    if not row:
+        db.execute(text("INSERT INTO client_wallets (client_id) VALUES (:c) ON CONFLICT (client_id) DO NOTHING"),{"c":c}); row=db.execute(text("SELECT id,available_balance FROM client_wallets WHERE client_id=:c FOR UPDATE"),{"c":c}).mappings().one()
+    return row
 
 @router.get("")
-def list_services(province: Optional[str] = Query(None), category_name: Optional[str] = Query(None), status: Optional[str] = Query(None), db: Session = Depends(get_db)):
-    query = db.query(Service)
-    if province: query = query.filter(Service.province == province)
-    if category_name: query = query.filter(Service.category_name == category_name)
-    if status: query = query.filter(Service.status == status)
-    services = query.order_by(Service.created_at.desc()).all()
-    results = []
-    for s in services:
-        status_str = s.status.value if hasattr(s.status, "value") else str(s.status)
-        client = db.query(User).filter(User.id == s.client_id).first()
-        results.append({"id":s.id,"title":s.title,"description":s.description,"category_name":s.category_name,"subcategory":s.subcategory,"price_rd":s.price_rd,"province":s.province,"municipality":s.municipality,"address_approx":s.address_approx,"service_date":s.service_date,"service_time":s.service_time,"estimated_duration":s.estimated_duration,"images":s.images or [],"requirements":s.requirements or [],"status":status_str,"client_id":s.client_id,"client_name":f"{client.first_name} {client.last_name}" if client else "Cliente SERVIYA","created_at":str(s.created_at)})
-    return {"services":results}
+def list_services(province:Optional[str]=Query(None),category_name:Optional[str]=Query(None),status:Optional[str]=Query(None),db:Session=Depends(get_db)):
+    q=db.query(Service)
+    if province:q=q.filter(Service.province==province)
+    if category_name:q=q.filter(Service.category_name==category_name)
+    if status:q=q.filter(Service.status==status)
+    out=[]
+    for s in q.order_by(Service.created_at.desc()).all():
+        c=db.query(User).filter(User.id==s.client_id).first(); out.append({"id":s.id,"title":s.title,"description":s.description,"category_name":s.category_name,"subcategory":s.subcategory,"price_rd":s.price_rd,"province":s.province,"municipality":s.municipality,"address_approx":s.address_approx,"service_date":s.service_date,"service_time":s.service_time,"estimated_duration":s.estimated_duration,"images":s.images or [],"requirements":s.requirements or [],"status":s.status.value if hasattr(s.status,"value") else str(s.status),"client_id":s.client_id,"client_name":f"{c.first_name} {c.last_name}" if c else "Cliente SERVIYA","created_at":str(s.created_at)})
+    return {"services":out}
 
 @router.post("")
-def create_service(data: CreateServiceSchema, current_user: User = Depends(get_current_active_user), db: Session = Depends(get_db)):
-    role_str = current_user.role.value if hasattr(current_user.role, "value") else str(current_user.role)
-    if role_str != UserRoleEnum.CLIENTE.value: raise HTTPException(status_code=403, detail="Solo los clientes pueden publicar servicios")
-    if data.price_rd <= 0: raise HTTPException(status_code=400, detail="El precio del servicio debe ser mayor que RD$0")
-    service = Service(title=data.title,description=data.description,category_name=data.category_name,subcategory=data.subcategory,price_rd=data.price_rd,province=data.province,municipality=data.municipality,address_approx=data.address_approx,service_date=data.service_date,service_time=data.service_time,estimated_duration=data.estimated_duration,images=list(dict.fromkeys(data.images+data.photos)),requirements=data.requirements,client_id=current_user.id,status=ServiceStatusEnum.PUBLICADA)
-    db.add(service); db.commit(); db.refresh(service)
-    return {"message":"Servicio publicado exitosamente en SERVIYA.do","service":{"id":service.id,"title":service.title,"price_rd":service.price_rd,"images":service.images or [],"requirements":service.requirements or [],"status":service.status.value if hasattr(service.status,"value") else str(service.status)}}
+def create_service(data:CreateServiceSchema,current_user:User=Depends(get_current_active_user),db:Session=Depends(get_db)):
+    if role(current_user)!=UserRoleEnum.CLIENTE.value: raise HTTPException(403,"Solo los clientes pueden publicar servicios")
+    if data.price_rd<=0: raise HTTPException(400,"El precio debe ser mayor que RD$0")
+    s=Service(title=data.title,description=data.description,category_name=data.category_name,subcategory=data.subcategory,price_rd=data.price_rd,province=data.province,municipality=data.municipality,address_approx=data.address_approx,service_date=data.service_date,service_time=data.service_time,estimated_duration=data.estimated_duration,images=list(dict.fromkeys(data.images+data.photos)),requirements=data.requirements,client_id=current_user.id,status=ServiceStatusEnum.PUBLICADA)
+    db.add(s);db.commit();db.refresh(s);return {"message":"Servicio publicado exitosamente en SERVIYA.do","service":{"id":s.id,"title":s.title,"price_rd":s.price_rd,"images":s.images or [],"requirements":s.requirements or [],"status":s.status.value if hasattr(s.status,"value") else str(s.status)}}
 
 @router.post("/{id}/cancel")
-def cancel_service(id: str, data: CancelServiceSchema, current_user: User = Depends(get_current_active_user), db: Session = Depends(get_db)):
-    service = db.query(Service).filter(Service.id == id).with_for_update().first()
-    if not service: raise HTTPException(status_code=404, detail="Servicio no encontrado")
-    if service.client_id != current_user.id: raise HTTPException(status_code=403, detail="Solo el cliente creador puede cancelar este servicio")
-    current_status = service.status.value if hasattr(service.status,"value") else str(service.status)
-    if current_status in {"COMPLETADA","CANCELADA"}: raise HTTPException(status_code=400, detail=f"El servicio no puede cancelarse en estado {current_status}")
+def cancel_service(id:str,data:CancelServiceSchema,current_user:User=Depends(get_current_active_user),db:Session=Depends(get_db)):
+    s=db.query(Service).filter(Service.id==id).with_for_update().first()
+    if not s:raise HTTPException(404,"Servicio no encontrado")
+    if s.client_id!=current_user.id:raise HTTPException(403,"Solo el cliente creador puede cancelar este servicio")
+    st=s.status.value if hasattr(s.status,"value") else str(s.status)
+    if st in {"COMPLETADA","CANCELADA"}:raise HTTPException(400,f"El servicio no puede cancelarse en estado {st}")
+    e=db.query(Escrow).filter(Escrow.service_id==s.id,Escrow.status.in_(["RETENIDO","EN_DISPUTA"])).with_for_update().first()
+    if e:
+        if e.status=="RETENIDO":e.status="EN_DISPUTA"
+        s.status=ServiceStatusEnum.EN_DISPUTA; ref=f"CANCEL-REVIEW-{str(s.id)[:8].upper()}";tx(db,current_user.id,0,"CANCELACION","EN_REVISION",ref,data.reason)
+        if s.worker_id:notify(db,s.worker_id,"Cancelación en revisión",f"El cliente solicitó cancelar el servicio. El pago permanece protegido. Motivo: {data.reason}","SERVICE_CANCEL_REVIEW",s.id)
+        db.commit();return {"message":"Cancelación recibida y enviada a revisión administrativa.","service_id":s.id,"status":"EN_DISPUTA","refund_pending":True}
+    s.status=ServiceStatusEnum.CANCELADA;ref=f"CANCEL-{str(s.id)[:8].upper()}";tx(db,current_user.id,0,"CANCELACION","EXITOSO",ref,data.reason)
+    if s.worker_id:notify(db,s.worker_id,"Servicio cancelado",f"El cliente canceló el servicio. Motivo: {data.reason}","SERVICE_CANCELLED",s.id)
+    db.commit();return {"message":"Servicio cancelado correctamente.","service_id":s.id,"status":"CANCELADA","refund_pending":False}
 
-    escrow = db.query(Escrow).filter(Escrow.service_id==service.id, Escrow.status.in_(["RETENIDO","EN_DISPUTA"])).with_for_update().first()
-    # Una vez que existe dinero en Custodia, la cancelación del cliente no libera fondos a ciegas.
-    # Se abre/continúa una disputa para que se determine si corresponde reembolso total, parcial o compensación.
-    if escrow:
-        if escrow.status == "RETENIDO":
-            escrow.status = "EN_DISPUTA"
-        service.status = ServiceStatusEnum.EN_DISPUTA
-        ref = f"CANCEL-REVIEW-{str(service.id)[:8].upper()}"
-        db.execute(text("INSERT INTO transactions (user_id, amount, type, status, reference_code, created_at) VALUES (:user_id,0,'CANCELACION','EN_REVISION',:reference,CURRENT_TIMESTAMP)"), {"user_id":current_user.id,"reference":ref})
-        if service.worker_id:
-            db.execute(text("INSERT INTO notifications (user_id,title,message,type,created_at) VALUES (:user_id,'Cancelación en revisión',:message,'SERVICE_CANCEL_REVIEW',CURRENT_TIMESTAMP)"), {"user_id":service.worker_id,"message":f"El cliente solicitó cancelar el servicio. El pago permanece protegido mientras se revisa el caso. Motivo: {data.reason}"})
-        db.commit()
-        return {"message":"La cancelación fue recibida y el caso quedó en revisión. Los fondos permanecen protegidos en Custodia SERVIYA hasta determinar el reembolso correspondiente.","service_id":service.id,"status":"EN_DISPUTA","refund_amount_rd":0.0,"refund_pending":True,"reason":data.reason}
+@router.post("/{id}/cancel-by-worker")
+def cancel_by_worker(id:str,data:CancelServiceSchema,current_user:User=Depends(get_current_active_user),db:Session=Depends(get_db)):
+    s=db.query(Service).filter(Service.id==id).with_for_update().first()
+    if not s:raise HTTPException(404,"Servicio no encontrado")
+    if s.worker_id!=current_user.id:raise HTTPException(403,"Solo el técnico asignado puede cancelar este servicio")
+    st=s.status.value if hasattr(s.status,"value") else str(s.status)
+    if st in {"COMPLETADA","CANCELADA"}:raise HTTPException(400,"El servicio ya no puede cancelarse")
+    e=db.query(Escrow).filter(Escrow.service_id==s.id,Escrow.status.in_(["RETENIDO","EN_DISPUTA"])).with_for_update().first()
+    if e:
+        e.status="EN_DISPUTA";s.status=ServiceStatusEnum.EN_DISPUTA
+        tx(db,current_user.id,0,"CANCELACION_TECNICO","EN_REVISION",f"WORKER-CANCEL-{str(s.id)[:8].upper()}",data.reason)
+        notify(db,s.client_id,"El técnico canceló el servicio",f"El técnico solicitó cancelar el servicio. El pago permanece protegido para revisión. Motivo: {data.reason}","WORKER_CANCELLED",s.id)
+        db.commit();return {"message":"Cancelación del técnico enviada a revisión. El pago permanece protegido.","status":"EN_DISPUTA","refund_pending":True}
+    s.status=ServiceStatusEnum.CANCELADA;tx(db,current_user.id,0,"CANCELACION_TECNICO","EXITOSO",f"WORKER-CANCEL-{str(s.id)[:8].upper()}",data.reason);notify(db,s.client_id,"Servicio cancelado por el técnico",f"El técnico canceló el servicio. Motivo: {data.reason}","WORKER_CANCELLED",s.id);db.commit();return {"message":"Servicio cancelado por el técnico.","status":"CANCELADA","refund_pending":False}
 
-    # Sin pago en custodia, el cliente puede cancelar directamente sin generar un reembolso financiero.
-    service.status = ServiceStatusEnum.CANCELADA
-    ref = f"CANCEL-{str(service.id)[:8].upper()}"
-    db.execute(text("INSERT INTO transactions (user_id, amount, type, status, reference_code, created_at) VALUES (:user_id,0,'CANCELACION','EXITOSO',:reference,CURRENT_TIMESTAMP)"), {"user_id":current_user.id,"reference":ref})
-    if service.worker_id:
-        db.execute(text("INSERT INTO notifications (user_id,title,message,type,created_at) VALUES (:user_id,'Servicio cancelado',:message,'SERVICE_CANCELLED',CURRENT_TIMESTAMP)"), {"user_id":service.worker_id,"message":f"El cliente canceló el servicio. Motivo: {data.reason}"})
-    db.commit()
-    return {"message":"Servicio cancelado correctamente.","service_id":service.id,"status":"CANCELADA","refund_amount_rd":0.0,"refund_pending":False,"reason":data.reason}
+@router.post("/{id}/report-no-show")
+def report_no_show(id:str,data:CancelServiceSchema,current_user:User=Depends(get_current_active_user),db:Session=Depends(get_db)):
+    s=db.query(Service).filter(Service.id==id).with_for_update().first()
+    if not s:raise HTTPException(404,"Servicio no encontrado")
+    if s.client_id!=current_user.id:raise HTTPException(403,"Solo el cliente puede reportar la ausencia del técnico")
+    if not s.worker_id:raise HTTPException(400,"El servicio no tiene técnico asignado")
+    e=db.query(Escrow).filter(Escrow.service_id==s.id,Escrow.status=="RETENIDO").with_for_update().first()
+    if not e:raise HTTPException(400,"No existe un pago activo en Custodia para este servicio")
+    existing=db.execute(text("SELECT id FROM disputes WHERE service_id=:sid AND status IN ('ABIERTA','EN_REVISION') LIMIT 1"),{"sid":s.id}).scalar()
+    if existing:raise HTTPException(409,"Ya existe una revisión activa para este servicio")
+    did=db.execute(text("INSERT INTO disputes (service_id,opened_by_user_id,against_user_id,reason,description,status,created_at) VALUES (:sid,:opened,:against,'NO_SHOW',:description,'ABIERTA',CURRENT_TIMESTAMP) RETURNING id"),{"sid":s.id,"opened":current_user.id,"against":s.worker_id,"description":data.reason}).scalar_one()
+    e.status="EN_DISPUTA";s.status=ServiceStatusEnum.EN_DISPUTA;notify(db,s.worker_id,"Reporte de no-show",f"El cliente reportó que no te presentaste al servicio. Caso #{did} enviado a revisión.","NO_SHOW",did);tx(db,current_user.id,0,"NO_SHOW","EN_REVISION",f"NO-SHOW-{did}",data.reason);db.commit();return {"message":"No-show reportado. Custodia congelada y caso enviado al administrador.","dispute_id":did,"status":"EN_DISPUTA"}
 
 @router.get("/{id}")
-def get_service(id: str, db: Session = Depends(get_db)):
-    service=db.query(Service).filter(Service.id==id).first()
-    if not service: raise HTTPException(status_code=404,detail="Servicio no encontrado")
-    client=db.query(User).filter(User.id==service.client_id).first(); worker=db.query(User).filter(User.id==service.worker_id).first() if service.worker_id else None
-    status_str=service.status.value if hasattr(service.status,"value") else str(service.status)
-    return {"service":{"id":service.id,"title":service.title,"description":service.description,"category_name":service.category_name,"subcategory":service.subcategory,"price_rd":service.price_rd,"province":service.province,"municipality":service.municipality,"address_approx":service.address_approx,"service_date":service.service_date,"service_time":service.service_time,"estimated_duration":service.estimated_duration,"images":service.images or [],"requirements":service.requirements or [],"status":status_str,"client_id":service.client_id,"client_name":f"{client.first_name} {client.last_name}" if client else "Cliente SERVIYA","worker_id":service.worker_id,"worker_name":f"{worker.first_name} {worker.last_name}" if worker else None,"created_at":str(service.created_at)}}
+def get_service(id:str,db:Session=Depends(get_db)):
+    s=db.query(Service).filter(Service.id==id).first()
+    if not s:raise HTTPException(404,"Servicio no encontrado")
+    c=db.query(User).filter(User.id==s.client_id).first();w=db.query(User).filter(User.id==s.worker_id).first() if s.worker_id else None;st=s.status.value if hasattr(s.status,"value") else str(s.status)
+    return {"service":{"id":s.id,"title":s.title,"description":s.description,"category_name":s.category_name,"subcategory":s.subcategory,"price_rd":s.price_rd,"province":s.province,"municipality":s.municipality,"address_approx":s.address_approx,"service_date":s.service_date,"service_time":s.service_time,"estimated_duration":s.estimated_duration,"images":s.images or [],"requirements":s.requirements or [],"status":st,"client_id":s.client_id,"client_name":f"{c.first_name} {c.last_name}" if c else "Cliente SERVIYA","worker_id":s.worker_id,"worker_name":f"{w.first_name} {w.last_name}" if w else None,"created_at":str(s.created_at)}}
 
 @router.get("/{id}/applications")
-def get_service_applications(id: str, current_user: User = Depends(get_current_active_user), db: Session = Depends(get_db)):
-    service=db.query(Service).filter(Service.id==id).first()
-    if not service: raise HTTPException(status_code=404,detail="Servicio no encontrado")
-    role_str=current_user.role.value if hasattr(current_user.role,"value") else str(current_user.role)
-    if role_str != UserRoleEnum.ADMIN.value and service.client_id != current_user.id: raise HTTPException(status_code=403,detail="Solo el cliente del servicio puede ver las postulaciones")
-    apps=db.query(Application).filter(Application.service_id==id).all(); results=[]
-    for a in apps:
-        worker=db.query(User).filter(User.id==a.worker_id).first(); status_str=a.status.value if hasattr(a.status,"value") else str(a.status)
-        results.append({"id":a.id,"service_id":a.service_id,"worker_id":a.worker_id,"worker_name":f"{worker.first_name} {worker.last_name}" if worker else "Técnico SERVIYA","worker_rating":worker.rating if worker else 5.0,"worker_verified":worker.is_verified if worker else False,"message":a.message,"offered_price_rd":a.offered_price_rd,"availability_note":a.availability_note,"status":status_str,"created_at":str(a.created_at)})
-    return {"applications":results}
+def get_service_applications(id:str,current_user:User=Depends(get_current_active_user),db:Session=Depends(get_db)):
+    s=db.query(Service).filter(Service.id==id).first()
+    if not s:raise HTTPException(404,"Servicio no encontrado")
+    if role(current_user)!=UserRoleEnum.ADMIN.value and s.client_id!=current_user.id:raise HTTPException(403,"Solo el cliente del servicio puede ver las postulaciones")
+    out=[]
+    for a in db.query(Application).filter(Application.service_id==id).all():
+        w=db.query(User).filter(User.id==a.worker_id).first();out.append({"id":a.id,"service_id":a.service_id,"worker_id":a.worker_id,"worker_name":f"{w.first_name} {w.last_name}" if w else "Técnico SERVIYA","worker_rating":w.rating if w else 5.0,"worker_verified":w.is_verified if w else False,"message":a.message,"offered_price_rd":a.offered_price_rd,"availability_note":a.availability_note,"status":a.status.value if hasattr(a.status,"value") else str(a.status),"created_at":str(a.created_at)})
+    return {"applications":out}
