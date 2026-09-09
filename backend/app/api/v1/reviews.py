@@ -2,6 +2,7 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import text
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_db, get_current_active_user
@@ -29,13 +30,20 @@ def create_review(data: CreateReviewSchema, current_user: User = Depends(get_cur
     expected_target = service["worker_id"] if current_user.id == service["client_id"] else service["client_id"]
     if data.target_user_id != expected_target:
         raise HTTPException(status_code=403, detail="Solo puedes calificar a la otra parte del servicio")
+
     duplicate = db.execute(text("SELECT id FROM reviews WHERE service_id=:sid AND reviewer_id=:reviewer LIMIT 1"), {"sid": data.service_id, "reviewer": current_user.id}).scalar()
     if duplicate:
         raise HTTPException(status_code=409, detail="Ya calificaste este servicio")
-    review_id = db.execute(text("""
-        INSERT INTO reviews (contract_id, service_id, reviewer_id, reviewee_id, target_user_id, rating, comment, created_at)
-        VALUES (NULL, :sid, :reviewer, :target, :target, :rating, :comment, :created_at) RETURNING id
-    """), {"sid": data.service_id, "reviewer": current_user.id, "target": data.target_user_id, "rating": data.rating, "comment": data.comment, "created_at": datetime.utcnow()}).scalar_one()
+
+    try:
+        review_id = db.execute(text("""
+            INSERT INTO reviews (contract_id, service_id, reviewer_id, reviewee_id, target_user_id, rating, comment, created_at)
+            VALUES (NULL, :sid, :reviewer, :target, :target, :rating, :comment, :created_at) RETURNING id
+        """), {"sid": data.service_id, "reviewer": current_user.id, "target": data.target_user_id, "rating": data.rating, "comment": data.comment.strip(), "created_at": datetime.utcnow()}).scalar_one()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Ya calificaste este servicio")
+
     avg, count = db.execute(text("""
         SELECT COALESCE(AVG(rating), 0), COUNT(*) FROM reviews
         WHERE reviewee_id=:uid OR target_user_id=:uid
@@ -46,7 +54,7 @@ def create_review(data: CreateReviewSchema, current_user: User = Depends(get_cur
         WHERE user_id=:uid
     """), {"rating": round(float(avg), 2), "count": int(count), "uid": data.target_user_id})
     db.commit()
-    return {"message": "Reseña guardada exitosamente", "review": {"id": review_id, "rating": data.rating, "comment": data.comment}, "target_rating": round(float(avg), 2), "review_count": int(count)}
+    return {"message": "Reseña guardada exitosamente", "review": {"id": review_id, "rating": data.rating, "comment": data.comment.strip()}, "target_rating": round(float(avg), 2), "review_count": int(count)}
 
 @router.get("/user/{user_id}")
 def get_user_reviews(user_id: str, db: Session = Depends(get_db)):
