@@ -120,7 +120,7 @@ class Service(Base):
     id = Column(String, primary_key=True, default=generate_uuid)
     title = Column(String(200), nullable=False)
     description = Column(Text, nullable=False)
-    category_id = Column(String, ForeignKey("categories.id"), nullable=True)
+    category_id = Column(String, nullable=True)
     category_name = Column(String(100), nullable=False)
     subcategory = Column(String(100), nullable=True)
     price_rd = Column(Float, nullable=False)

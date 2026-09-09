@@ -25,14 +25,14 @@ def override_get_db():
     finally:
         db.close()
 
-app.dependency_overrides[get_db] = override_get_db
-
 class TestFalla1AndFalla2(unittest.TestCase):
     def setUp(self):
         Base.metadata.create_all(bind=engine)
+        app.dependency_overrides[get_db] = override_get_db
         self.client = TestClient(app)
 
     def tearDown(self):
+        app.dependency_overrides.clear()
         Base.metadata.drop_all(bind=engine)
 
     def test_falla_1_trabajador_registration_no_bank_required(self):

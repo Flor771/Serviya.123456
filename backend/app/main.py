@@ -5,15 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from app.core.config import settings
-from app.database.base import Base
-from app.database.database import engine
 from app.api.v1.router import api_router
-
-# Ensure all DB tables exist on application boot
-try:
-    Base.metadata.create_all(bind=engine)
-except Exception as e:
-    print(f"Notice on DB table initialization: {e}")
 
 app = FastAPI(
     title="SERVIYA.do API 🇩🇴",
