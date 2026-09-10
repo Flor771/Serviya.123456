@@ -13,13 +13,65 @@ class ReleaseApproval(BaseModel):
     notes: str = Field(default="", max_length=1000)
 
 
-def _notify(db, user_id, title, message, kind):
+def _notify(db, user_id, title, message, kind, related_entity_id=None):
     if user_id:
-        db.execute(text("INSERT INTO notifications (user_id,title,message,type,is_read,created_at) VALUES (:u,:t,:m,:k,false,CURRENT_TIMESTAMP)"), {"u": user_id, "t": title, "m": message, "k": kind})
+        db.execute(text("INSERT INTO notifications (user_id,title,message,type,related_entity_id,read,created_at) VALUES (:u,:t,:m,:k,:rid,false,CURRENT_TIMESTAMP)"), {"u": user_id, "t": title, "m": message, "k": kind, "rid": related_entity_id})
 
 
 def _audit(db, admin_id, action, service_id, notes):
-    db.execute(text("INSERT INTO admin_audit_logs (admin_id,action,resource,target_id,details,timestamp) VALUES (:a,:action,'escrows',:id,:details,CURRENT_TIMESTAMP)"), {"a": admin_id, "action": action, "id": service_id, "details": notes or "Aprobación administrativa de liberación"})
+    db.execute(text("INSERT INTO admin_audit_logs (admin_id,action,resource,target_id,details,timestamp) VALUES (:a,:action,'escrows',:id,:details,CURRENT_TIMESTAMP)"), {"a": admin_id, "action": action, "id": service_id, "details": notes or "Aprobación administrativa"})
+
+
+@router.get("/escrows/pending-deposits")
+def pending_deposits(admin_user: User = Depends(require_admin), db: Session = Depends(get_db)):
+    rows = db.execute(text("""
+        SELECT e.id,e.service_id,e.client_id,e.worker_id,e.total_amount_rd,e.voucher_url,e.bank_account_id,e.payment_method,e.created_at,
+               s.title,s.negotiated_price_rd,
+               ba.bank_name,ba.account_number,ba.account_type
+        FROM escrows e
+        JOIN services s ON s.id=e.service_id
+        LEFT JOIN bank_accounts ba ON ba.id=e.bank_account_id
+        WHERE e.status='PENDIENTE_VERIFICACION'
+        ORDER BY e.created_at ASC
+    """)).mappings().all()
+    return {"pending_deposits": [dict(r) for r in rows]}
+
+
+@router.post("/escrows/{service_id}/approve-deposit")
+def approve_deposit(service_id: str, data: ReleaseApproval, admin_user: User = Depends(require_admin), db: Session = Depends(get_db)):
+    escrow = db.execute(text("SELECT id,client_id,worker_id,total_amount_rd,status,voucher_url,bank_account_id FROM escrows WHERE service_id=:sid AND status='PENDIENTE_VERIFICACION' ORDER BY created_at DESC LIMIT 1 FOR UPDATE"), {"sid": service_id}).mappings().first()
+    if not escrow:
+        raise HTTPException(404, "No existe un depósito pendiente de verificación para este servicio.")
+    if not escrow["voucher_url"]:
+        raise HTTPException(400, "No se puede confirmar el depósito sin voucher.")
+    service = db.execute(text("SELECT id,status,worker_id FROM services WHERE id=:sid FOR UPDATE"), {"sid": service_id}).mappings().first()
+    if not service:
+        raise HTTPException(404, "Servicio no encontrado")
+    if not service["worker_id"]:
+        raise HTTPException(400, "El servicio todavía no tiene trabajador seleccionado.")
+
+    now = datetime.utcnow()
+    db.execute(text("UPDATE escrows SET status='RETENIDO',created_at=created_at WHERE id=:id"), {"id": escrow["id"]})
+    db.execute(text("UPDATE services SET status='EN_PROGRESO' WHERE id=:sid"), {"sid": service_id})
+    db.execute(text("UPDATE transactions SET status='RETENIDO' WHERE user_id=:u AND type='PAGO_CUSTODIA_TRANSFERENCIA' AND status='PENDIENTE_VERIFICACION' AND reference_code IN (SELECT reference_code FROM transactions WHERE user_id=:u AND type='PAGO_CUSTODIA_TRANSFERENCIA' AND status='PENDIENTE_VERIFICACION' ORDER BY created_at DESC LIMIT 1)"), {"u": escrow["client_id"]})
+
+    _notify(db, escrow["client_id"], "Depósito verificado por Administración", f"Administración confirmó que llegaron RD$ {float(escrow['total_amount_rd']):,.2f}. El dinero ahora sí está en Custodia SERVIYA y tu trabajo ya está activo.", "DEPOSIT_VERIFIED", service_id)
+    _notify(db, escrow["worker_id"], "Depósito confirmado — trabajo activo", f"Administración confirmó el depósito de RD$ {float(escrow['total_amount_rd']):,.2f}. El servicio ya está protegido en Custodia SERVIYA y puedes comenzar.", "PAYMENT", service_id)
+    _audit(db, admin_user.id, "ADMIN_VERIFY_DEPOSIT", service_id, data.notes)
+    db.commit()
+    return {"message": "Depósito verificado. Fondos puestos en Custodia SERVIYA y servicio activado.", "status": "RETENIDO", "approved_by_admin": True, "service_status": "EN_PROGRESO"}
+
+
+@router.post("/escrows/{service_id}/reject-deposit")
+def reject_deposit(service_id: str, data: ReleaseApproval, admin_user: User = Depends(require_admin), db: Session = Depends(get_db)):
+    escrow = db.execute(text("SELECT id,client_id,worker_id,total_amount_rd,status FROM escrows WHERE service_id=:sid AND status='PENDIENTE_VERIFICACION' ORDER BY created_at DESC LIMIT 1 FOR UPDATE"), {"sid": service_id}).mappings().first()
+    if not escrow:
+        raise HTTPException(404, "No existe un depósito pendiente de verificación para este servicio.")
+    db.execute(text("UPDATE escrows SET status='RECHAZADO' WHERE id=:id"), {"id": escrow["id"]})
+    _notify(db, escrow["client_id"], "Voucher rechazado", "Administración no pudo confirmar la llegada del depósito. El dinero no está en Custodia SERVIYA. Revisa el comprobante y realiza nuevamente el proceso.", "DEPOSIT_REJECTED", service_id)
+    _audit(db, admin_user.id, "ADMIN_REJECT_DEPOSIT", service_id, data.notes)
+    db.commit()
+    return {"message": "Depósito rechazado; no se activó Custodia ni el trabajo.", "status": "RECHAZADO", "approved_by_admin": True}
 
 
 @router.post("/escrows/{service_id}/approve-release")
@@ -53,8 +105,8 @@ def approve_release(service_id: str, data: ReleaseApproval, admin_user: User = D
         ref = f"GAR-SRV-{service_id[:8].upper()}"
         db.execute(text("INSERT INTO service_warranties (id,service_id,client_id,worker_id,coverage_days,status,activated_at,expires_at,certificate_ref) VALUES (:id,:sid,:c,:w,60,'ACTIVA',:now,:exp,:ref)"), {"id": str(uuid.uuid4()), "sid": service_id, "c": escrow["client_id"], "w": escrow["worker_id"], "now": now, "exp": expires, "ref": ref})
 
-    _notify(db, escrow["worker_id"], "Pago liberado por administración", f"Administración aprobó la liberación de RD$ {payout:,.2f}.", "PAYMENT_RELEASED")
-    _notify(db, escrow["client_id"], "Pago aprobado y garantía activa", "Administración aprobó la liquidación y activó la garantía SERVIYA por 60 días.", "PAYMENT_ADMIN_APPROVED")
+    _notify(db, escrow["worker_id"], "Pago liberado por administración", f"Administración aprobó la liberación de RD$ {payout:,.2f}.", "PAYMENT_RELEASED", service_id)
+    _notify(db, escrow["client_id"], "Pago aprobado y garantía activa", "Administración aprobó la liquidación y activó la garantía SERVIYA por 60 días.", "PAYMENT_ADMIN_APPROVED", service_id)
     _audit(db, admin_user.id, "ADMIN_APPROVE_RELEASE", service_id, data.notes)
     db.commit()
     return {"message": "Liberación aprobada por administración.", "worker_payout_rd": payout, "commission_rd": commission, "status": "LIBERADO", "approved_by_admin": True, "warranty_days": 60}
