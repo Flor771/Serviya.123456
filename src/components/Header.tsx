@@ -84,8 +84,7 @@ export const Header: React.FC<HeaderProps> = ({
                 </div>}
               </div>
             </>}
-            {!user && <><button onClick={() => onOpenAuth('login')} className="hidden sm:block px-2 py-2 text-xs font-semibold">Ingresar</button><button onClick={() => onOpenAuth('register')} className="hidden sm:block px-3 py-2 bg-blue-600 rounded-xl text-xs font-bold">Registrarme</button></>}
-            <button onClick={() => setMobileMenuOpen(v => !v)} className="md:hidden p-2 rounded-xl hover:bg-slate-800" title="Menú">{mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}</button>
+            {!user && <><button onClick={() => onOpenAuth('login')} className="hidden sm:block px-2 py-2 text-xs font-semibold">Ingresar</button><button onClick={() => onOpenAuth('register')} className="hidden sm:block px-3 py-2 bg-blue-600 rounded-xl text-xs font-bold">Registrarme</button></n            <button onClick={() => setMobileMenuOpen(v => !v)} className="md:hidden p-2 rounded-xl hover:bg-slate-800" title="Menú">{mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}</button>
           </div>
         </div>
 
@@ -95,8 +94,6 @@ export const Header: React.FC<HeaderProps> = ({
           {user ? <>
             {isWorker && <button onClick={openApplications} className="w-full text-left px-3 py-3 rounded-xl text-sm font-black hover:bg-slate-800 bg-emerald-950/30"><ClipboardCheck className="inline w-4 h-4 mr-2 text-emerald-400" />Postulaciones</button>}
             {!isWorker && <button onClick={openMyPublications} className="w-full text-left px-3 py-3 rounded-xl text-sm font-bold hover:bg-slate-800"><ClipboardList className="inline w-4 h-4 mr-2 text-blue-400" />Mis publicaciones</button>}
-            {!isWorker && <button onClick={() => { close(); onNavigateTab('mis-trabajos'); }} className="w-full text-left px-3 py-3 rounded-xl text-sm font-bold hover:bg-slate-800"><BriefcaseBusiness className="inline w-4 h-4 mr-2 text-blue-400" />Mis trabajos</button>}
-            {isWorker && <button onClick={() => { close(); onNavigateTab('mis-servicios'); }} className="w-full text-left px-3 py-3 rounded-xl text-sm font-bold hover:bg-slate-800"><BriefcaseBusiness className="inline w-4 h-4 mr-2 text-emerald-400" />Mis trabajos</button>}
             <button onClick={() => { close(); onOpenMessages?.(); }} className="w-full text-left px-3 py-3 rounded-xl text-sm font-bold hover:bg-slate-800"><MessageSquare className="inline w-4 h-4 mr-2 text-blue-400" />Mensajes</button>
             <button onClick={() => { close(); onOpenNotifications(); }} className="w-full text-left px-3 py-3 rounded-xl text-sm font-semibold hover:bg-slate-800"><Bell className="inline w-4 h-4 mr-2" />Notificaciones {unreadCount > 0 ? `(${unreadCount})` : ''}</button>
             <button onClick={() => { close(); onOpenProfile(); }} className="w-full text-left px-3 py-3 rounded-xl text-sm font-semibold hover:bg-slate-800"><UserIcon className="inline w-4 h-4 mr-2" />Mi Perfil</button>
