@@ -113,10 +113,6 @@ def send_message(data: CreateMessageSchema, current_user: User = Depends(get_cur
     if not content:
         raise HTTPException(400, "El mensaje no puede estar vacío")
 
-    # The production messages table is legacy: id is integer, conversation_id
-    # belongs to the old chat model, while SERVIYA uses service-based chat.
-    # Migration 016 adds nullable service_id/receiver_id/content so new chat
-    # messages can be stored without breaking the existing legacy records.
     result = db.execute(text("""
         INSERT INTO messages (service_id, sender_id, receiver_id, text, content, is_read, created_at)
         VALUES (:service_id, :sender_id, :receiver_id, :text, :content, false, CURRENT_TIMESTAMP)
@@ -135,7 +131,8 @@ def send_message(data: CreateMessageSchema, current_user: User = Depends(get_cur
             user_id=data.receiver_id,
             title="Nuevo mensaje de SERVIYA",
             message=f"{current_user.first_name} te envió un mensaje sobre: {service.title}",
-            type="MESSAGE"
+            type="MESSAGE",
+            related_entity_id=service.id,
         ))
 
     db.commit()
