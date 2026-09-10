@@ -45,11 +45,19 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   }, [refreshWallet]);
 
   const depositRD = async (amount: number, method: string, cardLast4?: string) => {
+    const role = String(user?.activeRole || user?.role || '').toUpperCase();
+    if (role === 'CLIENTE') {
+      throw new Error('Para pagar un servicio debes usar Custodia SERVIYA desde el servicio contratado. No se puede cargar saldo directamente a la billetera del cliente.');
+    }
     await api.post('/wallet/deposit', { amount_rd: amount, method, card_last_4: cardLast4 });
     await refreshWallet();
   };
 
   const withdrawRD = async (data: any) => {
+    const role = String(user?.activeRole || user?.role || '').toUpperCase();
+    if (role !== 'TRABAJADOR') {
+      throw new Error('Los retiros normales están reservados exclusivamente para trabajadores.');
+    }
     await api.post('/wallet/withdraw', data);
     await refreshWallet();
   };
