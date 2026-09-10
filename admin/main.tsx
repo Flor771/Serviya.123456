@@ -4,6 +4,13 @@ import { AdminPanel } from '../src/components/AdminPanel';
 import { api, getAuthToken, removeAuthToken, setAuthToken } from '../src/services/api';
 import '../src/index.css';
 
+function getAdminUser(payload: any) {
+  const user = payload?.user || payload || {};
+  const role = String(user?.role || '').toUpperCase();
+  const activeRole = String(user?.active_role || user?.activeRole || '').toUpperCase();
+  return { user, role, activeRole };
+}
+
 function AdminApp() {
   const [checking, setChecking] = useState(true);
   const [authorized, setAuthorized] = useState(false);
@@ -15,28 +22,49 @@ function AdminApp() {
   const verifySession = async () => {
     try {
       const me = await api.get<any>('/auth/me');
-      if (me?.role === 'ADMIN' || me?.active_role === 'ADMIN') setAuthorized(true);
-      else { removeAuthToken(); setError('Esta cuenta no tiene permisos de administrador.'); }
-    } catch { removeAuthToken(); }
-    finally { setChecking(false); }
+      const { role, activeRole } = getAdminUser(me);
+      if (role === 'ADMIN' || activeRole === 'ADMIN') {
+        setAuthorized(true);
+        setError('');
+      } else {
+        removeAuthToken();
+        setError('Esta cuenta no tiene permisos de administrador.');
+      }
+    } catch {
+      removeAuthToken();
+    } finally {
+      setChecking(false);
+    }
   };
 
-  useEffect(() => { if (getAuthToken()) verifySession(); else setChecking(false); }, []);
+  useEffect(() => {
+    if (getAuthToken()) verifySession();
+    else setChecking(false);
+  }, []);
 
   const login = async (e: React.FormEvent) => {
-    e.preventDefault(); setError(''); setLoading(true);
+    e.preventDefault();
+    setError('');
+    setLoading(true);
     try {
       const data = await api.post<any>('/auth/login', { email, password });
       const token = data?.access_token || data?.token;
       if (!token) throw new Error('El servidor no devolvió un token de acceso.');
       setAuthToken(token);
+
       const me = await api.get<any>('/auth/me');
-      if (me?.role !== 'ADMIN' && me?.active_role !== 'ADMIN') {
-        removeAuthToken(); throw new Error('Esta cuenta no tiene permisos de administrador.');
+      const { role, activeRole } = getAdminUser(me);
+      if (role !== 'ADMIN' && activeRole !== 'ADMIN') {
+        removeAuthToken();
+        throw new Error('Esta cuenta no tiene permisos de administrador.');
       }
       setAuthorized(true);
-    } catch (err: any) { setError(err.message || 'No se pudo iniciar sesión.'); }
-    finally { setLoading(false); }
+    } catch (err: any) {
+      removeAuthToken();
+      setError(err.message || 'No se pudo iniciar sesión.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   if (checking) return <div className="min-h-screen flex items-center justify-center text-slate-600">Verificando acceso administrativo…</div>;
