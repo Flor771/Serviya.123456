@@ -1,10 +1,10 @@
+import os
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, EmailStr
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 
-from app.core.config import settings
 from app.core.deps import get_db, require_admin
 from app.core.security import get_password_hash
 from app.models.models import User, UserRoleEnum
