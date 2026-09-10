@@ -27,14 +27,60 @@ def pending_deposits(admin_user: User = Depends(require_admin), db: Session = De
     rows = db.execute(text("""
         SELECT e.id,e.service_id,e.client_id,e.worker_id,e.total_amount_rd,e.voucher_url,e.bank_account_id,e.payment_method,e.created_at,
                s.title,s.negotiated_price_rd,
+               COALESCE(NULLIF(TRIM(CONCAT(COALESCE(c.first_name,''),' ',COALESCE(c.last_name,''))),''), c.email) AS client_name,
+               c.email AS client_email,c.phone AS client_phone,
+               COALESCE(NULLIF(TRIM(CONCAT(COALESCE(w.first_name,''),' ',COALESCE(w.last_name,''))),''), w.email) AS worker_name,
+               w.email AS worker_email,
                ba.bank_name,ba.account_number,ba.account_type
         FROM escrows e
         JOIN services s ON s.id=e.service_id
+        LEFT JOIN users c ON c.id=e.client_id
+        LEFT JOIN users w ON w.id=e.worker_id
         LEFT JOIN bank_accounts ba ON ba.id=e.bank_account_id
         WHERE e.status='PENDIENTE_VERIFICACION'
         ORDER BY e.created_at ASC
     """)).mappings().all()
-    return {"pending_deposits": [dict(r) for r in rows]}
+    pending_total = sum(float(r["total_amount_rd"] or 0) for r in rows)
+    return {
+        "pending_deposits": [dict(r) for r in rows],
+        "summary": {
+            "count": len(rows),
+            "pending_total_rd": pending_total,
+        }
+    }
+
+
+@router.get("/escrows/deposit-ledger")
+def deposit_ledger(admin_user: User = Depends(require_admin), db: Session = Depends(get_db)):
+    rows = db.execute(text("""
+        SELECT e.id,e.service_id,e.client_id,e.worker_id,e.total_amount_rd,e.status,e.voucher_url,e.payment_method,e.created_at,e.released_at,
+               s.title,s.negotiated_price_rd,s.status AS service_status,
+               COALESCE(NULLIF(TRIM(CONCAT(COALESCE(c.first_name,''),' ',COALESCE(c.last_name,''))),''), c.email) AS client_name,
+               c.email AS client_email,
+               COALESCE(NULLIF(TRIM(CONCAT(COALESCE(w.first_name,''),' ',COALESCE(w.last_name,''))),''), w.email) AS worker_name,
+               ba.bank_name,ba.account_number,ba.account_type
+        FROM escrows e
+        JOIN services s ON s.id=e.service_id
+        LEFT JOIN users c ON c.id=e.client_id
+        LEFT JOIN users w ON w.id=e.worker_id
+        LEFT JOIN bank_accounts ba ON ba.id=e.bank_account_id
+        ORDER BY e.created_at DESC
+        LIMIT 1000
+    """)).mappings().all()
+    total = sum(float(r["total_amount_rd"] or 0) for r in rows if r["status"] in ('PENDIENTE_VERIFICACION','RETENIDO','EN_DISPUTA','LIBERADO'))
+    pending = sum(float(r["total_amount_rd"] or 0) for r in rows if r["status"] == 'PENDIENTE_VERIFICACION')
+    held = sum(float(r["total_amount_rd"] or 0) for r in rows if r["status"] in ('RETENIDO','EN_DISPUTA'))
+    released = sum(float(r["total_amount_rd"] or 0) for r in rows if r["status"] == 'LIBERADO')
+    return {
+        "deposits": [dict(r) for r in rows],
+        "summary": {
+            "count": len(rows),
+            "total_deposited_rd": total,
+            "pending_verification_rd": pending,
+            "held_custody_rd": held,
+            "released_rd": released,
+        }
+    }
 
 
 @router.post("/escrows/{service_id}/approve-deposit")
