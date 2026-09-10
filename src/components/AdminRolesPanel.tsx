@@ -30,7 +30,7 @@ export const AdminRolesPanel: React.FC = () => {
     e.preventDefault(); setSaving(true); setMessage(''); setError('');
     try {
       await api.post('/admin-panel/administrators', { first_name:form.first_name, last_name:form.last_name, email:form.email, phone:form.phone, admin_role:form.admin_role, initial_password:form.password });
-      setMessage('Administrador agregado correctamente. Puede entrar con su correo y la contraseña inicial asignada.');
+      setMessage('Administrador agregado correctamente. Puede entrar con su correo y contraseña.');
       setForm({ first_name:'', last_name:'', email:'', phone:'', password:'', admin_role:'ADMIN_OPERACIONES' });
       await load();
     } catch (e:any) { setError(e?.message || 'No se pudo crear el administrador.'); }
@@ -78,8 +78,8 @@ export const AdminRolesPanel: React.FC = () => {
           </div>)}
         </div>
       </div>
-      <div><h3 className="font-black mb-3">Roles administrativos disponibles</h3><div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-2">{roles.map(r=><div key={r.code} className="p-3 rounded-xl border bg-white"><p className="text-xs font-black flex items-center gap-2"><ShieldCheck className="w-4 h-4 text-blue-600"/>{r.name}</p><p className="text-[10px] text-slate-500 mt-1">{r.description || 'Permisos administrativos por área.'}</p></div>)}</div></div>
-      <div className="p-3 rounded-xl bg-blue-50 border border-blue-100 text-[11px] text-blue-900"><b>Seguridad:</b> solamente una cuenta con rol <b>SUPER_ADMIN</b> debe poder administrar el equipo. Los roles financieros, operaciones, verificaciones, soporte y moderación no deben recibir permisos fuera de su área.</div>
+      <div><h3 className="font-black mb-3">Roles administrativos disponibles</h3><div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-2">{roles.map(r=><div key={r.code} className="p-3 rounded-xl border bg-white"><p className="text-xs font-black flex items-center gap-2"><ShieldCheck className="w-4 h-4 text-blue-600"/>{r.name}</p><p className="text-[10px] text-slate-500 mt-1">{r.description || 'Permisos administrativos por área.'}</p>{r.permissions?.length ? <p className="text-[10px] text-slate-400 mt-2">{r.permissions.join(' • ')}</p> : null}</div>)}</div></div>
+      <div className="p-3 rounded-xl bg-blue-50 border border-blue-100 text-[11px] text-blue-900"><b>Super Administrador:</b> una vez autenticado, puede navegar por todas las ventanas y áreas administrativas dentro de la misma sesión, sin volver a introducir usuario o contraseña. Los demás administradores quedan limitados a sus permisos.</div>
     </section>
   );
 };
