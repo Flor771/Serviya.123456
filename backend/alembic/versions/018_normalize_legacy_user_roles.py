@@ -1,13 +1,16 @@
-"""Normalize legacy user roles that break SQLAlchemy enum loading.
+"""Merge the remaining admin-role head and normalize legacy user roles.
 
 Revision ID: 018_normalize_legacy_user_roles
-Revises: 017_merge_admin_roles_head
+Revises: 017_merge_admin_roles_head, 007_admin_roles_access
 """
 from typing import Sequence, Union
 from alembic import op
 
 revision: str = "018_normalize_legacy_user_roles"
-down_revision: Union[str, None] = "017_merge_admin_roles_head"
+down_revision: Union[str, tuple[str, str], None] = (
+    "017_merge_admin_roles_head",
+    "007_admin_roles_access",
+)
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
