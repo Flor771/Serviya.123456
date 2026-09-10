@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNotifications } from '../context/NotificationContext';
 import { PWAInstallPrompt } from './PWAInstallPrompt';
-import { Bell, User as UserIcon, PlusCircle, ShieldCheck, LogOut, Layers, Menu, X, ChevronDown, MessageSquare, FileText, Search, BriefcaseBusiness, ClipboardList } from 'lucide-react';
+import { Bell, User as UserIcon, PlusCircle, ShieldCheck, LogOut, Layers, Menu, X, ChevronDown, MessageSquare, FileText, BriefcaseBusiness, ClipboardList, ClipboardCheck } from 'lucide-react';
 
 interface HeaderProps {
   onOpenAuth: (mode: 'login' | 'register') => void;
@@ -32,6 +32,7 @@ export const Header: React.FC<HeaderProps> = ({
   const navItems: [string, string][] = isWorker ? [['inicio', 'Inicio'], ['buscar', 'Buscar trabajos'], ['mis-servicios', 'Mis trabajos']] : [['inicio', 'Inicio'], ['buscar', 'Buscar servicios'], ['mis-trabajos', 'Mis trabajos']];
   const close = () => { setMobileMenuOpen(false); setMoreOpen(false); setProfileOpen(false); };
   const openMyPublications = () => { close(); onNavigateTab('inicio'); };
+  const openApplications = () => { close(); onNavigateTab('postulaciones'); };
 
   return (
     <header className="sticky top-0 z-40 bg-slate-900 text-white border-b border-slate-800 shadow-lg overflow-x-clip">
@@ -48,7 +49,8 @@ export const Header: React.FC<HeaderProps> = ({
             {!isWorker && <button onClick={() => onNavigateTab('trabajadores')} className={`px-3 py-2 rounded-xl text-sm font-semibold whitespace-nowrap ${activeTab === 'trabajadores' ? 'bg-blue-600' : 'text-slate-300 hover:bg-slate-800'}`}>Trabajadores</button>}
             <div className="relative">
               <button onClick={() => setMoreOpen(v => !v)} className="px-3 py-2 rounded-xl text-sm font-semibold text-slate-300 hover:bg-slate-800">Más <ChevronDown className="inline w-3.5 h-3.5" /></button>
-              {moreOpen && <div className="absolute left-0 mt-2 w-56 bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl p-2 z-50">
+              {moreOpen && <div className="absolute left-0 mt-2 w-60 bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl p-2 z-50">
+                {isWorker && <button onClick={openApplications} className="w-full text-left p-3 rounded-xl text-xs font-bold hover:bg-slate-800"><ClipboardCheck className="inline w-4 h-4 mr-2 text-emerald-400" />Postulaciones</button>}
                 {!isWorker && <button onClick={openMyPublications} className="w-full text-left p-3 rounded-xl text-xs hover:bg-slate-800"><ClipboardList className="inline w-4 h-4 mr-2 text-blue-400" />Mis publicaciones</button>}
                 <button onClick={() => { close(); onOpenMessages?.(); }} className="w-full text-left p-3 rounded-xl text-xs hover:bg-slate-800"><MessageSquare className="inline w-4 h-4 mr-2 text-blue-400" />Mensajes</button>
                 <button onClick={() => { close(); onOpenProfile(); }} className="w-full text-left p-3 rounded-xl text-xs hover:bg-slate-800"><UserIcon className="inline w-4 h-4 mr-2" />Mi Perfil</button>
@@ -69,8 +71,10 @@ export const Header: React.FC<HeaderProps> = ({
                 </button>
                 {profileOpen && <div className="absolute right-0 mt-2 w-60 max-w-[calc(100vw-1rem)] bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl p-2 z-50">
                   <div className="px-3 py-2 border-b border-slate-800"><p className="font-bold text-sm truncate">{user.first_name} {user.last_name}</p><p className="text-[10px] text-slate-400 truncate">{user.email}</p></div>
+                  {isWorker && <button onClick={openApplications} className="w-full text-left p-3 rounded-xl text-xs font-bold hover:bg-slate-800"><ClipboardCheck className="inline w-4 h-4 mr-2 text-emerald-400" />Postulaciones</button>}
                   {!isWorker && <button onClick={openMyPublications} className="w-full text-left p-3 rounded-xl text-xs hover:bg-slate-800"><ClipboardList className="inline w-4 h-4 mr-2 text-blue-400" />Mis publicaciones</button>}
                   {!isWorker && <button onClick={() => { close(); onNavigateTab('mis-trabajos'); }} className="w-full text-left p-3 rounded-xl text-xs hover:bg-slate-800"><BriefcaseBusiness className="inline w-4 h-4 mr-2 text-blue-400" />Mis trabajos</button>}
+                  {isWorker && <button onClick={() => { close(); onNavigateTab('mis-servicios'); }} className="w-full text-left p-3 rounded-xl text-xs hover:bg-slate-800"><BriefcaseBusiness className="inline w-4 h-4 mr-2 text-emerald-400" />Mis trabajos</button>}
                   <button onClick={() => { close(); onOpenProfile(); }} className="w-full text-left p-3 rounded-xl text-xs hover:bg-slate-800"><UserIcon className="inline w-4 h-4 mr-2" />Mi Perfil</button>
                   <button onClick={() => { close(); onOpenMessages?.(); }} className="w-full text-left p-3 rounded-xl text-xs hover:bg-slate-800"><MessageSquare className="inline w-4 h-4 mr-2" />Mensajes</button>
                   {isWorker && <button onClick={() => { close(); onOpenVerification(); }} className="w-full text-left p-3 rounded-xl text-xs hover:bg-slate-800"><ShieldCheck className="inline w-4 h-4 mr-2" />Verificación</button>}
@@ -86,11 +90,13 @@ export const Header: React.FC<HeaderProps> = ({
         </div>
 
         {mobileMenuOpen && <div className="md:hidden border-t border-slate-800 py-2 max-h-[calc(100vh-3.5rem)] overflow-y-auto">
-          {navItems.map(([tab, label]) => <button key={tab} onClick={() => { close(); onNavigateTab(tab); }} className="w-full text-left px-3 py-3 rounded-xl text-sm font-semibold hover:bg-slate-800"><Search className="inline w-4 h-4 mr-2 text-blue-400" />{label}</button>)}
+          {navItems.map(([tab, label]) => <button key={tab} onClick={() => { close(); onNavigateTab(tab); }} className="w-full text-left px-3 py-3 rounded-xl text-sm font-semibold hover:bg-slate-800">{label}</button>)}
           {!isWorker && <button onClick={() => { close(); onNavigateTab('trabajadores'); }} className="w-full text-left px-3 py-3 rounded-xl text-sm font-semibold hover:bg-slate-800"><BriefcaseBusiness className="inline w-4 h-4 mr-2 text-emerald-400" />Trabajadores</button>}
           {user ? <>
+            {isWorker && <button onClick={openApplications} className="w-full text-left px-3 py-3 rounded-xl text-sm font-black hover:bg-slate-800 bg-emerald-950/30"><ClipboardCheck className="inline w-4 h-4 mr-2 text-emerald-400" />Postulaciones</button>}
             {!isWorker && <button onClick={openMyPublications} className="w-full text-left px-3 py-3 rounded-xl text-sm font-bold hover:bg-slate-800"><ClipboardList className="inline w-4 h-4 mr-2 text-blue-400" />Mis publicaciones</button>}
             {!isWorker && <button onClick={() => { close(); onNavigateTab('mis-trabajos'); }} className="w-full text-left px-3 py-3 rounded-xl text-sm font-bold hover:bg-slate-800"><BriefcaseBusiness className="inline w-4 h-4 mr-2 text-blue-400" />Mis trabajos</button>}
+            {isWorker && <button onClick={() => { close(); onNavigateTab('mis-servicios'); }} className="w-full text-left px-3 py-3 rounded-xl text-sm font-bold hover:bg-slate-800"><BriefcaseBusiness className="inline w-4 h-4 mr-2 text-emerald-400" />Mis trabajos</button>}
             <button onClick={() => { close(); onOpenMessages?.(); }} className="w-full text-left px-3 py-3 rounded-xl text-sm font-bold hover:bg-slate-800"><MessageSquare className="inline w-4 h-4 mr-2 text-blue-400" />Mensajes</button>
             <button onClick={() => { close(); onOpenNotifications(); }} className="w-full text-left px-3 py-3 rounded-xl text-sm font-semibold hover:bg-slate-800"><Bell className="inline w-4 h-4 mr-2" />Notificaciones {unreadCount > 0 ? `(${unreadCount})` : ''}</button>
             <button onClick={() => { close(); onOpenProfile(); }} className="w-full text-left px-3 py-3 rounded-xl text-sm font-semibold hover:bg-slate-800"><UserIcon className="inline w-4 h-4 mr-2" />Mi Perfil</button>
