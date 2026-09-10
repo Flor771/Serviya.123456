@@ -40,15 +40,13 @@ class UpdateAdminBody(BaseModel):
 
 def _is_super_admin(user: User) -> bool:
     role = (getattr(user, "admin_role", None) or "").strip().upper()
-    configured = (os.getenv("SUPERADMIN_EMAIL") or "admin@serviya.do").strip().lower()
+    configured = (os.getenv("SUPERADMIN_EMAIL") or os.getenv("ADMIN_EMAIL") or "admin@serviya.do").strip().lower()
     return role == "SUPER_ADMIN" or str(getattr(user, "email", "")).strip().lower() == configured
-
 
 def require_super_admin(current_user: User = Depends(require_admin)) -> User:
     if not _is_super_admin(current_user):
         raise HTTPException(status_code=403, detail="Solo el Super Administrador puede administrar cuentas y roles de administradores.")
     return current_user
-
 
 def admin_payload(u: User):
     role = "SUPER_ADMIN" if _is_super_admin(u) else ((getattr(u, "admin_role", None) or "ADMIN_OPERACIONES").strip().upper())
@@ -59,12 +57,12 @@ def admin_payload(u: User):
 def list_admin_roles(admin_user: User = Depends(require_admin)):
     return {"roles": [{"key": key, **value} for key, value in ADMIN_ROLES.items()]}
 
-@router.get("/administrators")
-def list_administrators(admin_user: User = Depends(require_admin), db: Session = Depends(get_db)):
+@router.get("/super-admin/administrators")
+def list_administrators(admin_user: User = Depends(require_super_admin), db: Session = Depends(get_db)):
     users = db.query(User).filter(User.role == UserRoleEnum.ADMIN).order_by(User.created_at.desc()).all()
     return {"administrators": [admin_payload(u) for u in users]}
 
-@router.post("/administrators")
+@router.post("/super-admin/administrators")
 def create_administrator(data: CreateAdminBody, admin_user: User = Depends(require_super_admin), db: Session = Depends(get_db)):
     role = data.admin_role.strip().upper()
     if role not in ADMIN_ROLES or role == "SUPER_ADMIN": raise HTTPException(status_code=400, detail="Rol administrativo no válido para un nuevo administrador.")
@@ -77,7 +75,7 @@ def create_administrator(data: CreateAdminBody, admin_user: User = Depends(requi
     db.commit(); db.refresh(user)
     return {"message": "Administrador creado correctamente.", "administrator": admin_payload(user)}
 
-@router.patch("/administrators/{user_id}")
+@router.patch("/super-admin/administrators/{user_id}")
 def update_administrator(user_id: str, data: UpdateAdminBody, admin_user: User = Depends(require_super_admin), db: Session = Depends(get_db)):
     user = db.query(User).filter(User.id == user_id, User.role == UserRoleEnum.ADMIN).first()
     if not user: raise HTTPException(status_code=404, detail="Administrador no encontrado.")
@@ -99,7 +97,7 @@ def update_administrator(user_id: str, data: UpdateAdminBody, admin_user: User =
     db.commit(); db.refresh(user)
     return {"message": "Administrador actualizado.", "administrator": admin_payload(user)}
 
-@router.delete("/administrators/{user_id}")
+@router.delete("/super-admin/administrators/{user_id}")
 def deactivate_administrator(user_id: str, admin_user: User = Depends(require_super_admin), db: Session = Depends(get_db)):
     user = db.query(User).filter(User.id == user_id, User.role == UserRoleEnum.ADMIN).first()
     if not user: raise HTTPException(status_code=404, detail="Administrador no encontrado.")
@@ -112,7 +110,7 @@ def deactivate_administrator(user_id: str, admin_user: User = Depends(require_su
     db.commit()
     return {"message": "Administrador desactivado.", "user_id": user_id}
 
-@router.get("/administrators/me/access")
+@router.get("/super-admin/access")
 def my_admin_access(admin_user: User = Depends(require_admin)):
     role = "SUPER_ADMIN" if _is_super_admin(admin_user) else ((getattr(admin_user, "admin_role", None) or "ADMIN_OPERACIONES").strip().upper())
     info = ADMIN_ROLES.get(role, ADMIN_ROLES["ADMIN_OPERACIONES"])
