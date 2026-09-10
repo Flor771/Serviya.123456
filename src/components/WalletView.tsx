@@ -22,31 +22,33 @@ export const WalletView: React.FC = () => {
   const [error, setError] = useState('');
 
   const handleWithdraw = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError('');
-    setMessage('');
+    e.preventDefault(); setError(''); setMessage('');
     if (!isWorker) return setError('Los retiros bancarios están reservados exclusivamente para Trabajadores.');
     if (!withdrawAmount || Number(withdrawAmount) <= 0) return setError('Ingresa un monto válido.');
     if (!holderName || !holderCedula || !accountNumber || !confirmAccountNumber) return setError('Completa todos los datos bancarios.');
     if (accountNumber.trim() !== confirmAccountNumber.trim()) return setError('Los números de cuenta no coinciden.');
     setSubmitting(true);
-    try {
-      await withdrawRD({ amount_rd: Number(withdrawAmount), bank_name: bankName, account_type: accountType, account_number: accountNumber, account_holder_name: holderName, account_holder_cedula: holderCedula });
-      setMessage(`Solicitud de retiro de RD$ ${Number(withdrawAmount).toLocaleString()} enviada a Administración.`);
-      setShowWithdrawModal(false);
-    } catch (err: any) {
-      setError(err?.message || 'No se pudo procesar el retiro.');
-    } finally {
-      setSubmitting(false);
-    }
+    try { await withdrawRD({ amount_rd: Number(withdrawAmount), bank_name: bankName, account_type: accountType, account_number: accountNumber, account_holder_name: holderName, account_holder_cedula: holderCedula }); setMessage(`Solicitud de retiro de RD$ ${Number(withdrawAmount).toLocaleString()} enviada a Administración.`); setShowWithdrawModal(false); }
+    catch (err: any) { setError(err?.message || 'No se pudo procesar el retiro.'); }
+    finally { setSubmitting(false); }
   };
+
+  if (!isWorker) {
+    const balance = Number(wallet?.available_rd || 0);
+    return <div className="max-w-md mx-auto py-2">
+      <div className="rounded-2xl bg-white border border-slate-200 shadow-sm p-4 flex items-center justify-between gap-4">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0"><WalletIcon className="w-5 h-5" /></div>
+          <div className="min-w-0"><p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Saldo disponible</p><p className="text-xl font-black text-slate-900 truncate">RD$ {balance.toLocaleString()}</p></div>
+        </div>
+        <span className="text-[9px] font-black uppercase text-slate-400 shrink-0">SERVIYA</span>
+      </div>
+    </div>;
+  }
 
   return (
     <div className="space-y-6 pb-12 max-w-4xl mx-auto">
-      <div>
-        <h1 className="text-2xl sm:text-3xl font-black text-slate-900">MI BILLETERA SERVIYA.do 🇩🇴</h1>
-        <p className="text-xs sm:text-sm text-slate-500">Gestión transparente de fondos y pagos protegidos mediante Custodia SERVIYA.</p>
-      </div>
+      <div><h1 className="text-2xl sm:text-3xl font-black text-slate-900">MI BILLETERA SERVIYA.do 🇩🇴</h1><p className="text-xs sm:text-sm text-slate-500">Gestión transparente de fondos y pagos protegidos mediante Custodia SERVIYA.</p></div>
       {message && <div className="p-3.5 bg-emerald-50 text-emerald-800 text-xs font-semibold rounded-2xl border border-emerald-200 flex items-center gap-2"><CheckCircle className="w-4 h-4" />{message}</div>}
       {error && <div className="p-3.5 bg-red-50 text-red-700 text-xs font-semibold rounded-2xl border border-red-200">{error}</div>}
       <div className="bg-slate-900 text-white rounded-3xl p-6 sm:p-8 shadow-2xl border border-slate-800 space-y-6">
@@ -56,11 +58,11 @@ export const WalletView: React.FC = () => {
           <div className="p-4 bg-slate-800/90 rounded-2xl border border-slate-700/80"><div className="flex items-center gap-1.5 text-xs text-slate-400 font-semibold uppercase"><Lock className="w-3.5 h-3.5 text-amber-400" />En Custodia</div><p className="text-2xl sm:text-3xl font-black text-amber-400">RD$ {wallet ? wallet.escrow_rd.toLocaleString() : '0.00'}</p><span className="text-[10px] text-slate-500 block">Fondos retenidos hasta completar el servicio</span></div>
           <div className="p-4 bg-slate-800/90 rounded-2xl border border-slate-700/80"><div className="flex items-center gap-1.5 text-xs text-slate-400 font-semibold uppercase"><Clock className="w-3.5 h-3.5 text-blue-400" />Pendiente Retiro</div><p className="text-2xl sm:text-3xl font-black text-blue-400">RD$ {wallet ? wallet.pending_rd.toLocaleString() : '0.00'}</p><span className="text-[10px] text-slate-500 block">En proceso de transferencia bancaria</span></div>
         </div>
-        {isWorker ? <button onClick={() => setShowWithdrawModal(true)} className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold text-sm py-3 rounded-xl shadow-lg transition flex items-center justify-center gap-2"><ArrowUpRight className="w-4 h-4" />Solicitar Retiro</button> : <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4 flex gap-3 items-start"><ShieldCheck className="w-6 h-6 text-amber-400 shrink-0" /><div><p className="font-bold text-amber-300 text-sm">Pago protegido con Custodia SERVIYA</p><p className="text-xs text-slate-300 mt-1">El cliente no puede agregar saldo directamente a su billetera. Para pagar un servicio, utiliza el botón de Custodia dentro del servicio contratado, sube el comprobante y espera la confirmación de Administración.</p></div></div>}
+        <button onClick={() => setShowWithdrawModal(true)} className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold text-sm py-3 rounded-xl shadow-lg transition flex items-center justify-center gap-2"><ArrowUpRight className="w-4 h-4" />Solicitar Retiro</button>
       </div>
-      {isWorker && <WorkerBankAccountPanel />}
+      <WorkerBankAccountPanel />
       <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-4"><h2 className="text-lg font-bold text-slate-900">Historial de Movimientos Billetera</h2>{transactions.length === 0 ? <p className="text-xs text-slate-500 text-center py-8">Aún no registras movimientos en tu billetera SERVIYA.do.</p> : <div className="space-y-2">{transactions.map((tx) => <div key={tx.id} className="p-3.5 bg-slate-50 rounded-2xl border border-slate-100 flex items-center justify-between gap-3 text-xs"><div><span className="font-bold text-slate-900 block">{tx.description}</span><span className="text-[11px] text-slate-500">{new Date(tx.created_at).toLocaleString()} • Ref: {tx.reference}</span></div><div className="text-right"><span className="font-black text-sm block">RD$ {tx.amount_rd.toLocaleString()}</span><span className="text-[10px] font-bold text-slate-400 uppercase">{tx.status}</span></div></div>)}</div>}</div>
-      {showWithdrawModal && isWorker && <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/70 backdrop-blur-sm p-4 overflow-y-auto"><div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl my-auto"><h3 className="text-lg font-bold text-slate-900 mb-1">Solicitar Retiro a Banco RD 🇩🇴</h3><p className="text-xs text-slate-500 mb-4">La solicitud será revisada por Administración.</p><form onSubmit={handleWithdraw} className="space-y-3"><input type="number" value={withdrawAmount} onChange={e => setWithdrawAmount(e.target.value === '' ? '' : Number(e.target.value))} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm" placeholder="Monto RD$" required /><select value={bankName} onChange={e => setBankName(e.target.value)} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm">{DOMINICAN_BANKS.map(b => <option key={b} value={b}>{b}</option>)}</select><select value={accountType} onChange={e => setAccountType(e.target.value)} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm"><option value="AHORROS">Cuenta de Ahorros</option><option value="CORRIENTE">Cuenta Corriente</option></select><input value={accountNumber} onChange={e => setAccountNumber(e.target.value)} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm" placeholder="Número de cuenta" required /><input value={confirmAccountNumber} onChange={e => setConfirmAccountNumber(e.target.value)} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm" placeholder="Confirmar cuenta" required /><input value={holderName} onChange={e => setHolderName(e.target.value)} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm" placeholder="Titular" required /><input value={holderCedula} onChange={e => setHolderCedula(e.target.value)} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm" placeholder="Cédula del titular" required /><div className="flex gap-2"><button type="button" onClick={() => setShowWithdrawModal(false)} className="flex-1 py-3 rounded-xl bg-slate-100 font-bold text-sm">Cancelar</button><button type="submit" disabled={submitting} className="flex-1 py-3 rounded-xl bg-blue-600 text-white font-bold text-sm disabled:opacity-50">{submitting ? 'Enviando...' : 'Solicitar retiro'}</button></div></form></div></div>}
+      {showWithdrawModal && <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/70 backdrop-blur-sm p-4 overflow-y-auto"><div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl my-auto"><h3 className="text-lg font-bold text-slate-900 mb-1">Solicitar Retiro a Banco RD 🇩🇴</h3><p className="text-xs text-slate-500 mb-4">La solicitud será revisada por Administración.</p><form onSubmit={handleWithdraw} className="space-y-3"><input type="number" value={withdrawAmount} onChange={e => setWithdrawAmount(e.target.value === '' ? '' : Number(e.target.value))} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm" placeholder="Monto RD$" required /><select value={bankName} onChange={e => setBankName(e.target.value)} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm">{DOMINICAN_BANKS.map(b => <option key={b} value={b}>{b}</option>)}</select><select value={accountType} onChange={e => setAccountType(e.target.value)} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm"><option value="AHORROS">Cuenta de Ahorros</option><option value="CORRIENTE">Cuenta Corriente</option></select><input value={accountNumber} onChange={e => setAccountNumber(e.target.value)} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm" placeholder="Número de cuenta" required /><input value={confirmAccountNumber} onChange={e => setConfirmAccountNumber(e.target.value)} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm" placeholder="Confirmar cuenta" required /><input value={holderName} onChange={e => setHolderName(e.target.value)} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm" placeholder="Titular" required /><input value={holderCedula} onChange={e => setHolderCedula(e.target.value)} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm" placeholder="Cédula del titular" required /><div className="flex gap-2"><button type="button" onClick={() => setShowWithdrawModal(false)} className="flex-1 py-3 rounded-xl bg-slate-100 font-bold text-sm">Cancelar</button><button type="submit" disabled={submitting} className="flex-1 py-3 rounded-xl bg-blue-600 text-white font-bold text-sm disabled:opacity-50">{submitting ? 'Enviando...' : 'Solicitar retiro'}</button></div></form></div></div>}
     </div>
   );
 };
