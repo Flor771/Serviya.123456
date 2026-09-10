@@ -15,8 +15,16 @@ app = FastAPI(
     openapi_url="/openapi.json"
 )
 
-# CORS Configuration
-origins = ["*"]
+# CORS: the admin frontend is hosted on a separate Render static site.
+# Explicit origins are required because the admin client sends Authorization headers.
+origins = [
+    "https://serviya-admin.onrender.com",
+    "https://serviya-com-odg.onrender.com",
+    "https://serviya-com.onrender.com",
+    "https://serviya-org.onrender.com",
+    "http://localhost:5173",
+    "http://localhost:4173",
+]
 
 app.add_middleware(
     CORSMiddleware,
