@@ -84,7 +84,8 @@ export const Header: React.FC<HeaderProps> = ({
                 </div>}
               </div>
             </>}
-            {!user && <><button onClick={() => onOpenAuth('login')} className="hidden sm:block px-2 py-2 text-xs font-semibold">Ingresar</button><button onClick={() => onOpenAuth('register')} className="hidden sm:block px-3 py-2 bg-blue-600 rounded-xl text-xs font-bold">Registrarme</button></n            <button onClick={() => setMobileMenuOpen(v => !v)} className="md:hidden p-2 rounded-xl hover:bg-slate-800" title="Menú">{mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}</button>
+            {!user && <><button onClick={() => onOpenAuth('login')} className="hidden sm:block px-2 py-2 text-xs font-semibold">Ingresar</button><button onClick={() => onOpenAuth('register')} className="hidden sm:block px-3 py-2 bg-blue-600 rounded-xl text-xs font-bold">Registrarme</button></>}
+            <button onClick={() => setMobileMenuOpen(v => !v)} className="md:hidden p-2 rounded-xl hover:bg-slate-800" title="Menú">{mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}</button>
           </div>
         </div>
 
