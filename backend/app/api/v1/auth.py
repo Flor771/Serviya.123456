@@ -1,12 +1,12 @@
+import os
 from datetime import datetime, timedelta, timezone
+from typing import Optional
 import hashlib
 import secrets
-from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, EmailStr
 from sqlalchemy import text
 from sqlalchemy.orm import Session
-
 from app.core.security import get_password_hash, verify_password, create_access_token
 from app.core.deps import get_db, get_current_active_user
 from app.models.models import User, UserRoleEnum, Wallet, WorkerProfile
@@ -25,9 +25,16 @@ class RecoverPasswordSchema(BaseModel): email: EmailStr
 class ResetPasswordSchema(BaseModel): token: str; new_password: str; confirm_password: Optional[str] = None
 class RoleToggleSchema(BaseModel): active_role: str
 
-
-def _admin_role(user: User):
-    return getattr(user, "admin_role", None) if str(getattr(user, "role", "")) == "ADMIN" or getattr(getattr(user, "role", None), "value", None) == "ADMIN" else None
+def _bootstrap_configured_admin(user: User, db: Session) -> None:
+    configured_email = os.getenv("ADMIN_EMAIL", "admin@serviya.do").strip().lower()
+    if str(user.email).strip().lower() == configured_email:
+        changed = False
+        if user.role != UserRoleEnum.ADMIN: user.role = UserRoleEnum.ADMIN; changed = True
+        if user.active_role != "ADMIN": user.active_role = "ADMIN"; changed = True
+        if not getattr(user, "admin_role", None): user.admin_role = "SUPER_ADMIN"; changed = True
+        if user.is_active is False: user.is_active = True; changed = True
+        if not user.is_verified: user.is_verified = True; changed = True
+        if changed: db.commit(); db.refresh(user)
 
 @router.post("/register")
 def register(data: RegisterSchema, db: Session = Depends(get_db)):
@@ -43,19 +50,20 @@ def register(data: RegisterSchema, db: Session = Depends(get_db)):
         db.add(WorkerProfile(user_id=user.id,cedula=data.cedula,specialties=data.profession or "Servicios Generales",hourly_rate=600.0,availability="TIEMPO_COMPLETO",has_infotep=False,rating=5.0,review_count=0,is_approved=False))
         db.add(Wallet(worker_id=user.id,available_balance=0.0,pending_custody_balance=0.0,total_earnings=0.0,total_commissions=0.0,total_withdrawn=0.0))
     db.commit(); db.refresh(user); token=create_access_token(user.id)
-    return {"message":"Usuario registrado exitosamente en SERVIYA.do","token":token,"access_token":token,"token_type":"bearer","user":{"id":user.id,"first_name":user.first_name,"last_name":user.last_name,"email":user.email,"phone":user.phone,"role":user.role.value if hasattr(user.role,"value") else str(user.role),"active_role":user.active_role,"admin_role":_admin_role(user),"is_verified":user.is_verified,"avatar_url":user.avatar_url}}
+    return {"message":"Usuario registrado exitosamente en SERVIYA.do","token":token,"access_token":token,"token_type":"bearer","user":{"id":user.id,"first_name":user.first_name,"last_name":user.last_name,"email":user.email,"phone":user.phone,"role":user.role.value if hasattr(user.role,"value") else str(user.role),"active_role":user.active_role,"is_verified":user.is_verified,"avatar_url":user.avatar_url}}
 
 @router.post("/login")
 def login(data: LoginSchema, db: Session = Depends(get_db)):
     user=db.query(User).filter(User.email == data.email).first(); pwd_hash=getattr(user,"password_hash",None) or getattr(user,"hashed_password",None)
     if not user or not verify_password(data.password,pwd_hash): raise HTTPException(401,"Credenciales incorrectas. Verifique su correo y contraseña.")
     if user.is_active is False: raise HTTPException(403,"Esta cuenta está suspendida. Contacte con soporte de SERVIYA.do.")
+    _bootstrap_configured_admin(user, db)
     token=create_access_token(user.id)
-    return {"message":"Inicio de sesión exitoso","token":token,"access_token":token,"token_type":"bearer","user":{"id":user.id,"first_name":user.first_name,"last_name":user.last_name,"email":user.email,"phone":user.phone,"role":user.role.value if hasattr(user.role,"value") else str(user.role),"active_role":user.active_role,"admin_role":_admin_role(user),"is_verified":user.is_verified,"avatar_url":user.avatar_url}}
+    return {"message":"Inicio de sesión exitoso","token":token,"access_token":token,"token_type":"bearer","user":{"id":user.id,"first_name":user.first_name,"last_name":user.last_name,"email":user.email,"phone":user.phone,"role":user.role.value if hasattr(user.role,"value") else str(user.role),"active_role":user.active_role,"is_verified":user.is_verified,"avatar_url":user.avatar_url}}
 
 @router.get("/me")
 def get_me(current_user: User = Depends(get_current_active_user)):
-    return {"user":{"id":current_user.id,"first_name":current_user.first_name,"last_name":current_user.last_name,"email":current_user.email,"phone":current_user.phone,"cedula":current_user.cedula,"role":current_user.role.value if hasattr(current_user.role,"value") else str(current_user.role),"active_role":current_user.active_role,"admin_role":_admin_role(current_user),"province":current_user.province,"municipality":current_user.municipality,"bio":current_user.bio,"avatar_url":current_user.avatar_url,"is_verified":current_user.is_verified,"rating":current_user.rating,"jobs_completed":current_user.jobs_completed}}
+    return {"user":{"id":current_user.id,"first_name":current_user.first_name,"last_name":current_user.last_name,"email":current_user.email,"phone":current_user.phone,"cedula":current_user.cedula,"role":current_user.role.value if hasattr(current_user.role,"value") else str(current_user.role),"active_role":current_user.active_role,"province":current_user.province,"municipality":current_user.municipality,"bio":current_user.bio,"avatar_url":current_user.avatar_url,"is_verified":current_user.is_verified,"rating":current_user.rating,"jobs_completed":current_user.jobs_completed}}
 
 @router.post("/recover-password")
 def recover_password(data: RecoverPasswordSchema, db: Session = Depends(get_db)):
@@ -65,7 +73,7 @@ def recover_password(data: RecoverPasswordSchema, db: Session = Depends(get_db))
         db.execute(text("UPDATE password_reset_tokens SET used_at=:now WHERE user_id=:uid AND used_at IS NULL"),{"now":now,"uid":user.id})
         db.execute(text("INSERT INTO password_reset_tokens (user_id,token_hash,expires_at,created_at) VALUES (:uid,:hash,:exp,:now)"),{"uid":user.id,"hash":token_hash,"exp":now+timedelta(minutes=30),"now":now}); db.commit()
         return {"message":"Solicitud de recuperación creada. El token de recuperación es válido durante 30 minutos.","reset_token":raw}
-    return {"message":"Si el correo está registrado, se enviaron instrucciones."}
+    return {"message":"Si el correo está registrado, se enviaron instrucciones para recuperar el acceso."}
 
 @router.post("/reset-password")
 def reset_password(data: ResetPasswordSchema, db: Session = Depends(get_db)):
@@ -73,7 +81,7 @@ def reset_password(data: ResetPasswordSchema, db: Session = Depends(get_db)):
     if data.confirm_password is not None and data.confirm_password != data.new_password: raise HTTPException(400,"Las contraseñas no coinciden.")
     h=hashlib.sha256(data.token.encode()).hexdigest(); row=db.execute(text("SELECT id,user_id,expires_at,used_at FROM password_reset_tokens WHERE token_hash=:hash"),{"hash":h}).mappings().first()
     if not row or row["used_at"] is not None or row["expires_at"] <= datetime.now(timezone.utc): raise HTTPException(400,"El token de recuperación no es válido o ya expiró.")
-    db.execute(text("UPDATE users SET password_hash=:pwd, hashed_password=:pwd, updated_at=:now WHERE id=:uid"),{"pwd":get_password_hash(data.new_password),"now":datetime.now(timezone.utc),"uid":row["user_id"]}); db.execute(text("UPDATE password_reset_tokens SET used_at=:now WHERE id=:id"),{"now":datetime.now(timezone.utc),"id":row["id"]}); db.commit()
+    db.execute(text("UPDATE users SET password_hash=:pwd, updated_at=:now WHERE id=:uid"),{"pwd":get_password_hash(data.new_password),"now":datetime.now(timezone.utc),"uid":row["user_id"]}); db.execute(text("UPDATE password_reset_tokens SET used_at=:now WHERE id=:id"),{"now":datetime.now(timezone.utc),"id":row["id"]}); db.commit()
     return {"message":"Contraseña restablecida exitosamente. Ya puede iniciar sesión."}
 
 @router.post("/role-toggle")
