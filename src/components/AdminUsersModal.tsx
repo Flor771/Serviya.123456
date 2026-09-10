@@ -1,0 +1,19 @@
+import React, { useMemo, useState } from 'react';
+import { Search, X, Ban, UserCheck, Users, Mail, Phone } from 'lucide-react';
+import { api } from '../services/api';
+
+type AdminUser = { id:string; first_name:string; last_name:string; email:string; phone:string; role:string; is_active:boolean; is_verified:boolean; province?:string; created_at?:string };
+
+export const AdminUsersModal: React.FC<{ users:AdminUser[]; onClose:()=>void; onReload:()=>Promise<void> }> = ({users,onClose,onReload}) => {
+  const [query,setQuery]=useState(''); const [busy,setBusy]=useState<string|null>(null); const [error,setError]=useState('');
+  const filtered=useMemo(()=>{const q=query.trim().toLowerCase(); if(!q)return users; return users.filter(u=>`${u.first_name} ${u.last_name} ${u.email} ${u.phone}`.toLowerCase().includes(q));},[users,query]);
+  const toggle=async(u:AdminUser)=>{setBusy(u.id);setError('');try{await api.patch(`/admin/users/${u.id}/status`,{status:u.is_active?'SUSPENDIDO':'ACTIVO'});await onReload();}catch(e:any){setError(e?.message||'No se pudo actualizar el usuario.');}finally{setBusy(null)}};
+  return <div className="fixed inset-0 z-[100] bg-slate-950/60 p-3 sm:p-6 flex items-center justify-center" onMouseDown={e=>{if(e.target===e.currentTarget)onClose()}}>
+    <div className="w-full max-w-3xl max-h-[90vh] overflow-hidden bg-white rounded-3xl shadow-2xl border border-slate-200 flex flex-col">
+      <div className="p-5 border-b flex items-center justify-between gap-3"><div className="flex items-center gap-3"><div className="w-11 h-11 rounded-2xl bg-blue-50 flex items-center justify-center"><Users className="w-6 h-6 text-blue-600"/></div><div><h2 className="text-lg font-black">Gestión de usuarios</h2><p className="text-xs text-slate-500">Busca por nombre, apellido, correo o teléfono.</p></div></div><button onClick={onClose} className="w-10 h-10 rounded-xl border bg-white flex items-center justify-center"><X className="w-5 h-5"/></button></div>
+      <div className="p-4 border-b bg-slate-50"><div className="relative"><Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400"/><input autoFocus value={query} onChange={e=>setQuery(e.target.value)} placeholder="Buscar nombre o correo…" className="w-full pl-10 pr-4 py-3 rounded-xl border bg-white text-sm outline-none focus:ring-2 focus:ring-blue-200"/></div>{error&&<p className="mt-2 text-xs font-bold text-red-600">⚠ {error}</p>}</div>
+      <div className="overflow-y-auto p-4 space-y-2">{filtered.length===0?<div className="text-center py-12 text-sm text-slate-400">No se encontraron usuarios.</div>:filtered.map(u=><div key={u.id} className="p-4 rounded-2xl border bg-white flex flex-col sm:flex-row sm:items-center justify-between gap-3"><div className="min-w-0"><div className="flex items-center gap-2"><b className="truncate">{u.first_name} {u.last_name}</b><span className={`text-[10px] font-black px-2 py-1 rounded-full ${u.is_active?'bg-emerald-100 text-emerald-700':'bg-red-100 text-red-700'}`}>{u.is_active?'ACTIVO':'BLOQUEADO'}</span></div><div className="text-xs text-slate-500 mt-1 flex flex-wrap gap-x-3 gap-y-1"><span><Mail className="inline w-3.5 h-3.5 mr-1"/>{u.email}</span><span><Phone className="inline w-3.5 h-3.5 mr-1"/>{u.phone||'Sin teléfono'}</span></div><p className="text-[11px] font-bold text-blue-700 mt-1">{u.role} {u.is_verified?'• VERIFICADO':''}</p></div><button disabled={busy===u.id||u.role==='ADMIN'} onClick={()=>toggle(u)} className="shrink-0 px-3 py-2 rounded-xl border bg-white text-xs font-black disabled:opacity-40">{u.is_active?<><Ban className="inline w-3.5 h-3.5 mr-1"/>Bloquear</>:<><UserCheck className="inline w-3.5 h-3.5 mr-1"/>Activar</>}</button></div>)}</div>
+      <div className="p-4 border-t bg-slate-50 text-xs text-slate-500 font-semibold">Mostrando {filtered.length} de {users.length} usuarios.</div>
+    </div>
+  </div>;
+};
