@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.database.database import get_db
-from app.models.models import User, UserRoleEnum
+from app.models.models import User
 
 security = HTTPBearer(auto_error=False)
 
@@ -31,8 +31,10 @@ def get_current_active_user(
 ) -> User:
     if not current_user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="No autenticado. Por favor inicie sesión.", headers={"WWW-Authenticate": "Bearer"})
-    if current_user.is_active is False:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Esta cuenta está suspendida. Contacte con soporte de SERVIYA.do.")
+    # Some legacy ORM instances/databases may not expose is_active. Treat those accounts as active
+    # rather than crashing every protected endpoint with AttributeError.
+    if getattr(current_user, "is_active", True) is False:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Esta cuenta está suspendida. Contacte con soporte de SERVIYA.")
     return current_user
 
 def require_admin(current_user: User = Depends(get_current_active_user)) -> User:
