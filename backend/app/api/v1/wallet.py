@@ -60,16 +60,26 @@ def get_wallet(current_user: User = Depends(get_current_active_user), db: Sessio
     if role_str == "TRABAJADOR" and not wallet:
         wallet = Wallet(worker_id=current_user.id, available_balance=0.0, pending_custody_balance=0.0, total_earnings=0.0, total_commissions=0.0, total_withdrawn=0.0)
         db.add(wallet); db.commit(); db.refresh(wallet)
+
     withdrawal_rows = db.execute(text("SELECT id, amount, method, account_number, account_type, account_holder_name, status, reference_code, created_at FROM withdrawals WHERE worker_id=:worker_id ORDER BY created_at DESC"), {"worker_id": current_user.id}).mappings().all() if role_str == "TRABAJADOR" else []
     withdrawals = [{"id": r["id"], "amount_rd": float(r["amount"]), "bank_name": r["method"], "account_type": r["account_type"], "account_number": r["account_number"], "account_holder_name": r["account_holder_name"], "status": r["status"], "reference": r["reference_code"], "requested_at": str(r["created_at"])} for r in withdrawal_rows]
+
     saved_account = None
+    custody_jobs = []
+    custody_total = 0.0
     if role_str == "TRABAJADOR":
-        saved_account = db.execute(text("SELECT id,bank_name,account_type,account_number,account_holder_name,account_holder_cedula,is_active FROM worker_bank_accounts WHERE worker_id=:worker_id"), {"worker_id": current_user.id}).mappings().first()
+        saved_account = db.execute(text("SELECT id,bank_name,account_type,account_number,account_holder_name,account_holder_cedula,is_active FROM worker_bank_accounts WHERE worker_id=:worker_id AND is_active=true ORDER BY id DESC LIMIT 1"), {"worker_id": current_user.id}).mappings().first()
+        custody_rows = db.execute(text("SELECT e.id AS escrow_id,e.service_id,e.total_amount_rd,e.worker_payout_rd,e.status,e.created_at,s.title,s.status AS service_status FROM escrows e JOIN services s ON s.id=e.service_id WHERE e.worker_id=:worker_id AND e.status IN ('RETENIDO','PENDIENTE_APROBACION') ORDER BY e.created_at DESC"), {"worker_id": current_user.id}).mappings().all()
+        for r in custody_rows:
+            amount = float(r["worker_payout_rd"] or r["total_amount_rd"] or 0)
+            custody_total += amount
+            custody_jobs.append({"escrow_id": r["escrow_id"], "service_id": r["service_id"], "title": r["title"], "amount_rd": amount, "escrow_amount_rd": float(r["total_amount_rd"] or 0), "status": r["status"], "service_status": r["service_status"], "created_at": str(r["created_at"])})
+
     if not wallet:
-        return {"wallet": {"id": None, "user_id": current_user.id, "worker_id": None, "available_rd": 0.0, "escrow_rd": 0.0, "pending_rd": 0.0, "total_received_rd": 0.0, "total_spent_rd": 0.0, "can_withdraw": False}, "transactions": transactions, "withdrawals": withdrawals, "worker_bank_account": dict(saved_account) if saved_account else None}
+        return {"wallet": {"id": None, "user_id": current_user.id, "worker_id": None, "available_rd": 0.0, "escrow_rd": custody_total, "pending_rd": 0.0, "total_received_rd": 0.0, "total_spent_rd": 0.0, "can_withdraw": False}, "transactions": transactions, "withdrawals": withdrawals, "worker_bank_account": dict(saved_account) if saved_account else None, "custody_jobs": custody_jobs}
 
     pending_withdrawal = float(wallet.pending_custody_balance or 0)
-    return {"wallet": {"id": wallet.id, "user_id": wallet.worker_id, "worker_id": wallet.worker_id, "available_rd": float(wallet.available_balance or 0), "escrow_rd": 0.0, "pending_rd": pending_withdrawal, "total_received_rd": float(wallet.total_earnings or 0), "total_spent_rd": float(wallet.total_withdrawn or 0), "can_withdraw": role_str == "TRABAJADOR"}, "transactions": transactions, "withdrawals": withdrawals, "worker_bank_account": dict(saved_account) if saved_account else None}
+    return {"wallet": {"id": wallet.id, "user_id": wallet.worker_id, "worker_id": wallet.worker_id, "available_rd": float(wallet.available_balance or 0), "escrow_rd": custody_total, "pending_rd": pending_withdrawal, "total_received_rd": float(wallet.total_earnings or 0), "total_spent_rd": float(wallet.total_withdrawn or 0), "can_withdraw": role_str == "TRABAJADOR"}, "transactions": transactions, "withdrawals": withdrawals, "worker_bank_account": dict(saved_account) if saved_account else None, "custody_jobs": custody_jobs}
 
 
 @router.post("/deposit")
