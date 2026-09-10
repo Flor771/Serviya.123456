@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy import text
 from sqlalchemy.orm import Session
@@ -55,6 +55,16 @@ def save_worker_bank_account(data: BankAccountBody, current_user: User = Depends
     db.commit()
     row = db.execute(text("SELECT id,worker_id,bank_name,account_type,account_number,account_holder_name,account_holder_cedula,is_active,created_at,updated_at FROM worker_bank_accounts WHERE worker_id=:worker_id"), {"worker_id": current_user.id}).mappings().one()
     return {"message": "Cuenta bancaria guardada correctamente. Esta cuenta quedará asociada a tus retiros hasta que la actualices.", "bank_account": _serialize(row)}
+
+@router.get("/admin/all")
+def list_worker_bank_accounts_admin(admin_user: User = Depends(require_admin), db: Session = Depends(get_db)):
+    rows = db.execute(text("SELECT b.id,b.worker_id,b.bank_name,b.account_type,b.account_number,b.account_holder_name,b.account_holder_cedula,b.is_active,b.created_at,b.updated_at,u.first_name,u.last_name,u.email FROM worker_bank_accounts b LEFT JOIN users u ON u.id=b.worker_id ORDER BY b.updated_at DESC" )).mappings().all()
+    accounts = []
+    for row in rows:
+        item = _serialize(row)
+        item.update({"worker_name": " ".join(x for x in [row.get("first_name"), row.get("last_name")] if x), "worker_email": row.get("email")})
+        accounts.append(item)
+    return {"bank_accounts": accounts}
 
 @router.get("/by-worker/{worker_id}")
 def get_worker_bank_account_admin(worker_id: str, admin_user: User = Depends(require_admin), db: Session = Depends(get_db)):
