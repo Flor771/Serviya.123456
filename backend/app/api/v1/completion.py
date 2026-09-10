@@ -31,6 +31,25 @@ def submit_completion(service_id: str, data: CompletionSubmitSchema, current_use
     db.commit()
     return {"message":"Trabajo enviado a revisión del cliente.","service_id":service_id,"completion_submitted":True,"release_otp":otp}
 
+@router.post("/{service_id}/approve")
+def approve_completion(service_id: str, current_user: User = Depends(get_current_active_user), db: Session = Depends(get_db)):
+    s=db.execute(text("SELECT id,client_id,worker_id,status,completion_submitted,completion_summary FROM services WHERE id=:id FOR UPDATE"),{"id":service_id}).mappings().first()
+    if not s: raise HTTPException(404,"Servicio no encontrado")
+    if s["client_id"] != current_user.id: raise HTTPException(403,"Solo el cliente que contrató el servicio puede aprobarlo")
+    if not s["completion_submitted"]: raise HTTPException(400,"El técnico todavía no ha enviado el trabajo a revisión")
+    escrow=db.execute(text("SELECT id,total_amount_rd,status FROM escrows WHERE service_id=:sid ORDER BY created_at DESC LIMIT 1 FOR UPDATE"),{"sid":service_id}).mappings().first()
+    if not escrow: raise HTTPException(404,"No existe una custodia para este servicio")
+    if escrow["status"] == "PENDIENTE_APROBACION":
+        return {"message":"La aprobación del cliente ya fue registrada y está pendiente de Administración.","status":"PENDIENTE_APROBACION"}
+    if escrow["status"] != "RETENIDO": raise HTTPException(409,"La custodia no está disponible para aprobación del cliente")
+    db.execute(text("UPDATE escrows SET status='PENDIENTE_APROBACION' WHERE id=:id"),{"id":escrow["id"]})
+    notify(db,s["worker_id"],"Cliente aprobó el trabajo","El cliente confirmó que está conforme. El pago quedó pendiente de liberación por Administración.","CLIENT_APPROVED_RELEASE",service_id)
+    admins=db.execute(text("SELECT id FROM users WHERE role='ADMIN' AND COALESCE(is_active,true)=true")).scalars().all()
+    for admin_id in admins:
+        notify(db,admin_id,"Liberación pendiente de aprobación",f"El cliente aprobó el servicio y solicita liberar RD$ {float(escrow['total_amount_rd'] or 0):,.2f}. Revisa la evidencia y procesa la liberación administrativa.","ADMIN_RELEASE_PENDING",service_id)
+    db.commit()
+    return {"message":"Aprobación registrada. El dinero sigue protegido hasta que Administración confirme y libere los fondos.","status":"PENDIENTE_APROBACION","service_id":service_id}
+
 @router.get("/{service_id}")
 def get_completion(service_id: str, current_user: User = Depends(get_current_active_user), db: Session = Depends(get_db)):
     s=db.execute(text("SELECT id,client_id,worker_id,status,completion_submitted,completion_summary,completion_submitted_at FROM services WHERE id=:id"),{"id":service_id}).mappings().first()
