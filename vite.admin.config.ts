@@ -10,7 +10,7 @@ export default defineConfig({
     outDir: 'admin-dist',
     emptyOutDir: true,
     rollupOptions: {
-      input: 'admin.html',
+      input: 'admin/index.html',
     },
   },
 });
