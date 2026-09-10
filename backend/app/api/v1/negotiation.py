@@ -16,8 +16,8 @@ class PriceOfferSchema(BaseModel):
 def role(user):
     return user.role.value if hasattr(user.role, "value") else str(user.role)
 
-def notify(db, user_id, title, message, typ):
-    db.execute(text("INSERT INTO notifications (user_id,title,message,type,is_read,created_at) VALUES (:u,:t,:m,:ty,false,CURRENT_TIMESTAMP)"), {"u":user_id,"t":title,"m":message,"ty":typ})
+def notify(db, user_id, title, message, typ, service_id=None):
+    db.execute(text("INSERT INTO notifications (user_id,title,message,type,related_entity_id,is_read,created_at) VALUES (:u,:t,:m,:ty,:sid,false,CURRENT_TIMESTAMP)"), {"u":user_id,"t":title,"m":message,"ty":typ,"sid":service_id})
 
 def get_service(db, service_id):
     return db.execute(text("SELECT id,client_id,worker_id,price_rd,negotiated_price_rd,negotiation_status,negotiation_offer_rd,negotiation_offer_by,negotiation_offer_note,price_agreed_at,status,title FROM services WHERE id=:id FOR UPDATE"), {"id":service_id}).mappings().first()
@@ -52,9 +52,7 @@ def offer_price(service_id: str, data: PriceOfferSchema, current_user: User = De
     db.execute(text("UPDATE services SET negotiation_offer_rd=:p,negotiation_offer_by=:u,negotiation_offer_note=:n,negotiation_status='PENDIENTE_ACEPTACION',negotiated_price_rd=NULL,price_agreed_at=NULL WHERE id=:id"), {"p":data.price_rd,"u":current_user.id,"n":data.note,"id":service_id})
     receiver = s["worker_id"] if current_user.id == s["client_id"] else s["client_id"]
     label = "Cliente" if current_user.id == s["client_id"] else "Trabajador / Técnico"
-    notify(db, receiver, "Nueva propuesta de precio", f"{label} propuso RD$ {data.price_rd:,.2f}. Revisa la negociación en SERVIYA.", "PRICE_OFFER")
-
-    # messages.text is required by the production schema; content is kept in sync for the newer API.
+    notify(db, receiver, "Nueva propuesta de precio", f"{label} propuso RD$ {data.price_rd:,.2f}. Revisa la negociación en SERVIYA.", "PRICE_OFFER", service_id)
     db.execute(text("INSERT INTO messages (service_id,sender_id,receiver_id,text,content,created_at) VALUES (:sid,:sender,:receiver,:msg,:msg,CURRENT_TIMESTAMP)"), {"sid":service_id,"sender":current_user.id,"receiver":receiver,"msg":proposal_text})
     db.commit()
     return {"message":"Propuesta enviada. Espera la aceptación de la otra parte.","offer_rd":data.price_rd,"status":"PENDIENTE_ACEPTACION"}
@@ -76,6 +74,6 @@ def accept_price(service_id: str, current_user: User = Depends(get_current_activ
     agreed = float(s["negotiation_offer_rd"])
     db.execute(text("UPDATE services SET negotiated_price_rd=:p,negotiation_status='ACORDADO',price_agreed_at=CURRENT_TIMESTAMP WHERE id=:id"), {"p":agreed,"id":service_id})
     receiver = s["client_id"] if current_user.id == s["worker_id"] else s["worker_id"]
-    notify(db, receiver, "Precio acordado", f"Precio acordado para {s['title']}: RD$ {agreed:,.2f}. El cliente ya puede proceder al pago en Custodia SERVIYA.", "PRICE_AGREED")
+    notify(db, receiver, "Precio acordado", f"Precio acordado para {s['title']}: RD$ {agreed:,.2f}. El cliente ya puede proceder al pago en Custodia SERVIYA.", "PRICE_AGREED", service_id)
     db.commit()
     return {"message":f"Precio acordado: RD$ {agreed:,.2f}","agreed_price_rd":agreed,"status":"ACORDADO"}
