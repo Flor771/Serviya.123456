@@ -22,20 +22,14 @@ class DepositSchema(BaseModel):
 
 class WithdrawSchema(BaseModel):
     amount_rd: float
-    bank_name: str
-    account_type: str
-    account_number: str
-    confirm_account_number: Optional[str] = None
-    account_holder_name: str
-    account_holder_cedula: str
 
 
 def _record_transaction(db: Session, user_id: str, amount: float, tx_type: str, status_value: str, description: str, reference: str):
-    db.execute(text("""INSERT INTO transactions (user_id, amount, type, status, reference_code, created_at) VALUES (:user_id, :amount, :type, :status, :reference, CURRENT_TIMESTAMP)"""), {"user_id": user_id, "amount": amount, "type": tx_type, "status": status_value, "reference": reference})
+    db.execute(text("INSERT INTO transactions (user_id, amount, type, status, reference_code, created_at) VALUES (:user_id, :amount, :type, :status, :reference, CURRENT_TIMESTAMP)"), {"user_id": user_id, "amount": amount, "type": tx_type, "status": status_value, "reference": reference})
 
 
 def _record_financial_movement(db: Session, wallet_id: int, amount: float, movement_type: str, description: str):
-    db.execute(text("""INSERT INTO financial_movements (wallet_id, contract_id, movement_type, amount_dop, description, created_at) VALUES (:wallet_id, NULL, :movement_type, :amount, :description, CURRENT_TIMESTAMP)"""), {"wallet_id": wallet_id, "movement_type": movement_type, "amount": amount, "description": description})
+    db.execute(text("INSERT INTO financial_movements (wallet_id, contract_id, movement_type, amount_dop, description, created_at) VALUES (:wallet_id, NULL, :movement_type, :amount, :description, CURRENT_TIMESTAMP)"), {"wallet_id": wallet_id, "movement_type": movement_type, "amount": amount, "description": description})
 
 
 def _role(user):
@@ -66,16 +60,16 @@ def get_wallet(current_user: User = Depends(get_current_active_user), db: Sessio
     if role_str == "TRABAJADOR" and not wallet:
         wallet = Wallet(worker_id=current_user.id, available_balance=0.0, pending_custody_balance=0.0, total_earnings=0.0, total_commissions=0.0, total_withdrawn=0.0)
         db.add(wallet); db.commit(); db.refresh(wallet)
-    withdrawal_rows = db.execute(text("SELECT id, amount, method, account_number, account_type, status, created_at FROM withdrawals WHERE worker_id=:worker_id ORDER BY created_at DESC"), {"worker_id": current_user.id}).mappings().all() if role_str == "TRABAJADOR" else []
-    withdrawals = [{"id": r["id"], "amount_rd": float(r["amount"]), "bank_name": r["method"], "account_type": r["account_type"], "account_number": r["account_number"], "status": r["status"], "requested_at": str(r["created_at"])} for r in withdrawal_rows]
+    withdrawal_rows = db.execute(text("SELECT id, amount, method, account_number, account_type, account_holder_name, status, reference_code, created_at FROM withdrawals WHERE worker_id=:worker_id ORDER BY created_at DESC"), {"worker_id": current_user.id}).mappings().all() if role_str == "TRABAJADOR" else []
+    withdrawals = [{"id": r["id"], "amount_rd": float(r["amount"]), "bank_name": r["method"], "account_type": r["account_type"], "account_number": r["account_number"], "account_holder_name": r["account_holder_name"], "status": r["status"], "reference": r["reference_code"], "requested_at": str(r["created_at"])} for r in withdrawal_rows]
+    saved_account = None
+    if role_str == "TRABAJADOR":
+        saved_account = db.execute(text("SELECT id,bank_name,account_type,account_number,account_holder_name,account_holder_cedula,is_active FROM worker_bank_accounts WHERE worker_id=:worker_id"), {"worker_id": current_user.id}).mappings().first()
     if not wallet:
-        return {"wallet": {"id": None, "user_id": current_user.id, "worker_id": None, "available_rd": 0.0, "escrow_rd": 0.0, "pending_rd": 0.0, "total_received_rd": 0.0, "total_spent_rd": 0.0, "can_withdraw": False}, "transactions": transactions, "withdrawals": withdrawals}
+        return {"wallet": {"id": None, "user_id": current_user.id, "worker_id": None, "available_rd": 0.0, "escrow_rd": 0.0, "pending_rd": 0.0, "total_received_rd": 0.0, "total_spent_rd": 0.0, "can_withdraw": False}, "transactions": transactions, "withdrawals": withdrawals, "worker_bank_account": dict(saved_account) if saved_account else None}
 
-    # Custodia pertenece al registro Escrow, no a la billetera del trabajador.
-    # pending_custody_balance se mantiene por compatibilidad histórica, pero en este flujo
-    # representa únicamente retiros pendientes de procesamiento administrativo.
     pending_withdrawal = float(wallet.pending_custody_balance or 0)
-    return {"wallet": {"id": wallet.id, "user_id": wallet.worker_id, "worker_id": wallet.worker_id, "available_rd": float(wallet.available_balance or 0), "escrow_rd": 0.0, "pending_rd": pending_withdrawal, "total_received_rd": float(wallet.total_earnings or 0), "total_spent_rd": float(wallet.total_withdrawn or 0), "can_withdraw": role_str == "TRABAJADOR"}, "transactions": transactions, "withdrawals": withdrawals}
+    return {"wallet": {"id": wallet.id, "user_id": wallet.worker_id, "worker_id": wallet.worker_id, "available_rd": float(wallet.available_balance or 0), "escrow_rd": 0.0, "pending_rd": pending_withdrawal, "total_received_rd": float(wallet.total_earnings or 0), "total_spent_rd": float(wallet.total_withdrawn or 0), "can_withdraw": role_str == "TRABAJADOR"}, "transactions": transactions, "withdrawals": withdrawals, "worker_bank_account": dict(saved_account) if saved_account else None}
 
 
 @router.post("/deposit")
@@ -107,22 +101,19 @@ def deposit(data: DepositSchema, current_user: User = Depends(get_current_active
 def withdraw(data: WithdrawSchema, current_user: User = Depends(get_current_active_user), db: Session = Depends(get_db)):
     if _role(current_user) != "TRABAJADOR":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Acceso denegado. Solamente los usuarios con rol TRABAJADOR pueden solicitar retiros de fondos.")
-    allowed_banks = ["banco popular", "bhd", "banreservas", "banco de reservas"]
-    if not any(b in (data.bank_name or "").strip().lower() for b in allowed_banks):
-        raise HTTPException(status_code=400, detail="El banco debe ser Banco Popular, BHD o Banreservas.")
-    if data.confirm_account_number is not None and data.confirm_account_number.strip() != data.account_number.strip():
-        raise HTTPException(status_code=400, detail="Los números de cuenta bancaria no coinciden.")
+    account = db.execute(text("SELECT id,bank_name,account_type,account_number,account_holder_name,account_holder_cedula FROM worker_bank_accounts WHERE worker_id=:worker_id AND is_active=true FOR UPDATE"), {"worker_id": current_user.id}).mappings().first()
+    if not account:
+        raise HTTPException(status_code=400, detail="Primero debes registrar tu cuenta bancaria en SERVIYA.")
     if data.amount_rd < settings.MIN_WITHDRAWAL_RD:
         raise HTTPException(status_code=400, detail=f"El monto mínimo de retiro es RD$ {settings.MIN_WITHDRAWAL_RD:,.2f}")
     wallet = db.query(Wallet).filter(Wallet.worker_id == current_user.id).with_for_update().first()
     if not wallet or float(wallet.available_balance or 0) < data.amount_rd:
         raise HTTPException(status_code=400, detail="Saldo insuficiente en Billetera disponible.")
     wallet.available_balance -= data.amount_rd
-    # Este campo histórico funciona como bolsa de retiros pendientes; la custodia real vive en escrows.
     wallet.pending_custody_balance += data.amount_rd
-    withdrawal = db.execute(text("INSERT INTO withdrawals (worker_id, amount, method, account_number, account_type, status, created_at) VALUES (:worker_id,:amount,:method,:account_number,:account_type,:status,CURRENT_TIMESTAMP) RETURNING id"), {"worker_id": current_user.id, "amount": data.amount_rd, "method": data.bank_name, "account_number": data.account_number, "account_type": data.account_type, "status": "PENDIENTE"}).scalar_one()
     ref = f"WITH-{uuid.uuid4().hex[:8].upper()}"
-    _record_transaction(db, current_user.id, data.amount_rd, "RETIRO", "PENDIENTE", f"Solicitud de retiro bancario a {data.bank_name}", ref)
-    _record_financial_movement(db, wallet.id, -data.amount_rd, "RETIRO_SOLICITADO", f"Retiro solicitado a {data.bank_name}")
+    withdrawal = db.execute(text("INSERT INTO withdrawals (worker_id, amount, method, account_number, account_type, bank_account_id, account_holder_name, account_holder_cedula, reference_code, status, created_at) VALUES (:worker_id,:amount,:method,:account_number,:account_type,:bank_account_id,:holder,:cedula,:reference,:status,CURRENT_TIMESTAMP) RETURNING id"), {"worker_id": current_user.id, "amount": data.amount_rd, "method": account["bank_name"], "account_number": account["account_number"], "account_type": account["account_type"], "bank_account_id": account["id"], "holder": account["account_holder_name"], "cedula": account["account_holder_cedula"], "reference": ref, "status": "PENDIENTE"}).scalar_one()
+    _record_transaction(db, current_user.id, data.amount_rd, "RETIRO", "PENDIENTE", f"Solicitud de retiro {ref} a {account['bank_name']} terminada en {str(account['account_number'])[-4:]}", ref)
+    _record_financial_movement(db, wallet.id, -data.amount_rd, "RETIRO_SOLICITADO", f"Retiro {ref} solicitado a {account['bank_name']}")
     db.commit()
-    return {"message": f"Solicitud de retiro por RD$ {data.amount_rd:,.2f} enviada a revisión administrativa.", "withdrawal_id": withdrawal, "available_rd": wallet.available_balance, "pending_rd": wallet.pending_custody_balance}
+    return {"message": f"Solicitud de retiro por RD$ {data.amount_rd:,.2f} enviada a revisión administrativa.", "withdrawal_id": withdrawal, "reference": ref, "bank_name": account["bank_name"], "account_number": account["account_number"], "available_rd": wallet.available_balance, "pending_rd": wallet.pending_custody_balance}
