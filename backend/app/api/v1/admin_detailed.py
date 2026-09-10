@@ -1,31 +1,45 @@
 from datetime import datetime
 from typing import Optional
-
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr
 from sqlalchemy import text
 from sqlalchemy.orm import Session
-
 from app.core.deps import get_db, require_admin
-from app.models.models import User
+from app.core.security import get_password_hash
+from app.models.models import User, UserRoleEnum
 
 router = APIRouter(prefix="/admin-panel", tags=["Panel Administrativo Completo"])
 
 class UserStateBody(BaseModel):
     is_active: bool
     reason: Optional[str] = None
-
 class TicketBody(BaseModel):
     status: Optional[str] = None
     admin_response: Optional[str] = None
-
 class ServiceModerationBody(BaseModel):
     status: str
     reason: Optional[str] = None
-
 class PortfolioModerationBody(BaseModel):
     action: str
     reason: Optional[str] = None
+class AdminCreateBody(BaseModel):
+    first_name: str
+    last_name: str
+    email: EmailStr
+    phone: str = ""
+    admin_role: str
+    initial_password: str
+class AdminRoleBody(BaseModel):
+    admin_role: str
+
+ADMIN_ROLES = {
+    "SUPER_ADMIN": "Administrador principal",
+    "ADMIN_OPERACIONES": "Administrador de operaciones",
+    "ADMIN_FINANCIERO": "Administrador financiero",
+    "ADMIN_VERIFICACIONES": "Administrador de verificaciones",
+    "ADMIN_SOPORTE": "Administrador de soporte",
+    "ADMIN_MODERACION": "Administrador de moderación",
+}
 
 def audit(db: Session, admin_id: str, action: str, resource: str, target_id=None, details: str = ""):
     db.execute(text("INSERT INTO admin_audit_logs (admin_id, action, resource, target_id, details, timestamp) VALUES (:admin_id, :action, :resource, :target_id, :details, :timestamp)"), {"admin_id": admin_id, "action": action, "resource": resource, "target_id": target_id, "details": details, "timestamp": datetime.utcnow()})
@@ -49,6 +63,40 @@ def user_state(user_id: str, data: UserStateBody, admin_user: User = Depends(req
     audit(db, admin_user.id, "USER_ACTIVATED" if data.is_active else "USER_SUSPENDED", "users", None, f"Usuario {user_id}; motivo: {data.reason or 'sin motivo indicado'}")
     db.commit()
     return {"message": "Usuario activado" if data.is_active else "Usuario suspendido", "is_active": data.is_active}
+
+@router.get("/administrators")
+def administrators(admin_user: User = Depends(require_admin), db: Session = Depends(get_db)):
+    rows = db.execute(text("SELECT id, first_name, last_name, email, phone, admin_role, is_active, is_verified, created_at FROM users WHERE role = 'ADMIN' ORDER BY created_at DESC")).mappings().all()
+    return {"administrators": [dict(r) for r in rows], "roles": [{"code": k, "name": v} for k, v in ADMIN_ROLES.items()]}
+
+@router.post("/administrators")
+def create_administrator(data: AdminCreateBody, admin_user: User = Depends(require_admin), db: Session = Depends(get_db)):
+    if data.admin_role not in ADMIN_ROLES: raise HTTPException(400, "Rol administrativo no válido")
+    if len(data.initial_password) < 8: raise HTTPException(400, "La contraseña inicial debe tener al menos 8 caracteres")
+    if db.query(User).filter(User.email == data.email).first(): raise HTTPException(409, "Ya existe un usuario con ese correo")
+    user = User(first_name=data.first_name,last_name=data.last_name,email=str(data.email).lower(),phone=data.phone,password_hash=get_password_hash(data.initial_password),role=UserRoleEnum.ADMIN,active_role="ADMIN",admin_role=data.admin_role,province="Distrito Nacional",municipality="Santo Domingo de Guzmán (DN)",is_active=True,is_verified=True)
+    db.add(user); db.commit(); db.refresh(user)
+    audit(db, admin_user.id, "ADMIN_CREATED", "users", None, f"Administrador creado con rol {data.admin_role}")
+    db.commit()
+    return {"message": "Administrador creado correctamente", "id": user.id, "admin_role": user.admin_role}
+
+@router.patch("/administrators/{user_id}/role")
+def update_administrator_role(user_id: str, data: AdminRoleBody, admin_user: User = Depends(require_admin), db: Session = Depends(get_db)):
+    if data.admin_role not in ADMIN_ROLES: raise HTTPException(400, "Rol administrativo no válido")
+    user = db.query(User).filter(User.id == user_id, User.role == UserRoleEnum.ADMIN).first()
+    if not user: raise HTTPException(404, "Administrador no encontrado")
+    user.admin_role = data.admin_role; db.commit()
+    audit(db, admin_user.id, "ADMIN_ROLE_CHANGED", "users", None, f"Administrador {user_id} -> {data.admin_role}"); db.commit()
+    return {"message": "Rol administrativo actualizado", "admin_role": user.admin_role}
+
+@router.patch("/administrators/{user_id}/status")
+def update_administrator_status(user_id: str, data: UserStateBody, admin_user: User = Depends(require_admin), db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.id == user_id, User.role == UserRoleEnum.ADMIN).first()
+    if not user: raise HTTPException(404, "Administrador no encontrado")
+    if user.id == admin_user.id and not data.is_active: raise HTTPException(400, "No puedes desactivar tu propio acceso administrativo")
+    user.is_active = data.is_active; db.commit()
+    audit(db, admin_user.id, "ADMIN_ACTIVATED" if data.is_active else "ADMIN_DEACTIVATED", "users", None, f"Administrador {user_id}"); db.commit()
+    return {"message": "Acceso administrativo actualizado", "is_active": data.is_active}
 
 @router.get("/services")
 def services(admin_user: User = Depends(require_admin), db: Session = Depends(get_db)):
@@ -87,8 +135,6 @@ def update_support(ticket_id: int, data: TicketBody, admin_user: User = Depends(
     if not row: raise HTTPException(status_code=404, detail="Ticket no encontrado")
     if data.status is not None and data.status not in {"ABIERTO", "EN_REVISION", "RESUELTO", "CERRADO"}: raise HTTPException(status_code=400, detail="Estado de ticket no válido")
     db.execute(text("UPDATE support_tickets SET status = COALESCE(:status, status), admin_response = COALESCE(:response, admin_response) WHERE id = :id"), {"id": ticket_id, "status": data.status, "response": data.admin_response})
-    if data.admin_response or data.status in {"RESUELTO", "CERRADO"}:
-        db.execute(text("INSERT INTO notifications (user_id, title, message, type, is_read, created_at) VALUES (:user_id, :title, :message, 'SUPPORT', false, CURRENT_TIMESTAMP)"), {"user_id": row["user_id"], "title": "Actualización de soporte", "message": f"Tu ticket #{ticket_id} ({row['subject']}) fue actualizado por soporte. Revisa la respuesta dentro de SERVIYA."})
     audit(db, admin_user.id, "SUPPORT_TICKET_UPDATED", "support_tickets", ticket_id, f"Estado={data.status or 'sin cambio'}")
     db.commit()
     return {"message": "Ticket actualizado"}
@@ -103,9 +149,7 @@ def moderate_portfolio(portfolio_id: int, data: PortfolioModerationBody, admin_u
     if data.action not in {"APPROVE", "REMOVE"}: raise HTTPException(status_code=400, detail="Acción de moderación no válida")
     row = db.execute(text("SELECT p.id, p.worker_id, p.title FROM portfolio_items p WHERE p.id = :id"), {"id": portfolio_id}).mappings().first()
     if not row: raise HTTPException(status_code=404, detail="Trabajo del portafolio no encontrado")
-    if data.action == "REMOVE":
-        db.execute(text("DELETE FROM portfolio_items WHERE id = :id"), {"id": portfolio_id})
-        db.execute(text("INSERT INTO notifications (user_id,title,message,type,is_read,created_at) VALUES (:user_id,'Portafolio moderado',:message,'PORTFOLIO_MODERATION',false,CURRENT_TIMESTAMP)"), {"user_id": row["worker_id"], "message": f"Tu trabajo de portafolio '{row['title']}' fue retirado por moderación. Motivo: {data.reason or 'incumplimiento de las reglas de SERVIYA.'}"})
+    if data.action == "REMOVE": db.execute(text("DELETE FROM portfolio_items WHERE id = :id"), {"id": portfolio_id})
     audit(db, admin_user.id, "PORTFOLIO_APPROVED" if data.action == "APPROVE" else "PORTFOLIO_REMOVED", "portfolio_items", portfolio_id, f"{row['title']}; motivo: {data.reason or 'sin motivo'}")
     db.commit()
     return {"message": "Trabajo aprobado" if data.action == "APPROVE" else "Trabajo retirado", "action": data.action}
@@ -117,5 +161,5 @@ def reviews(admin_user: User = Depends(require_admin), db: Session = Depends(get
 
 @router.get("/audit")
 def audit_logs(admin_user: User = Depends(require_admin), db: Session = Depends(get_db)):
-    admin_rows = db.execute(text("SELECT id, admin_id, action, resource, target_id, details, timestamp FROM admin_audit_logs ORDER BY timestamp DESC LIMIT 500")).mappings().all()
-    return {"admin_audit": [dict(r) for r in admin_rows]}
+    rows = db.execute(text("SELECT id, admin_id, action, resource, target_id, details, timestamp FROM admin_audit_logs ORDER BY timestamp DESC LIMIT 500")).mappings().all()
+    return {"admin_audit": [dict(r) for r in rows]}
