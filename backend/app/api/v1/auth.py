@@ -25,6 +25,9 @@ class RecoverPasswordSchema(BaseModel): email: EmailStr
 class ResetPasswordSchema(BaseModel): token: str; new_password: str; confirm_password: Optional[str] = None
 class RoleToggleSchema(BaseModel): active_role: str
 
+def _user_payload(user: User):
+    return {"id":user.id,"first_name":user.first_name,"last_name":user.last_name,"email":user.email,"phone":user.phone,"cedula":user.cedula,"role":user.role.value if hasattr(user.role,"value") else str(user.role),"active_role":user.active_role,"admin_role":getattr(user,"admin_role",None),"province":user.province,"municipality":user.municipality,"bio":user.bio,"avatar_url":user.avatar_url,"is_verified":user.is_verified,"rating":user.rating,"jobs_completed":user.jobs_completed}
+
 def _bootstrap_configured_admin(user: User, db: Session) -> None:
     configured_email = os.getenv("ADMIN_EMAIL", "admin@serviya.do").strip().lower()
     if str(user.email).strip().lower() == configured_email:
@@ -42,6 +45,7 @@ def register(data: RegisterSchema, db: Session = Depends(get_db)):
     if data.confirm_password is not None and data.confirm_password != data.password: raise HTTPException(400, "Las contraseñas no coinciden.")
     role_str=(data.role or "CLIENTE").upper()
     if role_str == "TRABAJADOR" and not data.cedula: raise HTTPException(400, "La cédula es obligatoria para registrarse como trabajador.")
+    if role_str == "ADMIN": raise HTTPException(403, "Las cuentas administrativas no se registran públicamente.")
     if db.query(User).filter(User.email == data.email).first(): raise HTTPException(400, "Ya existe una cuenta registrada con este correo electrónico.")
     role_enum=UserRoleEnum.TRABAJADOR if role_str == "TRABAJADOR" else UserRoleEnum.CLIENTE
     user=User(first_name=data.first_name,last_name=data.last_name,email=data.email,phone=data.phone,cedula=data.cedula,password_hash=get_password_hash(data.password),role=role_enum,active_role=role_str,province=data.province or "Distrito Nacional",municipality=data.municipality or "Santo Domingo de Guzmán (DN)",is_verified=False)
@@ -50,7 +54,7 @@ def register(data: RegisterSchema, db: Session = Depends(get_db)):
         db.add(WorkerProfile(user_id=user.id,cedula=data.cedula,specialties=data.profession or "Servicios Generales",hourly_rate=600.0,availability="TIEMPO_COMPLETO",has_infotep=False,rating=5.0,review_count=0,is_approved=False))
         db.add(Wallet(worker_id=user.id,available_balance=0.0,pending_custody_balance=0.0,total_earnings=0.0,total_commissions=0.0,total_withdrawn=0.0))
     db.commit(); db.refresh(user); token=create_access_token(user.id)
-    return {"message":"Usuario registrado exitosamente en SERVIYA.do","token":token,"access_token":token,"token_type":"bearer","user":{"id":user.id,"first_name":user.first_name,"last_name":user.last_name,"email":user.email,"phone":user.phone,"role":user.role.value if hasattr(user.role,"value") else str(user.role),"active_role":user.active_role,"is_verified":user.is_verified,"avatar_url":user.avatar_url}}
+    return {"message":"Usuario registrado exitosamente en SERVIYA.do","token":token,"access_token":token,"token_type":"bearer","user":_user_payload(user)}
 
 @router.post("/login")
 def login(data: LoginSchema, db: Session = Depends(get_db)):
@@ -59,11 +63,11 @@ def login(data: LoginSchema, db: Session = Depends(get_db)):
     if user.is_active is False: raise HTTPException(403,"Esta cuenta está suspendida. Contacte con soporte de SERVIYA.do.")
     _bootstrap_configured_admin(user, db)
     token=create_access_token(user.id)
-    return {"message":"Inicio de sesión exitoso","token":token,"access_token":token,"token_type":"bearer","user":{"id":user.id,"first_name":user.first_name,"last_name":user.last_name,"email":user.email,"phone":user.phone,"role":user.role.value if hasattr(user.role,"value") else str(user.role),"active_role":user.active_role,"is_verified":user.is_verified,"avatar_url":user.avatar_url}}
+    return {"message":"Inicio de sesión exitoso","token":token,"access_token":token,"token_type":"bearer","user":_user_payload(user)}
 
 @router.get("/me")
 def get_me(current_user: User = Depends(get_current_active_user)):
-    return {"user":{"id":current_user.id,"first_name":current_user.first_name,"last_name":current_user.last_name,"email":current_user.email,"phone":current_user.phone,"cedula":current_user.cedula,"role":current_user.role.value if hasattr(current_user.role,"value") else str(current_user.role),"active_role":current_user.active_role,"province":current_user.province,"municipality":current_user.municipality,"bio":current_user.bio,"avatar_url":current_user.avatar_url,"is_verified":current_user.is_verified,"rating":current_user.rating,"jobs_completed":current_user.jobs_completed}}
+    return {"user":_user_payload(current_user)}
 
 @router.post("/recover-password")
 def recover_password(data: RecoverPasswordSchema, db: Session = Depends(get_db)):
