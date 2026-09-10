@@ -17,6 +17,27 @@ class CompletionSubmitSchema(BaseModel):
 def notify(db, user_id, title, message, typ, related):
     db.execute(text("INSERT INTO notifications (user_id,title,message,type,is_read,created_at,related_entity_id) VALUES (:u,:t,:m,:ty,false,CURRENT_TIMESTAMP,:r)"), {"u":user_id,"t":title,"m":message,"ty":typ,"r":related})
 
+@router.post("/{service_id}/execute")
+def execute_work(service_id: str, current_user: User = Depends(get_current_active_user), db: Session = Depends(get_db)):
+    s = db.execute(text("SELECT id,client_id,worker_id,status,completion_submitted FROM services WHERE id=:id FOR UPDATE"), {"id":service_id}).mappings().first()
+    if not s:
+        raise HTTPException(404,"Servicio no encontrado")
+    if s["worker_id"] != current_user.id:
+        raise HTTPException(403,"Solo el técnico asignado puede ejecutar este trabajo")
+    if s["status"] == "EN_PROGRESO":
+        return {"message":"El trabajo ya está en ejecución.","service_id":service_id,"status":"EN_PROGRESO"}
+    if s["status"] != "TRABAJADOR_SELECCIONADO":
+        raise HTTPException(409,"El trabajo no está listo para ejecución. La Custodia debe estar confirmada y el técnico debe estar asignado.")
+    escrow = db.execute(text("SELECT id,status,total_amount_rd FROM escrows WHERE service_id=:sid ORDER BY created_at DESC LIMIT 1 FOR UPDATE"), {"sid":service_id}).mappings().first()
+    if not escrow:
+        raise HTTPException(409,"No existe una Custodia asociada a este servicio")
+    if escrow["status"] != "RETENIDO":
+        raise HTTPException(409,"El dinero todavía no está en Custodia SERVIYA; Administración debe confirmar el depósito primero")
+    db.execute(text("UPDATE services SET status='EN_PROGRESO' WHERE id=:id"), {"id":service_id})
+    notify(db,s["client_id"],"Trabajo iniciado", "El técnico asignado comenzó oficialmente el trabajo. El pago continúa protegido en Custodia SERVIYA.", "WORK_STARTED", service_id)
+    db.commit()
+    return {"message":"Trabajo ejecutado correctamente. El servicio está EN_PROGRESO.","service_id":service_id,"status":"EN_PROGRESO"}
+
 @router.post("/{service_id}/submit")
 def submit_completion(service_id: str, data: CompletionSubmitSchema, current_user: User = Depends(get_current_active_user), db: Session = Depends(get_db)):
     s=db.execute(text("SELECT id,client_id,worker_id,status,completion_submitted FROM services WHERE id=:id FOR UPDATE"),{"id":service_id}).mappings().first()
