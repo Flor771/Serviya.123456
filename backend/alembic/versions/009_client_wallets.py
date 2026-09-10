@@ -1,18 +1,22 @@
 """Add client wallet balances for deposits and refunds.
 
 Revision ID: 009_client_wallets
-Revises: 008_password_reset_tokens
+Revises: 007_admin_roles_access
 """
 from alembic import op
 import sqlalchemy as sa
 
 revision = "009_client_wallets"
-down_revision = "008_password_reset_tokens"
+down_revision = "007_admin_roles_access"
 branch_labels = None
 depends_on = None
 
 
 def upgrade():
+    bind = op.get_bind()
+    inspector = sa.inspect(bind)
+    if "client_wallets" in inspector.get_table_names():
+        return
     op.create_table(
         "client_wallets",
         sa.Column("id", sa.Integer(), primary_key=True),
