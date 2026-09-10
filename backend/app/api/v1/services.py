@@ -39,7 +39,10 @@ def list_services(province:Optional[str]=Query(None),category_name:Optional[str]
     if status:q=q.filter(Service.status==status)
     out=[]
     for s in q.order_by(Service.created_at.desc()).all():
-        c=db.query(User).filter(User.id==s.client_id).first();out.append({"id":s.id,"title":s.title,"description":s.description,"category_name":s.category_name,"subcategory":s.subcategory,"price_rd":s.price_rd,"province":s.province,"municipality":s.municipality,"address_approx":s.address_approx,"service_date":s.service_date,"service_time":s.service_time,"estimated_duration":s.estimated_duration,"images":s.images or [],"requirements":s.requirements or [],"status":s.status.value if hasattr(s.status,"value") else str(s.status),"client_id":s.client_id,"client_name":f"{c.first_name} {c.last_name}" if c else "Cliente SERVIYA","created_at":str(s.created_at)})
+        c=db.query(User).filter(User.id==s.client_id).first()
+        w=db.query(User).filter(User.id==s.worker_id).first() if s.worker_id else None
+        st=s.status.value if hasattr(s.status,"value") else str(s.status)
+        out.append({"id":s.id,"title":s.title,"description":s.description,"category_name":s.category_name,"subcategory":s.subcategory,"price_rd":s.price_rd,"province":s.province,"municipality":s.municipality,"address_approx":s.address_approx,"service_date":s.service_date,"service_time":s.service_time,"estimated_duration":s.estimated_duration,"images":s.images or [],"requirements":s.requirements or [],"status":st,"client_id":s.client_id,"client_name":f"{c.first_name} {c.last_name}" if c else "Cliente SERVIYA","worker_id":s.worker_id,"worker_name":f"{w.first_name} {w.last_name}" if w else None,"created_at":str(s.created_at)})
     return {"services":out}
 
 @router.post("")
