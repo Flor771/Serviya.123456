@@ -17,9 +17,9 @@ export const AdminRolesPanel: React.FC = () => {
   const load = async () => {
     setLoading(true); setError('');
     try {
-      const [data, roleData] = await Promise.all([api.get<any>('/admin-panel/administrators'), api.get<any>('/admin-panel/administrator-roles')]);
+      const [data, roleData] = await Promise.all([api.get<any>('/admin/super-admin/administrators'), api.get<any>('/admin/administrator-roles')]);
       setAdmins(data?.administrators || []);
-      const rawRoles = roleData?.roles || data?.roles || [];
+      const rawRoles = roleData?.roles || [];
       setRoles(rawRoles.map((r:any) => ({ code:r.key || r.code, name:r.label || r.name, description:r.description, permissions:r.permissions })));
     } catch (e:any) { setError(e?.message || 'No se pudo cargar el equipo administrativo.'); }
     finally { setLoading(false); }
@@ -29,7 +29,7 @@ export const AdminRolesPanel: React.FC = () => {
   const createAdmin = async (e: React.FormEvent) => {
     e.preventDefault(); setSaving(true); setMessage(''); setError('');
     try {
-      await api.post('/admin-panel/administrators', { first_name:form.first_name, last_name:form.last_name, email:form.email, phone:form.phone, admin_role:form.admin_role, initial_password:form.password });
+      await api.post('/admin/super-admin/administrators', { first_name:form.first_name, last_name:form.last_name, email:form.email, phone:form.phone, admin_role:form.admin_role, password:form.password });
       setMessage('Administrador agregado correctamente. Puede entrar con su correo y contraseña.');
       setForm({ first_name:'', last_name:'', email:'', phone:'', password:'', admin_role:'ADMIN_OPERACIONES' });
       await load();
@@ -39,13 +39,13 @@ export const AdminRolesPanel: React.FC = () => {
 
   const updateRole = async (admin: Administrator, role: string) => {
     setError(''); setMessage('');
-    try { await api.patch(`/admin-panel/administrators/${admin.id}/role`, { admin_role:role }); setMessage('Rol administrativo actualizado.'); await load(); }
+    try { await api.patch(`/admin/super-admin/administrators/${admin.id}`, { admin_role:role }); setMessage('Rol administrativo actualizado.'); await load(); }
     catch (e:any) { setError(e?.message || 'No se pudo actualizar el rol.'); }
   };
 
   const toggle = async (admin: Administrator) => {
     setError(''); setMessage('');
-    try { await api.patch(`/admin-panel/administrators/${admin.id}/status`, { is_active:!admin.is_active, reason:'Cambio realizado por Super Administrador' }); setMessage('Acceso administrativo actualizado.'); await load(); }
+    try { await api.patch(`/admin/super-admin/administrators/${admin.id}`, { is_active:!admin.is_active }); setMessage('Acceso administrativo actualizado.'); await load(); }
     catch (e:any) { setError(e?.message || 'No se pudo actualizar el acceso.'); }
   };
 
