@@ -1,8 +1,8 @@
 from alembic import op
 import sqlalchemy as sa
 
-revision = '007_admin_roles'
-down_revision = '006_ensure_all_tables_exist'
+revision = '011_admin_roles'
+down_revision = '010_unique_service_reviews'
 branch_labels = None
 depends_on = None
 
