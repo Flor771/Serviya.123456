@@ -1,5 +1,5 @@
 from typing import Optional
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, status, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from jose import jwt, JWTError
 from sqlalchemy.orm import Session
@@ -31,14 +31,28 @@ def get_current_active_user(
 ) -> User:
     if not current_user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="No autenticado. Por favor inicie sesión.", headers={"WWW-Authenticate": "Bearer"})
-    # Some legacy ORM instances/databases may not expose is_active. Treat those accounts as active
-    # rather than crashing every protected endpoint with AttributeError.
     if getattr(current_user, "is_active", True) is False:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Esta cuenta está suspendida. Contacte con soporte de SERVIYA.")
     return current_user
 
-def require_admin(current_user: User = Depends(get_current_active_user)) -> User:
+def require_admin(
+    request: Request,
+    current_user: User = Depends(get_current_active_user)
+) -> User:
     role_str = str(current_user.role.value) if hasattr(current_user.role, "value") else str(current_user.role)
     if role_str != "ADMIN":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Acceso denegado. Se requieren permisos de administrador.")
+
+    # The administrative team shares one authenticated session across the admin console.
+    # Sensitive team-management endpoints are reserved for SUPER_ADMIN only.
+    path = request.url.path.rstrip("/")
+    if "/administrators" in path and str(getattr(current_user, "admin_role", "") or "").upper() != "SUPER_ADMIN":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Esta función está reservada al Super Administrador.")
+    return current_user
+
+def require_super_admin(current_user: User = Depends(get_current_active_user)) -> User:
+    role_str = str(current_user.role.value) if hasattr(current_user.role, "value") else str(current_user.role)
+    admin_role = str(getattr(current_user, "admin_role", "") or "").upper()
+    if role_str != "ADMIN" or admin_role != "SUPER_ADMIN":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Se requieren permisos de Super Administrador.")
     return current_user
