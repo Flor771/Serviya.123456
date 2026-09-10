@@ -48,6 +48,59 @@ def apply_to_service(data: CreateApplicationSchema, current_user: User = Depends
     db.commit(); db.refresh(application)
     return {"message": "Postulación enviada exitosamente", "application": {"id": application.id, "service_id": application.service_id, "offered_price_rd": application.offered_price_rd, "status": application.status.value if hasattr(application.status, "value") else str(application.status)}}
 
+@router.get("/mine")
+def get_my_applications(current_user: User = Depends(get_current_active_user), db: Session = Depends(get_db)):
+    role_str = current_user.role.value if hasattr(current_user.role, "value") else str(current_user.role)
+    if role_str != UserRoleEnum.TRABAJADOR.value:
+        raise HTTPException(status_code=403, detail="Solo los trabajadores tienen postulaciones enviadas")
+
+    out = []
+    applications = db.query(Application).filter(Application.worker_id == current_user.id).order_by(Application.created_at.desc()).all()
+    for a in applications:
+        s = db.query(Service).filter(Service.id == a.service_id).first()
+        if not s:
+            continue
+        c = db.query(User).filter(User.id == s.client_id).first()
+        w = db.query(User).filter(User.id == s.worker_id).first() if s.worker_id else None
+        st = s.status.value if hasattr(s.status, "value") else str(s.status)
+        app_status = a.status.value if hasattr(a.status, "value") else str(a.status)
+        out.append({
+            "id": str(a.id),
+            "service_id": str(a.service_id),
+            "worker_id": str(a.worker_id),
+            "message": a.message,
+            "offered_price_rd": a.offered_price_rd,
+            "availability_note": a.availability_note,
+            "status": app_status,
+            "created_at": str(a.created_at),
+            "service": {
+                "id": s.id,
+                "title": s.title,
+                "description": s.description,
+                "category_name": s.category_name,
+                "subcategory": s.subcategory,
+                "price_rd": s.price_rd,
+                "negotiated_price_rd": getattr(s, "negotiated_price_rd", None),
+                "negotiation_status": getattr(s, "negotiation_status", None),
+                "province": s.province,
+                "municipality": s.municipality,
+                "address_approx": s.address_approx,
+                "service_date": s.service_date,
+                "service_time": s.service_time,
+                "estimated_duration": s.estimated_duration,
+                "images": s.images or [],
+                "requirements": s.requirements or [],
+                "status": st,
+                "client_id": s.client_id,
+                "client_name": f"{c.first_name} {c.last_name}" if c else "Cliente SERVIYA",
+                "worker_id": s.worker_id,
+                "worker_name": f"{w.first_name} {w.last_name}" if w else None,
+                "created_at": str(s.created_at),
+                "applications_count": db.query(Application).filter(Application.service_id == s.id).count(),
+            }
+        })
+    return {"applications": out, "count": len(out)}
+
 @router.post("/{id}/select")
 def select_application(id: str, current_user: User = Depends(get_current_active_user), db: Session = Depends(get_db)):
     app_item = db.query(Application).filter(Application.id == id).first()
