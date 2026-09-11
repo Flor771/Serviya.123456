@@ -20,19 +20,13 @@ def notify(db, user_id, title, message, typ, related):
 @router.post("/{service_id}/execute")
 def execute_work(service_id: str, current_user: User = Depends(get_current_active_user), db: Session = Depends(get_db)):
     s = db.execute(text("SELECT id,client_id,worker_id,status,completion_submitted FROM services WHERE id=:id FOR UPDATE"), {"id":service_id}).mappings().first()
-    if not s:
-        raise HTTPException(404,"Servicio no encontrado")
-    if s["worker_id"] != current_user.id:
-        raise HTTPException(403,"Solo el técnico asignado puede ejecutar este trabajo")
-    if s["status"] == "EN_PROGRESO":
-        return {"message":"El trabajo ya está en ejecución.","service_id":service_id,"status":"EN_PROGRESO"}
-    if s["status"] != "TRABAJADOR_SELECCIONADO":
-        raise HTTPException(409,"El trabajo no está listo para ejecución. La Custodia debe estar confirmada y el técnico debe estar asignado.")
+    if not s: raise HTTPException(404,"Servicio no encontrado")
+    if s["worker_id"] != current_user.id: raise HTTPException(403,"Solo el técnico asignado puede ejecutar este trabajo")
+    if s["status"] == "EN_PROGRESO": return {"message":"El trabajo ya está en ejecución.","service_id":service_id,"status":"EN_PROGRESO"}
+    if s["status"] != "TRABAJADOR_SELECCIONADO": raise HTTPException(409,"El trabajo no está listo para ejecución. La Custodia debe estar confirmada y el técnico debe estar asignado.")
     escrow = db.execute(text("SELECT id,status,total_amount_rd FROM escrows WHERE service_id=:sid ORDER BY created_at DESC LIMIT 1 FOR UPDATE"), {"sid":service_id}).mappings().first()
-    if not escrow:
-        raise HTTPException(409,"No existe una Custodia asociada a este servicio")
-    if escrow["status"] != "RETENIDO":
-        raise HTTPException(409,"El dinero todavía no está en Custodia SERVIYA; Administración debe confirmar el depósito primero")
+    if not escrow: raise HTTPException(409,"No existe una Custodia asociada a este servicio")
+    if escrow["status"] != "RETENIDO": raise HTTPException(409,"El dinero todavía no está en Custodia SERVIYA; Administración debe confirmar el depósito primero")
     db.execute(text("UPDATE services SET status='EN_PROGRESO' WHERE id=:id"), {"id":service_id})
     notify(db,s["client_id"],"Trabajo iniciado", "El técnico asignado comenzó oficialmente el trabajo. El pago continúa protegido en Custodia SERVIYA.", "WORK_STARTED", service_id)
     db.commit()
@@ -50,8 +44,7 @@ def submit_completion(service_id: str, data: CompletionSubmitSchema, current_use
         import json
         try: photos = json.loads(photos)
         except Exception: photos = []
-    if not isinstance(photos, list) or not photos:
-        raise HTTPException(400,"Debes subir al menos una foto de evidencia antes de marcar el trabajo como terminado")
+    if not isinstance(photos, list) or not photos: raise HTTPException(400,"Debes subir al menos una foto de evidencia antes de marcar el trabajo como terminado")
     otp=f"{__import__('random').randint(100000,999999)}"
     db.execute(text("UPDATE services SET completion_submitted=true,completion_summary=:summary,completion_submitted_at=CURRENT_TIMESTAMP WHERE id=:id"),{"summary":data.summary,"id":service_id})
     db.execute(text("UPDATE escrows SET release_otp=:otp WHERE service_id=:sid AND status='RETENIDO'"),{"otp":otp,"sid":service_id})
@@ -67,12 +60,13 @@ def approve_completion(service_id: str, current_user: User = Depends(get_current
     if not s["completion_submitted"]: raise HTTPException(400,"El técnico todavía no ha enviado el trabajo a revisión")
     escrow=db.execute(text("SELECT id,total_amount_rd,status FROM escrows WHERE service_id=:sid ORDER BY created_at DESC LIMIT 1 FOR UPDATE"),{"sid":service_id}).mappings().first()
     if not escrow: raise HTTPException(404,"No existe una custodia para este servicio")
-    if escrow["status"] == "PENDIENTE_APROBACION":
-        return {"message":"La aprobación del cliente ya fue registrada y está pendiente de Administración.","status":"PENDIENTE_APROBACION"}
+    if escrow["status"] == "PENDIENTE_APROBACION": return {"message":"La aprobación del cliente ya fue registrada y está pendiente de Administración.","status":"PENDIENTE_APROBACION"}
     if escrow["status"] != "RETENIDO": raise HTTPException(409,"La custodia no está disponible para aprobación del cliente")
     db.execute(text("UPDATE escrows SET status='PENDIENTE_APROBACION' WHERE id=:id"),{"id":escrow["id"]})
-    notify(db,s["worker_id"],"Cliente aprobó el trabajo","El cliente confirmó que está conforme. El pago quedó pendiente de liberación por Administración.","CLIENT_APPROVED_RELEASE",service_id)
-    admins=db.execute(text("SELECT id FROM users WHERE role='ADMIN' AND COALESCE(is_active,true)=true")).scalars().all()
+    notify(db,s["worker_id"],"Pago en proceso de liberación","El cliente confirmó que el trabajo está terminado y conforme. El pago pasó al proceso de liberación de Administración; el dinero permanece protegido en Custodia hasta que Administración lo confirme.","CLIENT_APPROVED_RELEASE",service_id)
+    # La aplicación utiliza role=ADMIN y admin_role para distinguir las áreas administrativas.
+    # Incluimos cualquier administrador activo, incluso si su active_role no es ADMIN en ese momento.
+    admins=db.execute(text("SELECT id FROM users WHERE COALESCE(is_active,true)=true AND (role='ADMIN' OR admin_role IS NOT NULL OR active_role='ADMIN')")).scalars().all()
     for admin_id in admins:
         notify(db,admin_id,"Liberación pendiente de aprobación",f"El cliente aprobó el servicio y solicita liberar RD$ {float(escrow['total_amount_rd'] or 0):,.2f}. Revisa la evidencia y procesa la liberación administrativa.","ADMIN_RELEASE_PENDING",service_id)
     db.commit()
