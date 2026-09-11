@@ -1,7 +1,9 @@
 from typing import Optional
+import json
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
+from sqlalchemy import text
 from app.core.deps import get_db, get_current_active_user
 from app.models.models import Service, User, Application, ServiceStatusEnum, UserRoleEnum
 
@@ -21,6 +23,10 @@ class ServiceCreate(BaseModel):
     estimated_duration: Optional[str] = None
     images: Optional[list] = None
     requirements: Optional[list] = None
+
+class CompletionPhotosPayload(BaseModel):
+    photos: list[str] = Field(min_length=1, max_length=10)
+    summary: Optional[str] = Field(default=None, max_length=1000)
 
 @router.get("")
 def list_services(province: Optional[str] = None, category_name: Optional[str] = None, status: Optional[str] = None, db: Session = Depends(get_db)):
@@ -95,3 +101,46 @@ def get_service(service_id: str, db: Session = Depends(get_db)):
         "worker_name": f"{w.first_name} {w.last_name}" if w else None, "worker_verified": bool(getattr(w, "is_verified", False)) if w else False,
         "applications_count": db.query(Application).filter(Application.service_id == s.id).count(), "created_at": str(s.created_at)
     }}
+
+@router.get("/{service_id}/completion-photos")
+def get_completion_photos(service_id: str, current_user: User = Depends(get_current_active_user), db: Session = Depends(get_db)):
+    row = db.execute(text("SELECT id, client_id, worker_id, status, completion_photos, completion_summary FROM services WHERE id=:id"), {"id": service_id}).mappings().first()
+    if not row:
+        raise HTTPException(404, "Servicio no encontrado")
+    if current_user.id not in {row["client_id"], row["worker_id"]}:
+        raise HTTPException(403, "No tienes acceso a la evidencia de este trabajo")
+    photos = row["completion_photos"] or []
+    if isinstance(photos, str):
+        try: photos = json.loads(photos)
+        except Exception: photos = []
+    return {"service_id": service_id, "photos": photos, "summary": row["completion_summary"]}
+
+@router.post("/{service_id}/completion-photos")
+def save_completion_photos(service_id: str, data: CompletionPhotosPayload, current_user: User = Depends(get_current_active_user), db: Session = Depends(get_db)):
+    row = db.execute(text("SELECT id, client_id, worker_id, status, completion_photos, completion_submitted FROM services WHERE id=:id FOR UPDATE"), {"id": service_id}).mappings().first()
+    if not row:
+        raise HTTPException(404, "Servicio no encontrado")
+    if row["worker_id"] != current_user.id:
+        raise HTTPException(403, "Solo el técnico asignado puede subir evidencia")
+    status = str(row["status"])
+    if status not in {"EN_PROGRESO", "TRABAJADOR_SELECCIONADO"}:
+        raise HTTPException(400, "La evidencia solo puede subirse mientras el trabajo está activo")
+    photos = row["completion_photos"] or []
+    if isinstance(photos, str):
+        try: photos = json.loads(photos)
+        except Exception: photos = []
+    if not isinstance(photos, list): photos = []
+    clean_new = []
+    for photo in data.photos:
+        value = str(photo).strip()
+        if not value.startswith("data:image/"):
+            raise HTTPException(400, "Cada evidencia debe ser una imagen válida")
+        if len(value) > 700_000:
+            raise HTTPException(400, "Una de las fotos supera el tamaño permitido")
+        clean_new.append(value)
+    combined = (photos + clean_new)[-10:]
+    summary = data.summary.strip() if data.summary else None
+    db.execute(text("UPDATE services SET completion_photos=CAST(:photos AS JSON), completion_summary=COALESCE(:summary, completion_summary) WHERE id=:id"), {"photos": json.dumps(combined), "summary": summary, "id": service_id})
+    db.execute(text("INSERT INTO notifications (user_id,title,message,type,is_read,created_at,related_entity_id) VALUES (:uid,:title,:message,:typ,false,CURRENT_TIMESTAMP,:related)"), {"uid": row["client_id"], "title": "Nueva evidencia del trabajo", "message": "El técnico subió fotos del trabajo para tu revisión.", "typ": "COMPLETION_PHOTOS", "related": service_id})
+    db.commit()
+    return {"message": "Evidencia guardada correctamente", "service_id": service_id, "photos": combined}
