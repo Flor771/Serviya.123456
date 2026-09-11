@@ -32,9 +32,38 @@ def upgrade() -> None:
             sa.Column("certificate_ref", sa.String(length=120), nullable=True),
         )
 
+    if "warranty_revisits" not in tables:
+        op.create_table(
+            "warranty_revisits",
+            sa.Column("id", sa.String(length=64), primary_key=True),
+            sa.Column("service_id", sa.String(), sa.ForeignKey("services.id"), nullable=False),
+            sa.Column("warranty_id", sa.String(length=64), sa.ForeignKey("service_warranties.id"), nullable=False),
+            sa.Column("requested_by_user_id", sa.String(), sa.ForeignKey("users.id"), nullable=False),
+            sa.Column("client_id", sa.String(), sa.ForeignKey("users.id"), nullable=False),
+            sa.Column("worker_id", sa.String(), sa.ForeignKey("users.id"), nullable=False),
+            sa.Column("issue", sa.String(length=180), nullable=False),
+            sa.Column("description", sa.Text(), nullable=False),
+            sa.Column("status", sa.String(length=40), nullable=False, server_default="SOLICITADA"),
+            sa.Column("scheduled_at", sa.DateTime(), nullable=True),
+            sa.Column("resolution_notes", sa.Text(), nullable=True),
+            sa.Column("created_at", sa.DateTime(), nullable=False, server_default=sa.func.now()),
+            sa.Column("updated_at", sa.DateTime(), nullable=False, server_default=sa.func.now()),
+            sa.Column("resolved_at", sa.DateTime(), nullable=True),
+        )
+
     op.execute("""
         CREATE UNIQUE INDEX IF NOT EXISTS uq_service_warranties_service
         ON service_warranties(service_id)
+    """)
+
+    op.execute("""
+        CREATE INDEX IF NOT EXISTS ix_warranty_revisits_service
+        ON warranty_revisits(service_id)
+    """)
+
+    op.execute("""
+        CREATE INDEX IF NOT EXISTS ix_warranty_revisits_worker_status
+        ON warranty_revisits(worker_id, status)
     """)
 
     op.execute("""
@@ -52,5 +81,7 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     op.execute("DROP INDEX IF EXISTS uq_warranty_active_revisit_service")
+    op.execute("DROP INDEX IF EXISTS ix_warranty_revisits_worker_status")
+    op.execute("DROP INDEX IF EXISTS ix_warranty_revisits_service")
     op.execute("DROP INDEX IF EXISTS uq_service_warranties_service")
     # Keep historical warranty records if this migration is rolled back.
