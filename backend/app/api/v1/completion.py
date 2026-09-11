@@ -15,7 +15,7 @@ class CompletionSubmitSchema(BaseModel):
 
 
 def notify(db, user_id, title, message, typ, related):
-    db.execute(text("INSERT INTO notifications (user_id,title,message,type,is_read,created_at,related_entity_id) VALUES (:u,:t,:m,:ty,false,CURRENT_TIMESTAMP,:r)"), {"u":user_id,"t":title,"m":message,"ty":typ,"r":related})
+    db.execute(text("INSERT INTO notifications (user_id,title,message,type,read,created_at,related_entity_id) VALUES (:u,:t,:m,:ty,false,CURRENT_TIMESTAMP,:r)"), {"u":user_id,"t":title,"m":message,"ty":typ,"r":related})
 
 @router.post("/{service_id}/execute")
 def execute_work(service_id: str, current_user: User = Depends(get_current_active_user), db: Session = Depends(get_db)):
