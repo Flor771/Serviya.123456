@@ -22,6 +22,44 @@
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
     <script>
+      // Registro de PWA y botón de instalación para Android/Chrome.
+      let deferredInstallPrompt = null;
+
+      window.addEventListener('beforeinstallprompt', (event) => {
+        event.preventDefault();
+        deferredInstallPrompt = event;
+        window.dispatchEvent(new CustomEvent('serviya:pwa-install-ready'));
+      });
+
+      window.addEventListener('appinstalled', () => {
+        deferredInstallPrompt = null;
+        const button = document.getElementById('serviya-install-button');
+        if (button) button.remove();
+      });
+
+      window.addEventListener('serviya:request-pwa-install', async () => {
+        if (!deferredInstallPrompt) return;
+        deferredInstallPrompt.prompt();
+        await deferredInstallPrompt.userChoice;
+        deferredInstallPrompt = null;
+      });
+
+      function showInstallButton() {
+        if (window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true) return;
+        if (document.getElementById('serviya-install-button')) return;
+
+        const button = document.createElement('button');
+        button.id = 'serviya-install-button';
+        button.type = 'button';
+        button.textContent = '📲 Instalar SERVIYA';
+        button.setAttribute('aria-label', 'Instalar SERVIYA en el teléfono');
+        button.style.cssText = 'position:fixed;right:14px;bottom:78px;z-index:9999;border:0;border-radius:999px;padding:13px 18px;background:#0057B8;color:#fff;font:800 14px system-ui,-apple-system,sans-serif;box-shadow:0 10px 28px rgba(0,45,98,.28);cursor:pointer;';
+        button.onclick = () => window.dispatchEvent(new Event('serviya:request-pwa-install'));
+        document.body.appendChild(button);
+      }
+
+      window.addEventListener('serviya:pwa-install-ready', showInstallButton);
+
       if ('serviceWorker' in navigator && window.location.protocol !== 'http:') {
         window.addEventListener('load', () => {
           navigator.serviceWorker.register('/sw.js')
@@ -32,4 +70,3 @@
     </script>
   </body>
 </html>
-
