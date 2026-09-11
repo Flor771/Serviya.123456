@@ -1,4 +1,3 @@
-import os
 from pathlib import Path
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -12,16 +11,14 @@ app = FastAPI(
     description="API para la plataforma de servicios SERVIYA.do en República Dominicana",
     version=settings.VERSION,
     docs_url="/docs",
-    openapi_url="/openapi.json"
+    openapi_url="/openapi.json",
 )
 
-# CORS: the admin frontend is hosted on a separate Render static site.
-# Explicit origins are required because the admin client sends Authorization headers.
+# Only current production frontend/admin origins plus local development.
+# Old SERVIYA deployments are intentionally not trusted anymore.
 origins = [
     "https://serviya-admin.onrender.com",
     "https://serviya-com-odg.onrender.com",
-    "https://serviya-com.onrender.com",
-    "https://serviya-org.onrender.com",
     "http://localhost:5173",
     "http://localhost:4173",
 ]
@@ -34,16 +31,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Include API Router FIRST
 app.include_router(api_router)
+
 
 @app.get("/api/v1/health")
 def health_check():
     return {"status": "ok", "version": settings.VERSION}
 
-# Absolute path based on __file__
-# __file__ = /.../repo_root/backend/app/main.py
-# .parent.parent.parent = /.../repo_root
+
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 DIST_DIR = BASE_DIR / "dist"
 INDEX_FILE = DIST_DIR / "index.html"
@@ -51,6 +46,7 @@ ASSETS_DIR = DIST_DIR / "assets"
 
 if ASSETS_DIR.exists():
     app.mount("/assets", StaticFiles(directory=str(ASSETS_DIR)), name="assets")
+
 
 @app.get("/", include_in_schema=False)
 async def serve_frontend_root():
@@ -63,8 +59,9 @@ async def serve_frontend_root():
         "app": "SERVIYA.do API 🇩🇴",
         "tagline": "Trabajo • Confianza • Oportunidades",
         "status": "online",
-        "docs": "/docs"
+        "docs": "/docs",
     }
+
 
 @app.get("/{full_path:path}", include_in_schema=False)
 async def serve_frontend_spa(full_path: str):
@@ -86,5 +83,5 @@ async def serve_frontend_spa(full_path: str):
         "app": "SERVIYA.do API 🇩🇴",
         "tagline": "Trabajo • Confianza • Oportunidades",
         "status": "online",
-        "docs": "/docs"
+        "docs": "/docs",
     }
