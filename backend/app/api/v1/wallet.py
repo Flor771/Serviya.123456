@@ -7,18 +7,9 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.deps import get_db, get_current_active_user
-from app.models.models import Wallet, User, BankAccount
+from app.models.models import Wallet, User
 
 router = APIRouter(prefix="/wallet", tags=["Billetera SERVIYA"])
-
-@router.get("/bank-accounts")
-def get_active_serviya_bank_accounts(current_user: User = Depends(get_current_active_user), db: Session = Depends(get_db)):
-    accounts = db.query(BankAccount).filter(BankAccount.is_active == True).order_by(BankAccount.is_primary.desc(), BankAccount.id.asc()).all()
-    return {"bank_accounts": [{"id": a.id, "bank_name": a.bank_name, "account_number": a.account_number, "account_type": a.account_type, "account_holder": a.account_holder, "rnc_cedula": a.rnc_cedula, "is_primary": bool(a.is_primary)} for a in accounts]}
-
-class DepositSchema(BaseModel):
-    amount_rd: float
-    payment_method: Optional[str] = "TARJETA_SIMULACION"
 
 class WithdrawSchema(BaseModel):
     amount_rd: float
@@ -32,25 +23,36 @@ def _role(user):
     return user.role.value if hasattr(user.role, "value") else str(user.role)
 
 
-def _get_or_create_client_wallet(db: Session, client_id: str):
-    row = db.execute(text("SELECT id, available_balance, total_deposited, total_spent, total_refunded FROM client_wallets WHERE client_id=:client_id FOR UPDATE"), {"client_id": client_id}).mappings().first()
-    if row:
-        return row
-    db.execute(text("INSERT INTO client_wallets (client_id) VALUES (:client_id) ON CONFLICT (client_id) DO NOTHING"), {"client_id": client_id})
-    return db.execute(text("SELECT id, available_balance, total_deposited, total_spent, total_refunded FROM client_wallets WHERE client_id=:client_id FOR UPDATE"), {"client_id": client_id}).mappings().one()
-
-
 @router.get("")
 def get_wallet(current_user: User = Depends(get_current_active_user), db: Session = Depends(get_db)):
     role_str = _role(current_user)
     tx_rows = db.execute(text("SELECT id, amount, type, status, reference_code, created_at FROM transactions WHERE user_id=:user_id ORDER BY created_at DESC"), {"user_id": current_user.id}).mappings().all()
     transactions = [{"id": r["id"], "type": r["type"], "amount_rd": float(r["amount"]), "description": r["type"], "reference": r["reference_code"], "status": r["status"], "created_at": str(r["created_at"])} for r in tx_rows]
 
+    # CLIENTE no tiene billetera de depósito. Los fondos solo se pagan directamente
+    # a la Custodia de un trabajo que ya fue negociado y acordado. client_wallets
+    # puede existir internamente para registrar reembolsos administrativos, pero
+    # nunca se expone como saldo para depositar ni como fuente de pago de Custodia.
     if role_str == "CLIENTE":
-        wallet = db.execute(text("SELECT id, available_balance, total_deposited, total_spent, total_refunded FROM client_wallets WHERE client_id=:client_id"), {"client_id": current_user.id}).mappings().first()
-        if not wallet:
-            wallet = {"id": None, "available_balance": 0, "total_deposited": 0, "total_spent": 0, "total_refunded": 0}
-        return {"wallet": {"id": wallet["id"], "user_id": current_user.id, "client_id": current_user.id, "available_rd": float(wallet["available_balance"] or 0), "escrow_rd": 0.0, "pending_rd": 0.0, "total_deposited_rd": float(wallet["total_deposited"] or 0), "total_spent_rd": float(wallet["total_spent"] or 0), "total_refunded_rd": float(wallet["total_refunded"] or 0), "can_withdraw": False}, "transactions": transactions, "withdrawals": []}
+        refunded = db.execute(text("SELECT COALESCE(total_refunded,0) FROM client_wallets WHERE client_id=:client_id"), {"client_id": current_user.id}).scalar() or 0
+        return {
+            "wallet": {
+                "id": None,
+                "user_id": current_user.id,
+                "client_id": current_user.id,
+                "available_rd": 0.0,
+                "escrow_rd": 0.0,
+                "pending_rd": 0.0,
+                "total_deposited_rd": 0.0,
+                "total_spent_rd": 0.0,
+                "total_refunded_rd": float(refunded),
+                "can_withdraw": False,
+                "can_deposit": False,
+                "deposit_mode": "SOLO_CUSTODIA_POR_TRABAJO_ACORDADO",
+            },
+            "transactions": transactions,
+            "withdrawals": [],
+        }
 
     wallet = db.query(Wallet).filter(Wallet.worker_id == current_user.id).first()
     if role_str == "TRABAJADOR" and not wallet:
@@ -72,34 +74,17 @@ def get_wallet(current_user: User = Depends(get_current_active_user), db: Sessio
             custody_jobs.append({"escrow_id": r["escrow_id"], "service_id": r["service_id"], "title": r["title"], "amount_rd": amount, "escrow_amount_rd": float(r["total_amount_rd"] or 0), "status": r["status"], "service_status": r["service_status"], "created_at": str(r["created_at"])})
 
     if not wallet:
-        return {"wallet": {"id": None, "user_id": current_user.id, "worker_id": None, "available_rd": 0.0, "escrow_rd": custody_total, "pending_rd": 0.0, "total_received_rd": 0.0, "total_spent_rd": 0.0, "can_withdraw": False}, "transactions": transactions, "withdrawals": withdrawals, "worker_bank_account": dict(saved_account) if saved_account else None, "custody_jobs": custody_jobs}
+        return {"wallet": {"id": None, "user_id": current_user.id, "worker_id": None, "available_rd": 0.0, "escrow_rd": custody_total, "pending_rd": 0.0, "total_received_rd": 0.0, "total_spent_rd": 0.0, "can_withdraw": False, "can_deposit": False}, "transactions": transactions, "withdrawals": withdrawals, "worker_bank_account": dict(saved_account) if saved_account else None, "custody_jobs": custody_jobs}
 
     pending_withdrawal = sum(float(r["amount"] or 0) for r in withdrawal_rows if str(r["status"]).upper() == "PENDIENTE") if role_str == "TRABAJADOR" else 0.0
-    return {"wallet": {"id": wallet.id, "user_id": wallet.worker_id, "worker_id": wallet.worker_id, "available_rd": float(wallet.available_balance or 0), "escrow_rd": custody_total, "pending_rd": pending_withdrawal, "total_received_rd": float(wallet.total_earnings or 0), "total_spent_rd": float(wallet.total_withdrawn or 0), "can_withdraw": role_str == "TRABAJADOR"}, "transactions": transactions, "withdrawals": withdrawals, "worker_bank_account": dict(saved_account) if saved_account else None, "custody_jobs": custody_jobs}
+    return {"wallet": {"id": wallet.id, "user_id": wallet.worker_id, "worker_id": wallet.worker_id, "available_rd": float(wallet.available_balance or 0), "escrow_rd": custody_total, "pending_rd": pending_withdrawal, "total_received_rd": float(wallet.total_earnings or 0), "total_spent_rd": float(wallet.total_withdrawn or 0), "can_withdraw": role_str == "TRABAJADOR", "can_deposit": False}, "transactions": transactions, "withdrawals": withdrawals, "worker_bank_account": dict(saved_account) if saved_account else None, "custody_jobs": custody_jobs}
 
 
 @router.post("/deposit")
-def deposit(data: DepositSchema, current_user: User = Depends(get_current_active_user), db: Session = Depends(get_db)):
-    if data.amount_rd <= 0:
-        raise HTTPException(status_code=400, detail="El monto a depositar debe ser mayor que RD$ 0.")
-    role_str = _role(current_user)
-    ref = f"DEP-{uuid.uuid4().hex[:8].upper()}"
-    if role_str == "CLIENTE":
-        wallet = _get_or_create_client_wallet(db, current_user.id)
-        db.execute(text("UPDATE client_wallets SET available_balance=available_balance+:amount, total_deposited=total_deposited+:amount, updated_at=CURRENT_TIMESTAMP WHERE id=:id"), {"amount": data.amount_rd, "id": wallet["id"]})
-        _record_transaction(db, current_user.id, data.amount_rd, "DEPOSITO_CLIENTE", "EXITOSO", f"Depósito de cliente via {data.payment_method}", ref)
-        db.commit()
-        balance = db.execute(text("SELECT available_balance FROM client_wallets WHERE id=:id"), {"id": wallet["id"]}).scalar_one()
-        return {"message": f"Depósito de RD$ {data.amount_rd:,.2f} acreditado a tu Billetera SERVIYA.", "reference": ref, "available_rd": float(balance)}
-    if role_str != "TRABAJADOR":
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Este tipo de depósito no está disponible para este usuario.")
-    wallet = db.query(Wallet).filter(Wallet.worker_id == current_user.id).first()
-    if not wallet:
-        wallet = Wallet(worker_id=current_user.id, available_balance=0.0, pending_custody_balance=0.0, total_earnings=0.0, total_commissions=0.0, total_withdrawn=0.0); db.add(wallet); db.flush()
-    wallet.available_balance += data.amount_rd
-    _record_transaction(db, current_user.id, data.amount_rd, "DEPOSITO", "EXITOSO", f"Depósito via {data.payment_method}", ref)
-    db.commit()
-    return {"message": f"Depósito de RD$ {data.amount_rd:,.2f} procesado exitosamente.", "reference": ref, "available_rd": wallet.available_balance}
+def deposit(current_user: User = Depends(get_current_active_user)):
+    # No existe depósito general de saldo. El cliente paga únicamente después de
+    # negociar/acordar un trabajo y ese pago se registra directamente en Custodia.
+    raise HTTPException(status_code=status.HTTP_410_GONE, detail="Los depósitos generales están deshabilitados. Primero negocia y acuerda un trabajo; luego paga ese trabajo directamente en Custodia SERVIYA.")
 
 
 @router.post("/withdraw")
