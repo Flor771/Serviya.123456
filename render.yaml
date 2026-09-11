@@ -14,7 +14,7 @@ services:
       - key: SECRET_KEY
         generateValue: true
       - key: PLATFORM_COMMISSION_PERCENT
-        value: "8.0"
+        value: "10.0"
 
 databases:
   - name: serviya-db
