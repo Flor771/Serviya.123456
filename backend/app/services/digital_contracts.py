@@ -55,6 +55,9 @@ def ensure_digital_contracts() -> None:
         conn.execute(text("""
             CREATE OR REPLACE FUNCTION serviya_lock_digital_contract() RETURNS trigger AS $$
             BEGIN
+                IF NEW.status='ACEPTADO_POR_AMBOS' AND NEW.locked_at IS NULL THEN
+                    NEW.locked_at=CURRENT_TIMESTAMP;
+                END IF;
                 IF OLD.locked_at IS NOT NULL AND (
                     NEW.service_id IS DISTINCT FROM OLD.service_id OR NEW.escrow_id IS DISTINCT FROM OLD.escrow_id OR
                     NEW.contract_number IS DISTINCT FROM OLD.contract_number OR NEW.version IS DISTINCT FROM OLD.version OR
