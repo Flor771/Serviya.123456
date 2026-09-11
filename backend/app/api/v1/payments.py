@@ -7,7 +7,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.core.deps import get_db, get_current_active_user
-from app.models.models import Service, Escrow, Wallet, ServiceStatusEnum, User, BankAccount, Notification
+from app.models.models import Service, Escrow, User, BankAccount, Notification
 
 router = APIRouter(prefix="/payments", tags=["Pagos y Custodia (Escrow)"])
 
@@ -72,15 +72,5 @@ def request_release_approval(data:EscrowReleaseSchema,current_user:User=Depends(
 
 @router.post("/refund")
 def refund_escrow(data:RefundSchema,current_user:User=Depends(get_current_active_user),db:Session=Depends(get_db)):
-    escrow=db.query(Escrow).filter(Escrow.service_id==data.service_id,Escrow.status=="RETENIDO").with_for_update().first()
-    if not escrow: raise HTTPException(409,"El reembolso directo no está disponible. Si existe una disputa, debe ser resuelta por administración.")
-    if escrow.client_id != current_user.id: raise HTTPException(403,"Solamente el cliente creador puede solicitar este reembolso.")
-    wallet=db.execute(text("SELECT id,available_balance FROM client_wallets WHERE client_id=:c FOR UPDATE"),{"c":current_user.id}).mappings().first()
-    if not wallet:
-        db.execute(text("INSERT INTO client_wallets (client_id) VALUES (:c) ON CONFLICT (client_id) DO NOTHING"),{"c":current_user.id}); wallet=db.execute(text("SELECT id,available_balance FROM client_wallets WHERE client_id=:c FOR UPDATE"),{"c":current_user.id}).mappings().one()
-    amount=float(escrow.total_amount_rd); escrow.status="REEMBOLSADO"; service=db.query(Service).filter(Service.id==data.service_id).first()
-    if service: service.status=ServiceStatusEnum.CANCELADA
-    db.execute(text("UPDATE client_wallets SET available_balance=available_balance+:a,total_refunded=total_refunded+:a,updated_at=CURRENT_TIMESTAMP WHERE id=:id"),{"a":amount,"id":wallet["id"]})
-    ref=f"REFUND-{uuid.uuid4().hex[:8].upper()}"; _tx(db,current_user.id,amount,"REEMBOLSO","EXITOSO",f"Reembolso del servicio #{data.service_id[:8]}: {data.reason}",ref)
-    db.commit(); balance=db.execute(text("SELECT available_balance FROM client_wallets WHERE id=:id"),{"id":wallet["id"]}).scalar_one()
-    return {"message":f"Reembolso de RD$ {amount:,.2f} acreditado a la Billetera SERVIYA.","refund_amount_rd":amount,"reference":ref,"wallet_available_rd":float(balance)}
+    # Financial refunds are administrative settlements. A client cannot execute one directly.
+    raise HTTPException(409,"El reembolso directo está deshabilitado. Solicita una revisión o disputa; Administración debe autorizar y registrar el reembolso.")
