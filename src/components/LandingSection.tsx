@@ -1,167 +1,105 @@
 import React, { useMemo, useState } from 'react';
 import { SERVICE_CATEGORIES, DOMINICAN_PROVINCES } from '../data/dominicanData';
 import { Service, User } from '../types';
-import {
-  ArrowRight, BriefcaseBusiness, Building2, ChevronDown, ChevronUp,
-  Hammer, HeartHandshake, Laptop, LockKeyhole, MapPin, Search, ShieldCheck,
-  Sparkles, Star, Wrench, Zap
-} from 'lucide-react';
+import { ArrowRight, BriefcaseBusiness, Building2, ChevronDown, ChevronUp, Hammer, HeartHandshake, Laptop, LockKeyhole, MapPin, Search, ShieldCheck, Sparkles, Star, Wrench, Zap } from 'lucide-react';
+import { AnnouncementsSection } from './AnnouncementsSection';
 
-interface LandingSectionProps {
-  services: Service[];
-  workers: User[];
-  onSelectCategory: (catId: string) => void;
-  onSelectService: (service: Service) => void;
-  onOpenPublish: () => void;
-  onNavigateTab: (tab: string) => void;
-}
-
+interface LandingSectionProps { services: Service[]; workers: User[]; onSelectCategory: (catId: string) => void; onSelectService: (service: Service) => void; onOpenPublish: () => void; onNavigateTab: (tab: string) => void; }
 type Faq = { q: string; a: string; tags: string[] };
 
 const FAQ_GROUPS: Record<string, { label: string; intro: string; items: Faq[] }> = {
-  cliente: {
-    label: 'Soy Cliente',
-    intro: 'Todo lo que necesitas para publicar, contratar, pagar y cerrar un trabajo.',
-    items: [
-      { q: '¿Cómo empiezo como cliente?', a: 'Regístrate, completa tu cuenta y entra a Buscar para encontrar un trabajador o a Publicar trabajo para explicar lo que necesitas.', tags: ['cliente','inicio'] },
-      { q: '¿Qué tipo de trabajos puedo publicar?', a: 'Desde mandados, limpieza y reparaciones pequeñas hasta electricidad, plomería, pintura, construcción, remodelaciones y proyectos grandes.', tags: ['cliente','trabajos'] },
-      { q: '¿Cómo publico un trabajo?', a: 'Indica qué necesitas, describe el trabajo con claridad, selecciona categoría y ubicación, define la modalidad de precio y agrega las condiciones importantes. Mientras más información des, mejores serán las propuestas.', tags: ['cliente','publicar'] },
-      { q: '¿Puedo publicar un microtrabajo?', a: 'Sí. SERVIYA está diseñada para cubrir desde el trabajo más pequeño hasta el trabajo más grande.', tags: ['cliente','microtrabajo'] },
-      { q: '¿Cómo elijo al trabajador?', a: 'Revisa su perfil, experiencia, verificación cuando esté disponible, reputación, propuesta y condiciones. Compara antes de aceptar.', tags: ['cliente','trabajador'] },
-      { q: '¿Puedo negociar el precio?', a: 'Sí. Cliente y trabajador pueden conversar y acordar precio, alcance, fecha, duración y condiciones antes de confirmar.', tags: ['cliente','negociación'] },
-      { q: '¿Qué pasa cuando acepto una propuesta?', a: 'El servicio queda encaminado al acuerdo. Revisa que precio, alcance y condiciones estén correctos antes de avanzar al pago en Custodia.', tags: ['cliente','contratación'] },
-      { q: '¿Cuándo debo pagar?', a: 'Cuando el acuerdo esté listo y el flujo del servicio indique que corresponde pagar en Custodia. No entregues dinero por fuera del flujo acordado si quieres conservar la trazabilidad de SERVIYA.', tags: ['cliente','pago'] },
-      { q: '¿Qué significa Pagar en Custodia?', a: 'Significa que el dinero queda retenido dentro del proceso de SERVIYA y no se considera pago liberado al trabajador hasta que se cumplan las etapas correspondientes.', tags: ['cliente','custodia'] },
-      { q: '¿Qué ocurre después de enviar el comprobante?', a: 'El pago queda como pendiente de verificación. Administración revisa el comprobante y, si corresponde, mueve los fondos a Custodia.', tags: ['cliente','comprobante'] },
-      { q: '¿Cuándo recibe el trabajador su dinero?', a: 'Después de que el trabajo se complete, tú registres tu conformidad y Administración apruebe la liberación. Entonces el trabajador recibe el monto neto correspondiente.', tags: ['cliente','liberación'] },
-      { q: '¿Puedo cancelar un trabajo?', a: 'Depende del estado del servicio. Si ya existe dinero en Custodia o una disputa, el caso debe seguir el flujo correspondiente para proteger a ambas partes.', tags: ['cliente','cancelación'] },
-      { q: '¿Qué hago si el trabajador no se presenta?', a: 'Documenta la situación y utiliza el flujo de cancelación o disputa disponible. SERVIYA puede revisar la evidencia y el estado de los fondos.', tags: ['cliente','incumplimiento'] },
-      { q: '¿Qué hago si el trabajo quedó mal?', a: 'Si la garantía está activa, puedes solicitar una revisita cuando el problema esté relacionado directamente con el trabajo realizado. También puedes escalar a Administración cuando corresponda.', tags: ['cliente','garantía','revisita'] },
-      { q: '¿Qué pasa si necesito abrir una disputa?', a: 'Explica el problema, aporta evidencia y envía la disputa. Administración revisará el caso y podrá resolverlo a favor del trabajador, del cliente o mantener los fondos en custodia mientras continúa la revisión.', tags: ['cliente','disputa'] },
-      { q: '¿El cliente puede retirar dinero de su billetera?', a: 'No. El rol CLIENTE no tiene un retiro normal de fondos. Su saldo se utiliza para pagar servicios dentro del flujo de SERVIYA.', tags: ['cliente','billetera','retiro'] },
-      { q: '¿Dónde veo mi comprobante?', a: 'Los comprobantes y facturas del servicio quedan disponibles en las áreas correspondientes de la cuenta cuando el proceso genera el comprobante.', tags: ['cliente','comprobante','factura'] },
-    ]
-  },
-  trabajador: {
-    label: 'Soy Trabajador/Técnico',
-    intro: 'Aprende a encontrar oportunidades, enviar propuestas, trabajar y cobrar correctamente.',
-    items: [
-      { q: '¿Cómo empiezo como trabajador?', a: 'Regístrate como Trabajador/Técnico, completa tu perfil y proporciona la información de verificación y bancaria que corresponda.', tags: ['trabajador','inicio'] },
-      { q: '¿Por qué conviene verificar mi perfil?', a: 'La verificación permite mostrar información de confianza, como el distintivo de trabajador verificado cuando la validación correspondiente esté aprobada.', tags: ['trabajador','verificación'] },
-      { q: '¿Qué trabajos puedo aceptar?', a: 'Puedes encontrar desde microtrabajos hasta trabajos normales, trabajos grandes y proyectos, según tus habilidades, ubicación y condiciones.', tags: ['trabajador','trabajos'] },
-      { q: '¿Cómo encuentro trabajos?', a: 'Explora las oportunidades publicadas, usa categorías y ubicación, abre los servicios que te interesen y revisa bien sus requisitos antes de enviar una propuesta.', tags: ['trabajador','buscar'] },
-      { q: '¿Cómo envío una propuesta?', a: 'Revisa el alcance, calcula tus costos, indica un precio y condiciones realistas y envía la propuesta. Evita prometer algo que no puedas cumplir.', tags: ['trabajador','propuesta'] },
-      { q: '¿Puedo negociar con el cliente?', a: 'Sí. Puedes conversar sobre precio, materiales, duración, fecha y alcance. El acuerdo final debe quedar claro antes de iniciar.', tags: ['trabajador','negociación'] },
-      { q: '¿Qué debo hacer antes de comenzar?', a: 'Confirma que el precio, alcance, fecha, ubicación, materiales y condiciones estén claros. Si el servicio requiere Custodia, espera el estado correspondiente antes de asumir que el pago está liberado.', tags: ['trabajador','inicio','custodia'] },
-      { q: '¿Puedo marcar el trabajo como terminado?', a: 'Sí, cuando realmente hayas completado lo acordado. Agrega el resumen y las evidencias disponibles para dejar constancia del resultado.', tags: ['trabajador','finalizar'] },
-      { q: '¿Cuándo me pagan?', a: 'Cuando el cliente aprueba la finalización y Administración libera los fondos. La comisión de SERVIYA se descuenta según la configuración vigente; el objetivo actual del flujo es 10%.', tags: ['trabajador','pago','comisión'] },
-      { q: '¿La garantía significa que no me pagan hasta que termine la garantía?', a: 'No. La garantía es posterior al pago. Una vez aprobada la finalización y liberados los fondos, recibes tu pago; la garantía sirve para atender problemas relacionados con el trabajo después.', tags: ['trabajador','garantía','pago'] },
-      { q: '¿Qué pasa si el cliente reclama después de que ya cobré?', a: 'Si el reclamo está relacionado con un incumplimiento real, SERVIYA puede investigar, registrar el caso y aplicar las medidas previstas. El trabajador puede ser responsable económicamente por un incumplimiento posterior al pago.', tags: ['trabajador','garantía','disputa'] },
-      { q: '¿Cómo funciona una revisita?', a: 'El cliente solicita la revisita, se registra el problema, el trabajador puede programarla, iniciar la corrección y marcarla realizada. El cliente puede confirmar el cierre o escalar el caso.', tags: ['trabajador','revisita'] },
-      { q: '¿Dónde recibo mi dinero?', a: 'El pago liberado entra a tu billetera como saldo disponible. Tu cuenta bancaria registrada se utiliza como destino para los retiros.', tags: ['trabajador','billetera'] },
-      { q: '¿Cómo solicito un retiro?', a: 'Desde tu billetera, solicita el monto disponible. El sistema registra la solicitud y Administración la procesa según el flujo de retiros.', tags: ['trabajador','retiro'] },
-      { q: '¿Tengo que escribir mi cuenta bancaria cada vez?', a: 'No debería ser necesario. SERVIYA permite guardar la cuenta bancaria del trabajador para utilizarla como destino de retiro y mostrarla de forma controlada.', tags: ['trabajador','banco','retiro'] },
-      { q: '¿Qué pasa si no tengo saldo suficiente para retirar?', a: 'La solicitud debe respetar el saldo disponible y las reglas de retiro. Los fondos que estén en Custodia o pendientes no son saldo disponible para retirar.', tags: ['trabajador','retiro','custodia'] },
-      { q: '¿Puedo retirar dinero que todavía está en Custodia?', a: 'No. Mientras el dinero esté retenido en Custodia no es saldo disponible para retiro.', tags: ['trabajador','custodia','retiro'] },
-      { q: '¿Qué pasa si incumplo repetidamente?', a: 'SERVIYA puede registrar incidentes, limitar retiros u operaciones nuevas, exigir la solución de obligaciones pendientes y suspender o bloquear la cuenta según la gravedad y reincidencia.', tags: ['trabajador','reglas','suspensión'] },
-    ]
-  },
-  flujo: {
-    label: 'Contratación paso a paso',
-    intro: 'La ruta completa de una contratación, desde que nace el trabajo hasta que termina.',
-    items: [
-      { q: '¿Cuál es el flujo completo?', a: 'Publicar → recibir propuestas → comparar → negociar → acordar → pagar en Custodia → verificar pago → realizar trabajo → marcar finalizado → cliente aprueba → Administración libera → trabajador cobra → garantía y seguimiento si corresponde.', tags: ['flujo','contratación'] },
-      { q: '¿Quién publica?', a: 'El CLIENTE publica la necesidad o proyecto que desea contratar.', tags: ['flujo','cliente'] },
-      { q: '¿Quién propone el precio?', a: 'Normalmente el TRABAJADOR/TÉCNICO presenta una propuesta, aunque el precio puede negociarse hasta llegar a un acuerdo.', tags: ['flujo','propuesta','precio'] },
-      { q: '¿Cuándo existe un acuerdo?', a: 'Cuando ambas partes aceptan claramente el alcance, precio, fecha, duración y condiciones del servicio.', tags: ['flujo','acuerdo'] },
-      { q: '¿Qué pasa con el dinero durante el trabajo?', a: 'Si el servicio utiliza Custodia, los fondos permanecen retenidos hasta que se cumplan las condiciones para su liberación.', tags: ['flujo','custodia'] },
-      { q: '¿Quién libera el dinero?', a: 'Administración gestiona y aprueba la liberación después de la conformidad del cliente y las validaciones del flujo.', tags: ['flujo','administración'] },
-      { q: '¿Qué ocurre después de liberar?', a: 'El trabajador recibe el monto neto correspondiente en su billetera, se registra la transacción y el servicio puede quedar cerrado/completado.', tags: ['flujo','pago'] },
-    ]
-  },
-  pagos: {
-    label: 'Pagos y Custodia',
-    intro: 'Entiende dónde está el dinero y por qué cada estado existe.',
-    items: [
-      { q: '¿Qué es Custodia SERVIYA?', a: 'Es el mecanismo del flujo que mantiene el dinero retenido durante las etapas de la contratación hasta que corresponda liberarlo.', tags: ['pagos','custodia'] },
-      { q: '¿Qué significa Pago pendiente de verificación?', a: 'El comprobante fue enviado y Administración todavía debe comprobar que el pago corresponde antes de mover los fondos a Custodia.', tags: ['pagos','comprobante'] },
-      { q: '¿Qué significa Retenido?', a: 'El dinero está dentro de Custodia y todavía no está disponible para el trabajador.', tags: ['pagos','custodia'] },
-      { q: '¿Qué significa Pendiente de aprobación?', a: 'El trabajo fue marcado como terminado y el cliente registró su conformidad, pero Administración todavía debe ejecutar la liberación.', tags: ['pagos','liberación'] },
-      { q: '¿Qué significa Liberado?', a: 'La Custodia fue liberada y el trabajador recibió el monto neto correspondiente en su billetera.', tags: ['pagos','liberación'] },
-      { q: '¿Cuál es la comisión?', a: 'La configuración actual de referencia para SERVIYA es 10%. Por ejemplo, en RD$1,800 la comisión sería RD$180 y el trabajador recibiría RD$1,620.', tags: ['pagos','comisión'] },
-      { q: '¿SERVIYA usa tarjetas reales?', a: 'El sistema actual está preparado para modo simulación. No debes introducir números reales de tarjeta ni CVV para una simulación.', tags: ['pagos','simulación'] },
-      { q: '¿Puedo hacer pagos por fuera?', a: 'La recomendación es utilizar el flujo de SERVIYA y conservar comprobantes y conversaciones dentro de la plataforma para mantener la trazabilidad del servicio.', tags: ['pagos','seguridad'] },
-    ]
-  },
-  garantia: {
-    label: 'Garantía, cancelaciones y disputas',
-    intro: 'Qué hacer cuando el trabajo no sale como se esperaba.',
-    items: [
-      { q: '¿Qué cubre la garantía?', a: 'Problemas o defectos directamente relacionados con el trabajo realizado, correcciones cuando el resultado no corresponde a lo acordado y seguimiento mediante revisita cuando proceda.', tags: ['garantía','revisita'] },
-      { q: '¿Qué no cubre?', a: 'Daños posteriores causados por el cliente o terceros, accidentes, mal uso, modificaciones posteriores, trabajos adicionales no acordados, desgaste normal o problemas sin relación con el servicio.', tags: ['garantía'] },
-      { q: '¿Cómo solicito una revisita?', a: 'Abre la garantía del servicio, explica claramente el problema y envía la solicitud. Si es necesario, agrega evidencia y espera la coordinación con el trabajador.', tags: ['garantía','revisita','cliente'] },
-      { q: '¿Qué estados puede tener una revisita?', a: 'Puede pasar por solicitada, programada, corrección en proceso, corrección realizada, cerrada o escalada a Administración.', tags: ['garantía','revisita'] },
-      { q: '¿Qué hago si el trabajador no corrige el problema?', a: 'No cierres el caso si todavía no está solucionado. Utiliza la opción de escalar a Administración y conserva la evidencia.', tags: ['garantía','revisita','disputa'] },
-      { q: '¿Qué pasa si hay una disputa antes de liberar el dinero?', a: 'Los fondos pueden mantenerse protegidos en Custodia mientras Administración revisa el caso y determina la resolución correspondiente.', tags: ['disputa','custodia'] },
-      { q: '¿Qué puede decidir Administración?', a: 'Según la evidencia y el caso, puede resolver a favor del trabajador, a favor del cliente o mantener la situación en revisión/custodia.', tags: ['disputa','administración'] },
-      { q: '¿SERVIYA garantiza con su propio dinero un incumplimiento del trabajador?', a: 'No. SERVIYA administra el proceso, investiga y aplica sus políticas. Cuando existe un incumplimiento posterior al pago, la responsabilidad económica corresponde al trabajador según el caso y las políticas aplicables.', tags: ['disputa','políticas'] },
-      { q: '¿Qué medidas puede tomar SERVIYA ante un incumplimiento?', a: 'Puede registrar el incidente, limitar retiros u operaciones, exigir la solución de obligaciones pendientes y suspender o bloquear la cuenta según gravedad o reincidencia.', tags: ['disputa','políticas','trabajador'] },
-    ]
-  },
-  cuenta: {
-    label: 'Cuenta y seguridad',
-    intro: 'Dudas generales para usar la plataforma de forma segura.',
-    items: [
-      { q: '¿Necesito aprender todo antes de usar SERVIYA?', a: 'No. Esta guía es completamente opcional. Puedes usar la plataforma normalmente y venir aquí solo cuando tengas una duda.', tags: ['cuenta','guía'] },
-      { q: '¿Puedo volver a consultar la guía?', a: 'Sí. La sección está pensada como un mini tutorial de consulta rápida durante cualquier etapa de la contratación.', tags: ['cuenta','guía'] },
-      { q: '¿Qué debo revisar antes de contratar?', a: 'Revisa identidad/verificación cuando exista, experiencia, propuesta, precio, alcance, fecha, duración y condiciones. No aceptes algo que no entiendas.', tags: ['seguridad','cliente'] },
-      { q: '¿Qué debo guardar como evidencia?', a: 'Conserva conversaciones relevantes, acuerdos, comprobantes, fotografías del antes/después y cualquier información que ayude a demostrar qué se acordó y qué ocurrió.', tags: ['seguridad','evidencia'] },
-      { q: '¿Qué hago si detecto algo extraño?', a: 'No envíes dinero ni información sensible fuera de los canales correspondientes. Guarda evidencia y utiliza soporte, reporte o disputa según la situación.', tags: ['seguridad','soporte'] },
-      { q: '¿Dónde conozco las reglas completas?', a: 'Consulta el apartado de Políticas de SERVIYA. La guía explica el uso práctico; las políticas contienen las reglas que gobiernan los casos importantes.', tags: ['cuenta','políticas'] },
-    ]
-  }
+  cliente: { label: 'Soy Cliente', intro: 'Todo lo que necesitas para publicar, contratar, pagar y cerrar un trabajo.', items: [
+    { q: '¿Cómo empiezo como cliente?', a: 'Regístrate, completa tu cuenta y entra a Buscar para encontrar un trabajador o a Publicar trabajo para explicar lo que necesitas.', tags: ['cliente','inicio'] },
+    { q: '¿Qué tipo de trabajos puedo publicar?', a: 'Desde mandados, limpieza y reparaciones pequeñas hasta electricidad, plomería, pintura, construcción, remodelaciones y proyectos grandes.', tags: ['cliente','trabajos'] },
+    { q: '¿Cómo publico un trabajo?', a: 'Indica qué necesitas, describe el trabajo con claridad, selecciona categoría y ubicación, define la modalidad de precio y agrega las condiciones importantes. Mientras más información des, mejores serán las propuestas.', tags: ['cliente','publicar'] },
+    { q: '¿Puedo publicar un microtrabajo?', a: 'Sí. SERVIYA está diseñada para cubrir desde el trabajo más pequeño hasta el trabajo más grande.', tags: ['cliente','microtrabajo'] },
+    { q: '¿Cómo elijo al trabajador?', a: 'Revisa su perfil, experiencia, verificación cuando esté disponible, reputación, propuesta y condiciones. Compara antes de aceptar.', tags: ['cliente','trabajador'] },
+    { q: '¿Puedo negociar el precio?', a: 'Sí. Cliente y trabajador pueden conversar y acordar precio, alcance, fecha, duración y condiciones antes de confirmar.', tags: ['cliente','negociación'] },
+    { q: '¿Qué pasa cuando acepto una propuesta?', a: 'El servicio queda encaminado al acuerdo. Revisa que precio, alcance y condiciones estén correctos antes de avanzar al pago en Custodia.', tags: ['cliente','contratación'] },
+    { q: '¿Cuándo debo pagar?', a: 'Cuando el acuerdo esté listo y el flujo del servicio indique que corresponde pagar en Custodia. No entregues dinero por fuera del flujo acordado si quieres conservar la trazabilidad de SERVIYA.', tags: ['cliente','pago'] },
+    { q: '¿Qué significa Pagar en Custodia?', a: 'Significa que el dinero queda retenido dentro del proceso de SERVIYA y no se considera pago liberado al trabajador hasta que se cumplan las etapas correspondientes.', tags: ['cliente','custodia'] },
+    { q: '¿Qué ocurre después de enviar el comprobante?', a: 'El pago queda como pendiente de verificación. Administración revisa el comprobante y, si corresponde, mueve los fondos a Custodia.', tags: ['cliente','comprobante'] },
+    { q: '¿Cuándo recibe el trabajador su dinero?', a: 'Después de que el trabajo se complete, tú registres tu conformidad y Administración apruebe la liberación. Entonces el trabajador recibe el monto neto correspondiente.', tags: ['cliente','liberación'] },
+    { q: '¿Puedo cancelar un trabajo?', a: 'Depende del estado del servicio. Si ya existe dinero en Custodia o una disputa, el caso debe seguir el flujo correspondiente para proteger a ambas partes.', tags: ['cliente','cancelación'] },
+    { q: '¿Qué hago si el trabajador no se presenta?', a: 'Documenta la situación y utiliza el flujo de cancelación o disputa disponible. SERVIYA puede revisar la evidencia y el estado de los fondos.', tags: ['cliente','incumplimiento'] },
+    { q: '¿Qué hago si el trabajo quedó mal?', a: 'Si la garantía está activa, puedes solicitar una revisita cuando el problema esté relacionado directamente con el trabajo realizado. También puedes escalar a Administración cuando corresponda.', tags: ['cliente','garantía','revisita'] },
+    { q: '¿Qué pasa si necesito abrir una disputa?', a: 'Explica el problema, aporta evidencia y envía la disputa. Administración revisará el caso y podrá resolverlo a favor del trabajador, del cliente o mantener los fondos en custodia mientras continúa la revisión.', tags: ['cliente','disputa'] },
+    { q: '¿El cliente puede retirar dinero de su billetera?', a: 'No. El rol CLIENTE no tiene un retiro normal de fondos. Su saldo se utiliza para pagar servicios dentro del flujo de SERVIYA.', tags: ['cliente','billetera','retiro'] },
+    { q: '¿Dónde veo mi comprobante?', a: 'Los comprobantes y facturas del servicio quedan disponibles en las áreas correspondientes de la cuenta cuando el proceso genera el comprobante.', tags: ['cliente','comprobante','factura'] },
+  ] },
+  trabajador: { label: 'Soy Trabajador/Técnico', intro: 'Aprende a encontrar oportunidades, enviar propuestas, trabajar y cobrar correctamente.', items: [
+    { q: '¿Cómo empiezo como trabajador?', a: 'Regístrate como Trabajador/Técnico, completa tu perfil y proporciona la información de verificación y bancaria que corresponda.', tags: ['trabajador','inicio'] },
+    { q: '¿Por qué conviene verificar mi perfil?', a: 'La verificación permite mostrar información de confianza, como el distintivo de trabajador verificado cuando la validación correspondiente esté aprobada.', tags: ['trabajador','verificación'] },
+    { q: '¿Qué trabajos puedo aceptar?', a: 'Puedes encontrar desde microtrabajos hasta trabajos normales, trabajos grandes y proyectos, según tus habilidades, ubicación y condiciones.', tags: ['trabajador','trabajos'] },
+    { q: '¿Cómo encuentro trabajos?', a: 'Explora las oportunidades publicadas, usa categorías y ubicación, abre los servicios que te interesen y revisa bien sus requisitos antes de enviar una propuesta.', tags: ['trabajador','buscar'] },
+    { q: '¿Cómo envío una propuesta?', a: 'Revisa el alcance, calcula tus costos, indica un precio y condiciones realistas y envía la propuesta. Evita prometer algo que no puedas cumplir.', tags: ['trabajador','propuesta'] },
+    { q: '¿Puedo negociar con el cliente?', a: 'Sí. Puedes conversar sobre precio, materiales, duración, fecha y alcance. El acuerdo final debe quedar claro antes de iniciar.', tags: ['trabajador','negociación'] },
+    { q: '¿Qué debo hacer antes de comenzar?', a: 'Confirma que el precio, alcance, fecha, ubicación, materiales y condiciones estén claros. Si el servicio requiere Custodia, espera el estado correspondiente antes de asumir que el pago está liberado.', tags: ['trabajador','inicio','custodia'] },
+    { q: '¿Puedo marcar el trabajo como terminado?', a: 'Sí, cuando realmente hayas completado lo acordado. Agrega el resumen y las evidencias disponibles para dejar constancia del resultado.', tags: ['trabajador','finalizar'] },
+    { q: '¿Cuándo me pagan?', a: 'Cuando el cliente aprueba la finalización y Administración libera los fondos. La comisión de SERVIYA se descuenta según la configuración vigente; el objetivo actual del flujo es 10%.', tags: ['trabajador','pago','comisión'] },
+    { q: '¿La garantía significa que no me pagan hasta que termine la garantía?', a: 'No. La garantía es posterior al pago. Una vez aprobada la finalización y liberados los fondos, recibes tu pago; la garantía sirve para atender problemas relacionados con el trabajo después.', tags: ['trabajador','garantía','pago'] },
+    { q: '¿Qué pasa si el cliente reclama después de que ya cobré?', a: 'Si el reclamo está relacionado con un incumplimiento real, SERVIYA puede investigar, registrar el caso y aplicar las medidas previstas. El trabajador puede ser responsable económicamente por un incumplimiento posterior al pago.', tags: ['trabajador','garantía','disputa'] },
+    { q: '¿Cómo funciona una revisita?', a: 'El cliente solicita la revisita, se registra el problema, el trabajador puede programarla, iniciar la corrección y marcarla realizada. El cliente puede confirmar el cierre o escalar el caso.', tags: ['trabajador','revisita'] },
+    { q: '¿Dónde recibo mi dinero?', a: 'El pago liberado entra a tu billetera como saldo disponible. Tu cuenta bancaria registrada se utiliza como destino para los retiros.', tags: ['trabajador','billetera'] },
+    { q: '¿Cómo solicito un retiro?', a: 'Desde tu billetera, solicita el monto disponible. El sistema registra la solicitud y Administración la procesa según el flujo de retiros.', tags: ['trabajador','retiro'] },
+    { q: '¿Tengo que escribir mi cuenta bancaria cada vez?', a: 'No debería ser necesario. SERVIYA permite guardar la cuenta bancaria del trabajador para utilizarla como destino de retiro y mostrarla de forma controlada.', tags: ['trabajador','banco','retiro'] },
+    { q: '¿Qué pasa si no tengo saldo suficiente para retirar?', a: 'La solicitud debe respetar el saldo disponible y las reglas de retiro. Los fondos que estén en Custodia o pendientes no son saldo disponible para retirar.', tags: ['trabajador','retiro','custodia'] },
+    { q: '¿Puedo retirar dinero que todavía está en Custodia?', a: 'No. Mientras el dinero esté retenido en Custodia no es saldo disponible para retiro.', tags: ['trabajador','custodia','retiro'] },
+    { q: '¿Qué pasa si incumplo repetidamente?', a: 'SERVIYA puede registrar incidentes, limitar retiros u operaciones nuevas, exigir la solución de obligaciones pendientes y suspender o bloquear la cuenta según la gravedad y reincidencia.', tags: ['trabajador','reglas','suspensión'] },
+  ] },
+  flujo: { label: 'Contratación paso a paso', intro: 'La ruta completa de una contratación, desde que nace el trabajo hasta que termina.', items: [
+    { q: '¿Cuál es el flujo completo?', a: 'Publicar → recibir propuestas → comparar → negociar → acordar → pagar en Custodia → verificar pago → realizar trabajo → marcar finalizado → cliente aprueba → Administración libera → trabajador cobra → garantía y seguimiento si corresponde.', tags: ['flujo','contratación'] },
+    { q: '¿Quién publica?', a: 'El CLIENTE publica la necesidad o proyecto que desea contratar.', tags: ['flujo','cliente'] },
+    { q: '¿Quién propone el precio?', a: 'Normalmente el TRABAJADOR/TÉCNICO presenta una propuesta, aunque el precio puede negociarse hasta llegar a un acuerdo.', tags: ['flujo','propuesta','precio'] },
+    { q: '¿Cuándo existe un acuerdo?', a: 'Cuando ambas partes aceptan claramente el alcance, precio, fecha, duración y condiciones del servicio.', tags: ['flujo','acuerdo'] },
+    { q: '¿Qué pasa con el dinero durante el trabajo?', a: 'Si el servicio utiliza Custodia, los fondos permanecen retenidos hasta que se cumplan las condiciones para su liberación.', tags: ['flujo','custodia'] },
+    { q: '¿Quién libera el dinero?', a: 'Administración gestiona y aprueba la liberación después de la conformidad del cliente y las validaciones del flujo.', tags: ['flujo','administración'] },
+    { q: '¿Qué ocurre después de liberar?', a: 'El trabajador recibe el monto neto correspondiente en su billetera, se registra la transacción y el servicio puede quedar cerrado/completado.', tags: ['flujo','pago'] },
+  ] },
+  pagos: { label: 'Pagos y Custodia', intro: 'Entiende dónde está el dinero y por qué cada estado existe.', items: [
+    { q: '¿Qué es Custodia SERVIYA?', a: 'Es el mecanismo del flujo que mantiene el dinero retenido durante las etapas de la contratación hasta que corresponda liberarlo.', tags: ['pagos','custodia'] },
+    { q: '¿Qué significa Pago pendiente de verificación?', a: 'El comprobante fue enviado y Administración todavía debe comprobar que el pago corresponde antes de mover los fondos a Custodia.', tags: ['pagos','comprobante'] },
+    { q: '¿Qué significa Retenido?', a: 'El dinero está dentro de Custodia y todavía no está disponible para el trabajador.', tags: ['pagos','custodia'] },
+    { q: '¿Qué significa Pendiente de aprobación?', a: 'El trabajo fue marcado como terminado y el cliente registró su conformidad, pero Administración todavía debe ejecutar la liberación.', tags: ['pagos','liberación'] },
+    { q: '¿Qué significa Liberado?', a: 'La Custodia fue liberada y el trabajador recibió el monto neto correspondiente en su billetera.', tags: ['pagos','liberación'] },
+    { q: '¿Cuál es la comisión?', a: 'La configuración actual de referencia para SERVIYA es 10%. Por ejemplo, en RD$1,800 la comisión sería RD$180 y el trabajador recibiría RD$1,620.', tags: ['pagos','comisión'] },
+    { q: '¿SERVIYA usa tarjetas reales?', a: 'El sistema actual está preparado para modo simulación. No debes introducir números reales de tarjeta ni CVV para una simulación.', tags: ['pagos','simulación'] },
+    { q: '¿Puedo hacer pagos por fuera?', a: 'La recomendación es utilizar el flujo de SERVIYA y conservar comprobantes y conversaciones dentro de la plataforma para mantener la trazabilidad del servicio.', tags: ['pagos','seguridad'] },
+  ] },
+  garantia: { label: 'Garantía, cancelaciones y disputas', intro: 'Qué hacer cuando el trabajo no sale como se esperaba.', items: [
+    { q: '¿Qué cubre la garantía?', a: 'Problemas o defectos directamente relacionados con el trabajo realizado, correcciones cuando el resultado no corresponde a lo acordado y seguimiento mediante revisita cuando proceda.', tags: ['garantía','revisita'] },
+    { q: '¿Qué no cubre?', a: 'Daños posteriores causados por el cliente o terceros, accidentes, mal uso, modificaciones posteriores, trabajos adicionales no acordados, desgaste normal o problemas sin relación con el servicio.', tags: ['garantía'] },
+    { q: '¿Cómo solicito una revisita?', a: 'Abre la garantía del servicio, explica claramente el problema y envía la solicitud. Si es necesario, agrega evidencia y espera la coordinación con el trabajador.', tags: ['garantía','revisita','cliente'] },
+    { q: '¿Qué estados puede tener una revisita?', a: 'Puede pasar por solicitada, programada, corrección en proceso, corrección realizada, cerrada o escalada a Administración.', tags: ['garantía','revisita'] },
+    { q: '¿Qué hago si el trabajador no corrige el problema?', a: 'No cierres el caso si todavía no está solucionado. Utiliza la opción de escalar a Administración y conserva la evidencia.', tags: ['garantía','revisita','disputa'] },
+    { q: '¿Qué pasa si hay una disputa antes de liberar el dinero?', a: 'Los fondos pueden mantenerse protegidos en Custodia mientras Administración revisa el caso y determina la resolución correspondiente.', tags: ['disputa','custodia'] },
+    { q: '¿Qué puede decidir Administración?', a: 'Según la evidencia y el caso, puede resolver a favor del trabajador, a favor del cliente o mantener la situación en revisión/custodia.', tags: ['disputa','administración'] },
+    { q: '¿SERVIYA garantiza con su propio dinero un incumplimiento del trabajador?', a: 'No. SERVIYA administra el proceso, investiga y aplica sus políticas. Cuando existe un incumplimiento posterior al pago, la responsabilidad económica corresponde al trabajador según el caso y las políticas aplicables.', tags: ['disputa','políticas'] },
+    { q: '¿Qué medidas puede tomar SERVIYA ante un incumplimiento?', a: 'Puede registrar el incidente, limitar retiros u operaciones, exigir la solución de obligaciones pendientes y suspender o bloquear la cuenta según gravedad o reincidencia.', tags: ['disputa','políticas','trabajador'] },
+  ] },
+  cuenta: { label: 'Cuenta y seguridad', intro: 'Dudas generales para usar la plataforma de forma segura.', items: [
+    { q: '¿Necesito aprender todo antes de usar SERVIYA?', a: 'No. Esta guía es completamente opcional. Puedes usar la plataforma normalmente y venir aquí solo cuando tengas una duda.', tags: ['cuenta','guía'] },
+    { q: '¿Puedo volver a consultar la guía?', a: 'Sí. La sección está pensada como un mini tutorial de consulta rápida durante cualquier etapa de la contratación.', tags: ['cuenta','guía'] },
+    { q: '¿Qué debo revisar antes de contratar?', a: 'Revisa identidad/verificación cuando exista, experiencia, propuesta, precio, alcance, fecha, duración y condiciones. No aceptes algo que no entiendas.', tags: ['seguridad','cliente'] },
+    { q: '¿Qué debo guardar como evidencia?', a: 'Conserva conversaciones relevantes, acuerdos, comprobantes, fotografías del antes/después y cualquier información que ayude a demostrar qué se acordó y qué ocurrió.', tags: ['seguridad','evidencia'] },
+    { q: '¿Qué hago si detecto algo extraño?', a: 'No envíes dinero ni información sensible fuera de los canales correspondientes. Guarda evidencia y utiliza soporte, reporte o disputa según la situación.', tags: ['seguridad','soporte'] },
+    { q: '¿Dónde conozco las reglas completas?', a: 'Consulta el apartado de Políticas de SERVIYA. La guía explica el uso práctico; las políticas contienen las reglas que gobiernan los casos importantes.', tags: ['cuenta','políticas'] },
+  ] }
 };
 
 export const LandingSection: React.FC<LandingSectionProps> = ({ services, workers, onSelectCategory, onSelectService, onOpenPublish, onNavigateTab }) => {
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedProvince, setSelectedProvince] = useState('');
-  const [faqGroup, setFaqGroup] = useState('cliente');
-  const [faqSearch, setFaqSearch] = useState('');
-  const [openFaq, setOpenFaq] = useState<string | null>(null);
-
-  const categoryIcon = (name: string) => {
-    const icons: Record<string, React.ReactNode> = {
-      Sparkles: <Sparkles className="w-5 h-5" />, Wrench: <Wrench className="w-5 h-5" />,
-      Zap: <Zap className="w-5 h-5" />, Hammer: <Hammer className="w-5 h-5" />,
-      Laptop: <Laptop className="w-5 h-5" />
-    };
-    return icons[name] ?? <Wrench className="w-5 h-5" />;
-  };
-
-  const visibleFaqs = useMemo(() => {
-    const items = FAQ_GROUPS[faqGroup].items;
-    const term = faqSearch.trim().toLowerCase();
-    if (!term) return items;
-    return items.filter(item => `${item.q} ${item.a} ${item.tags.join(' ')}`.toLowerCase().includes(term));
-  }, [faqGroup, faqSearch]);
-
+  const [searchQuery, setSearchQuery] = useState(''); const [selectedProvince, setSelectedProvince] = useState(''); const [faqGroup, setFaqGroup] = useState('cliente'); const [faqSearch, setFaqSearch] = useState(''); const [openFaq, setOpenFaq] = useState<string | null>(null);
+  const categoryIcon = (name: string) => { const icons: Record<string, React.ReactNode> = { Sparkles: <Sparkles className="w-5 h-5" />, Wrench: <Wrench className="w-5 h-5" />, Zap: <Zap className="w-5 h-5" />, Hammer: <Hammer className="w-5 h-5" />, Laptop: <Laptop className="w-5 h-5" /> }; return icons[name] ?? <Wrench className="w-5 h-5" />; };
+  const visibleFaqs = useMemo(() => { const items = FAQ_GROUPS[faqGroup].items; const term = faqSearch.trim().toLowerCase(); if (!term) return items; return items.filter(item => `${item.q} ${item.a} ${item.tags.join(' ')}`.toLowerCase().includes(term)); }, [faqGroup, faqSearch]);
   return (
     <div className="space-y-10 sm:space-y-14 pb-12">
-      <section className="relative overflow-hidden rounded-[2rem] bg-slate-950 text-white border border-slate-800 shadow-2xl">
-        <div className="absolute -top-32 -right-24 w-80 h-80 rounded-full bg-blue-600/25 blur-3xl" /><div className="absolute -bottom-32 -left-24 w-80 h-80 rounded-full bg-emerald-500/15 blur-3xl" />
-        <div className="relative px-5 py-8 sm:px-10 sm:py-12 lg:px-14 lg:py-16">
-          <div className="max-w-4xl"><div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3.5 py-2 text-[11px] sm:text-xs font-bold text-blue-200"><span className="h-2 w-2 rounded-full bg-emerald-400" />SERVIYA · Trabajo • Confianza • Oportunidades</div>
-            <h1 className="mt-6 text-4xl sm:text-5xl lg:text-6xl font-black leading-[1.03] tracking-tight">Desde el trabajo más pequeño hasta el <span className="bg-gradient-to-r from-blue-300 via-cyan-200 to-emerald-300 bg-clip-text text-transparent">trabajo más grande.</span></h1>
-            <p className="mt-5 max-w-2xl text-sm sm:text-base lg:text-lg leading-relaxed text-slate-300">Un solo lugar para encontrar quién haga el trabajo que necesitas, sin importar su tamaño. Conecta con trabajadores y técnicos, acuerda el servicio y utiliza el sistema seguro de SERVIYA.</p>
-            <div className="mt-7 flex flex-col sm:flex-row gap-3"><button onClick={() => onNavigateTab('buscar')} className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 py-3.5 text-sm font-extrabold">Necesito un trabajador <ArrowRight className="w-4 h-4" /></button><button onClick={onOpenPublish} className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/15 bg-white/10 px-5 py-3.5 text-sm font-extrabold">Quiero publicar un trabajo <BriefcaseBusiness className="w-4 h-4" /></button></div>
-          </div>
-          <div className="mt-10 grid grid-cols-1 md:grid-cols-3 gap-3">
-            <button onClick={() => onNavigateTab('buscar')} className="group text-left rounded-2xl border border-white/10 bg-white/[.045] p-5"><div className="flex items-center justify-between"><div className="h-11 w-11 rounded-xl bg-blue-500/15 text-blue-300 flex items-center justify-center"><Wrench className="w-5 h-5" /></div><span className="text-[10px] font-bold uppercase tracking-widest text-blue-300">Nivel 01</span></div><h2 className="mt-4 text-lg font-black">Microtrabajos</h2><p className="mt-1 text-xs leading-relaxed text-slate-400">Mandados, limpieza, ayuda en el hogar, reparaciones pequeñas y tareas rápidas.</p></button>
-            <button onClick={() => onNavigateTab('buscar')} className="group text-left rounded-2xl border border-white/10 bg-white/[.045] p-5"><div className="flex items-center justify-between"><div className="h-11 w-11 rounded-xl bg-cyan-500/15 text-cyan-300 flex items-center justify-center"><Hammer className="w-5 h-5" /></div><span className="text-[10px] font-bold uppercase tracking-widest text-cyan-300">Nivel 02</span></div><h2 className="mt-4 text-lg font-black">Trabajos normales</h2><p className="mt-1 text-xs leading-relaxed text-slate-400">Electricidad, plomería, pintura, mecánica, instalaciones, mantenimiento y oficios técnicos.</p></button>
-            <button onClick={() => onNavigateTab('buscar')} className="group text-left rounded-2xl border border-white/10 bg-white/[.045] p-5"><div className="flex items-center justify-between"><div className="h-11 w-11 rounded-xl bg-emerald-500/15 text-emerald-300 flex items-center justify-center"><Building2 className="w-5 h-5" /></div><span className="text-[10px] font-bold uppercase tracking-widest text-emerald-300">Nivel 03</span></div><h2 className="mt-4 text-lg font-black">Grandes proyectos</h2><p className="mt-1 text-xs leading-relaxed text-slate-400">Construcción, remodelaciones, proyectos completos y servicios profesionales o empresariales.</p></button>
-          </div>
-        </div>
-      </section>
+      <section className="relative overflow-hidden rounded-[2rem] bg-slate-950 text-white border border-slate-800 shadow-2xl"><div className="absolute -top-32 -right-24 w-80 h-80 rounded-full bg-blue-600/25 blur-3xl" /><div className="absolute -bottom-32 -left-24 w-80 h-80 rounded-full bg-emerald-500/15 blur-3xl" /><div className="relative px-5 py-8 sm:px-10 sm:py-12 lg:px-14 lg:py-16"><div className="max-w-4xl"><div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3.5 py-2 text-[11px] sm:text-xs font-bold text-blue-200"><span className="h-2 w-2 rounded-full bg-emerald-400" />SERVIYA · Trabajo • Confianza • Oportunidades</div><h1 className="mt-6 text-4xl sm:text-5xl lg:text-6xl font-black leading-[1.03] tracking-tight">Desde el trabajo más pequeño hasta el <span className="bg-gradient-to-r from-blue-300 via-cyan-200 to-emerald-300 bg-clip-text text-transparent">trabajo más grande.</span></h1><p className="mt-5 max-w-2xl text-sm sm:text-base lg:text-lg leading-relaxed text-slate-300">Un solo lugar para encontrar quién haga el trabajo que necesitas, sin importar su tamaño. Conecta con trabajadores y técnicos, acuerda el servicio y utiliza el sistema seguro de SERVIYA.</p><div className="mt-7 flex flex-col sm:flex-row gap-3"><button onClick={() => onNavigateTab('buscar')} className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 py-3.5 text-sm font-extrabold">Necesito un trabajador <ArrowRight className="w-4 h-4" /></button><button onClick={onOpenPublish} className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/15 bg-white/10 px-5 py-3.5 text-sm font-extrabold">Quiero publicar un trabajo <BriefcaseBusiness className="w-4 h-4" /></button></div></div><div className="mt-10 grid grid-cols-1 md:grid-cols-3 gap-3">
+        <button onClick={() => onNavigateTab('buscar')} className="group text-left rounded-2xl border border-white/10 bg-white/[.045] p-5"><div className="flex items-center justify-between"><div className="h-11 w-11 rounded-xl bg-blue-500/15 text-blue-300 flex items-center justify-center"><Wrench className="w-5 h-5" /></div><span className="text-[10px] font-bold uppercase tracking-widest text-blue-300">Nivel 01</span></div><h2 className="mt-4 text-lg font-black">Microtrabajos</h2><p className="mt-1 text-xs leading-relaxed text-slate-400">Mandados, limpieza, ayuda en el hogar, reparaciones pequeñas y tareas rápidas.</p><div className="mt-4 rounded-xl border border-blue-400/10 bg-blue-500/10 p-3"><p className="text-[10px] font-black uppercase tracking-widest text-blue-300">Ejemplo</p><p className="mt-1 text-xs font-bold text-white">“Necesito una persona para limpiar mi casa de 2 habitaciones, incluyendo baño y cocina.”</p><p className="mt-1 text-[11px] text-slate-400">Microtrabajo · RD$1,500</p></div></button>
+        <button onClick={() => onNavigateTab('buscar')} className="group text-left rounded-2xl border border-white/10 bg-white/[.045] p-5"><div className="flex items-center justify-between"><div className="h-11 w-11 rounded-xl bg-cyan-500/15 text-cyan-300 flex items-center justify-center"><Hammer className="w-5 h-5" /></div><span className="text-[10px] font-bold uppercase tracking-widest text-cyan-300">Nivel 02</span></div><h2 className="mt-4 text-lg font-black">Trabajos normales</h2><p className="mt-1 text-xs leading-relaxed text-slate-400">Electricidad, plomería, pintura, mecánica, instalaciones, mantenimiento y oficios técnicos.</p><div className="mt-4 rounded-xl border border-cyan-400/10 bg-cyan-500/10 p-3"><p className="text-[10px] font-black uppercase tracking-widest text-cyan-300">Ejemplo</p><p className="mt-1 text-xs font-bold text-white">“Necesito instalar y revisar la plomería de mi baño.”</p><p className="mt-1 text-[11px] text-slate-400">Trabajo normal · RD$8,500</p></div></button>
+        <button onClick={() => onNavigateTab('buscar')} className="group text-left rounded-2xl border border-white/10 bg-white/[.045] p-5"><div className="flex items-center justify-between"><div className="h-11 w-11 rounded-xl bg-emerald-500/15 text-emerald-300 flex items-center justify-center"><Building2 className="w-5 h-5" /></div><span className="text-[10px] font-bold uppercase tracking-widest text-emerald-300">Nivel 03</span></div><h2 className="mt-4 text-lg font-black">Grandes proyectos</h2><p className="mt-1 text-xs leading-relaxed text-slate-400">Construcción, remodelaciones, proyectos completos y servicios profesionales o empresariales.</p><div className="mt-4 rounded-xl border border-emerald-400/10 bg-emerald-500/10 p-3"><p className="text-[10px] font-black uppercase tracking-widest text-emerald-300">Ejemplo</p><p className="mt-1 text-xs font-bold text-white">“Busco equipo para remodelar una casa completa.”</p><p className="mt-1 text-[11px] text-slate-400">Gran proyecto · Desde RD$250,000</p></div></button>
+      </div></div></section>
+
+      <AnnouncementsSection onNavigateTab={onNavigateTab} />
 
       <section className="rounded-3xl bg-white border border-slate-200 p-4 sm:p-6 shadow-sm"><div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3 mb-4"><div><p className="text-[11px] font-black uppercase tracking-widest text-blue-600">Encuentra lo que necesitas</p><h2 className="mt-1 text-xl sm:text-2xl font-black text-slate-900">Busca un servicio en tu zona</h2></div><span className="text-xs text-slate-500">RD$ · República Dominicana</span></div><div className="grid grid-cols-1 sm:grid-cols-12 gap-2"><div className="sm:col-span-6 flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-3"><Search className="w-5 h-5 text-slate-400 shrink-0" /><input value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Ej.: plomero, pintura, limpieza..." className="w-full bg-transparent text-sm text-slate-800 outline-none" /></div><div className="sm:col-span-4 flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-3"><MapPin className="w-5 h-5 text-slate-400 shrink-0" /><select value={selectedProvince} onChange={e => setSelectedProvince(e.target.value)} className="w-full bg-transparent text-sm text-slate-800 outline-none"><option value="">Todas las provincias</option>{DOMINICAN_PROVINCES.map(p => <option key={p.name} value={p.name}>{p.name}</option>)}</select></div><button onClick={() => onNavigateTab('buscar')} className="sm:col-span-2 rounded-xl bg-slate-900 px-4 py-3 text-sm font-extrabold text-white">Buscar</button></div></section>
 
@@ -173,20 +111,7 @@ export const LandingSection: React.FC<LandingSectionProps> = ({ services, worker
 
       {services.length > 0 && <section className="space-y-5"><div><p className="text-[11px] font-black uppercase tracking-widest text-blue-600">Oportunidades</p><h2 className="mt-1 text-2xl font-black text-slate-900">Trabajos publicados recientemente</h2></div><div className="grid grid-cols-1 md:grid-cols-3 gap-4">{services.slice(0, 3).map(s => <button key={s.id} onClick={() => onSelectService(s)} className="rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:border-blue-300 hover:shadow-md"><div className="flex items-start justify-between gap-3"><span className="rounded-lg bg-blue-50 px-2 py-1 text-[10px] font-bold text-blue-700">{s.category_name}</span><span className="font-black text-emerald-600">RD$ {s.price_rd.toLocaleString()}</span></div><h3 className="mt-3 line-clamp-2 font-black text-slate-900">{s.title}</h3><p className="mt-1 line-clamp-2 text-xs text-slate-500">{s.description}</p><div className="mt-4 flex items-center gap-1 border-t border-slate-100 pt-3 text-[11px] text-slate-500"><MapPin className="w-3.5 h-3.5" />{s.municipality}, {s.province}</div></button>)}</div></section>}
 
-      <section className="rounded-3xl border border-slate-200 bg-white p-5 sm:p-8 shadow-sm">
-        <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4"><div><div className="flex items-center gap-2"><Star className="w-5 h-5 text-amber-500" /><h2 className="text-xl sm:text-2xl font-black text-slate-900">Preguntas frecuentes y mini tutorial</h2></div><p className="mt-2 max-w-2xl text-xs sm:text-sm leading-relaxed text-slate-500">Esta guía es opcional. Úsala cuando tengas una duda sobre cómo contratar, trabajar, pagar o resolver una situación en SERVIYA.</p></div><div className="flex items-center gap-2 rounded-xl bg-blue-50 px-3 py-2 text-[11px] font-bold text-blue-700"><span className="h-2 w-2 rounded-full bg-blue-500" /> Consulta libre</div></div>
-
-        <div className="mt-6 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">{Object.entries(FAQ_GROUPS).map(([key, group]) => <button key={key} onClick={() => { setFaqGroup(key); setOpenFaq(null); setFaqSearch(''); }} className={`rounded-xl border px-3 py-3 text-left text-[11px] font-extrabold transition ${faqGroup === key ? 'border-blue-500 bg-blue-600 text-white' : 'border-slate-200 bg-slate-50 text-slate-700 hover:border-blue-300'}`}>{group.label}</button>)}</div>
-
-        <div className="mt-4 flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-3"><Search className="w-4 h-4 text-slate-400 shrink-0" /><input value={faqSearch} onChange={e => { setFaqSearch(e.target.value); setOpenFaq(null); }} placeholder="Buscar una pregunta: pago, retiro, garantía, cancelación..." className="w-full bg-transparent text-xs text-slate-800 outline-none" /></div>
-
-        <div className="mt-5 rounded-2xl bg-slate-50 border border-slate-100 p-4"><p className="text-[10px] font-black uppercase tracking-widest text-blue-600">{FAQ_GROUPS[faqGroup].label}</p><p className="mt-1 text-xs text-slate-500">{FAQ_GROUPS[faqGroup].intro}</p></div>
-
-        <div className="mt-4 space-y-2">{visibleFaqs.length === 0 ? <div className="rounded-xl border border-dashed border-slate-300 p-6 text-center text-xs text-slate-500">No encontramos una pregunta con ese término. Prueba con otra palabra.</div> : visibleFaqs.map((item, index) => { const id = `${faqGroup}-${index}`; const open = openFaq === id; return <div key={id} className="overflow-hidden rounded-xl border border-slate-200"><button onClick={() => setOpenFaq(open ? null : id)} className="flex w-full items-center justify-between gap-3 p-4 text-left text-sm font-bold text-slate-900"><span>{item.q}</span>{open ? <ChevronUp className="w-4 h-4 shrink-0" /> : <ChevronDown className="w-4 h-4 shrink-0" />}</button>{open && <div className="border-t border-slate-100 bg-slate-50 px-4 py-4 text-xs leading-relaxed text-slate-600">{item.a}</div>}</div>; })}</div>
-
-        <div className="mt-6 rounded-2xl border border-blue-100 bg-blue-50/60 p-4"><p className="text-xs font-black text-slate-900">Ruta rápida de aprendizaje</p><p className="mt-1 text-[11px] leading-relaxed text-slate-600">Si eres nuevo, empieza por <strong>Soy Cliente</strong> o <strong>Soy Trabajador/Técnico</strong>. Después revisa <strong>Contratación paso a paso</strong> y, cuando tengas una duda específica, usa <strong>Pagos y Custodia</strong> o <strong>Garantía, cancelaciones y disputas</strong>.</p></div>
-      </section>
-
+      <section className="rounded-3xl border border-slate-200 bg-white p-5 sm:p-8 shadow-sm"><div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4"><div><div className="flex items-center gap-2"><Star className="w-5 h-5 text-amber-500" /><h2 className="text-xl sm:text-2xl font-black text-slate-900">Preguntas frecuentes y mini tutorial</h2></div><p className="mt-2 max-w-2xl text-xs sm:text-sm leading-relaxed text-slate-500">Esta guía es opcional. Úsala cuando tengas una duda sobre cómo contratar, trabajar, pagar o resolver una situación en SERVIYA.</p></div><div className="flex items-center gap-2 rounded-xl bg-blue-50 px-3 py-2 text-[11px] font-bold text-blue-700"><span className="h-2 w-2 rounded-full bg-blue-500" /> Consulta libre</div></div><div className="mt-6 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">{Object.entries(FAQ_GROUPS).map(([key, group]) => <button key={key} onClick={() => { setFaqGroup(key); setOpenFaq(null); setFaqSearch(''); }} className={`rounded-xl border px-3 py-3 text-left text-[11px] font-extrabold transition ${faqGroup === key ? 'border-blue-500 bg-blue-600 text-white' : 'border-slate-200 bg-slate-50 text-slate-700 hover:border-blue-300'}`}>{group.label}</button>)}</div><div className="mt-4 flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-3"><Search className="w-4 h-4 text-slate-400 shrink-0" /><input value={faqSearch} onChange={e => { setFaqSearch(e.target.value); setOpenFaq(null); }} placeholder="Buscar una pregunta: pago, retiro, garantía, cancelación..." className="w-full bg-transparent text-xs text-slate-800 outline-none" /></div><div className="mt-5 rounded-2xl bg-slate-50 border border-slate-100 p-4"><p className="text-[10px] font-black uppercase tracking-widest text-blue-600">{FAQ_GROUPS[faqGroup].label}</p><p className="mt-1 text-xs text-slate-500">{FAQ_GROUPS[faqGroup].intro}</p></div><div className="mt-4 space-y-2">{visibleFaqs.length === 0 ? <div className="rounded-xl border border-dashed border-slate-300 p-6 text-center text-xs text-slate-500">No encontramos una pregunta con ese término. Prueba con otra palabra.</div> : visibleFaqs.map((item, index) => { const id = `${faqGroup}-${index}`; const open = openFaq === id; return <div key={id} className="overflow-hidden rounded-xl border border-slate-200"><button onClick={() => setOpenFaq(open ? null : id)} className="flex w-full items-center justify-between gap-3 p-4 text-left text-sm font-bold text-slate-900"><span>{item.q}</span>{open ? <ChevronUp className="w-4 h-4 shrink-0" /> : <ChevronDown className="w-4 h-4 shrink-0" />}</button>{open && <div className="border-t border-slate-100 bg-slate-50 px-4 py-4 text-xs leading-relaxed text-slate-600">{item.a}</div>}</div>; })}</div><div className="mt-6 rounded-2xl border border-blue-100 bg-blue-50/60 p-4"><p className="text-xs font-black text-slate-900">Ruta rápida de aprendizaje</p><p className="mt-1 text-[11px] leading-relaxed text-slate-600">Si eres nuevo, empieza por <strong>Soy Cliente</strong> o <strong>Soy Trabajador/Técnico</strong>. Después revisa <strong>Contratación paso a paso</strong> y, cuando tengas una duda específica, usa <strong>Pagos y Custodia</strong> o <strong>Garantía, cancelaciones y disputas</strong>.</p></div></section>
       <div className="text-center pt-2"><p className="text-sm font-black text-slate-900">SERVIYA</p><p className="mt-1 text-xs text-slate-500">Trabajo • Confianza • Oportunidades</p><p className="mt-2 text-[11px] text-slate-400">Desde el trabajo más pequeño hasta el trabajo más grande.</p></div>
     </div>
   );
