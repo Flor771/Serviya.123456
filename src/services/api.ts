@@ -1,4 +1,4 @@
-const API_BASE = (import.meta as any).env?.VITE_API_BASE_URL || '/api/v1';
+const API_BASE = (import.meta as any).env?.VITE_API_BASE_URL || 'https://serviya-com-odg.onrender.com/api/v1';
 
 export function getAuthToken(): string | null {
   return localStorage.getItem('serviya_token');
