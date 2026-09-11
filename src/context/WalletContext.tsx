@@ -9,7 +9,7 @@ interface WalletContextType {
   loading: boolean;
   refreshWallet: () => Promise<void>;
   depositRD: (amount: number, method: string, cardLast4?: string) => Promise<void>;
-  withdrawRD: (data: { amount_rd: number; bank_name: string; account_type: string; account_number: string; account_holder_name: string; account_holder_cedula: string }) => Promise<void>;
+  withdrawRD: (data: { amount_rd: number }) => Promise<void>;
   payEscrow: (service_id: string) => Promise<void>;
   releaseEscrow: (service_id: string) => Promise<void>;
 }
@@ -53,7 +53,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     await refreshWallet();
   };
 
-  const withdrawRD = async (data: any) => {
+  const withdrawRD = async (data: { amount_rd: number }) => {
     const role = String(user?.activeRole || user?.role || '').toUpperCase();
     if (role !== 'TRABAJADOR') {
       throw new Error('Los retiros normales están reservados exclusivamente para trabajadores.');
