@@ -1,3 +1,4 @@
+import logging
 from pathlib import Path
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -7,18 +8,23 @@ from app.core.config import settings
 from app.services.digital_contracts import ensure_digital_contracts
 from app.api.v1.router import api_router
 
+logger = logging.getLogger("serviya")
+
 app = FastAPI(title="SERVIYA.do API 🇩🇴", description="API para la plataforma de servicios SERVIYA.do en República Dominicana", version=settings.VERSION, docs_url="/docs", openapi_url="/openapi.json")
 origins=["https://serviya-admin.onrender.com","https://serviya-com-odg.onrender.com","http://localhost:5173","http://localhost:4173"]
 app.add_middleware(CORSMiddleware,allow_origins=origins,allow_credentials=True,allow_methods=["*"],allow_headers=["*"])
 app.include_router(api_router)
+
+digital_contracts_ready = False
 try:
     ensure_digital_contracts()
+    digital_contracts_ready = True
 except Exception:
-    pass
+    logger.exception("No se pudo inicializar el sistema de contratos digitales")
 
 @app.get("/api/v1/health")
 def health_check():
-    return {"status":"ok","version":settings.VERSION,"digital_contracts":True}
+    return {"status":"ok","version":settings.VERSION,"digital_contracts":digital_contracts_ready}
 
 BASE_DIR=Path(__file__).resolve().parent.parent.parent
 DIST_DIR=BASE_DIR/"dist"
