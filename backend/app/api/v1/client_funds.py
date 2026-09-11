@@ -8,8 +8,6 @@ router = APIRouter(prefix="/client-funds", tags=["Fondos del Cliente"])
 
 @router.get("")
 def get_client_funds(current_user: User = Depends(get_current_active_user), db: Session = Depends(get_db)):
-    # A dual-role account may have role=TRABAJADOR while actively using CLIENTE.
-    # The endpoint must honor the active role, not only the base account role.
     active_role = str(getattr(current_user, "active_role", "") or getattr(current_user, "role", "")).upper()
     if active_role == "CLIENT":
         active_role = "CLIENTE"
@@ -18,19 +16,12 @@ def get_client_funds(current_user: User = Depends(get_current_active_user), db: 
     if active_role != "CLIENTE":
         raise HTTPException(403, "Esta información está disponible solamente para clientes.")
 
+    # Read only columns that exist in the deployed PostgreSQL schema.
+    # Do not query transactions.description: that column does not exist in this DB.
     rows = db.execute(text("""
         SELECT e.id AS escrow_id, e.service_id, e.worker_id,
             e.total_amount_rd, e.status AS escrow_status, e.created_at,
-            s.title AS service_title, u.full_name AS worker_name,
-            (
-                SELECT t.reference_code
-                FROM transactions t
-                WHERE t.user_id = e.client_id
-                  AND t.type = 'PAGO_CUSTODIA_TRANSFERENCIA'
-                  AND t.description LIKE '%' || 'escrow=' || CAST(e.id AS TEXT) || ' %'
-                ORDER BY t.created_at DESC
-                LIMIT 1
-            ) AS payment_reference
+            s.title AS service_title, u.full_name AS worker_name
         FROM escrows e
         LEFT JOIN services s ON s.id = e.service_id
         LEFT JOIN users u ON u.id = e.worker_id
@@ -50,15 +41,16 @@ def get_client_funds(current_user: User = Depends(get_current_active_user), db: 
     funds = []
     for row in rows:
         status = str(row["escrow_status"] or "PENDIENTE_VERIFICACION")
+        escrow_id = str(row["escrow_id"])
         funds.append({
-            "payment_id": str(row["escrow_id"]),
+            "payment_id": escrow_id,
             "depositor_name": getattr(current_user, "full_name", None) or getattr(current_user, "name", None) or getattr(current_user, "email", "Cliente"),
             "destination_worker_name": row["worker_name"] or "Trabajador no asignado",
             "service_title": row["service_title"] or f"Servicio #{str(row['service_id'])[:8]}",
             "amount_dop": float(row["total_amount_rd"] or 0),
             "status": status,
             "status_label": labels.get(status, status.replace("_", " ").title()),
-            "reference": row["payment_reference"] or f"ESCROW-{str(row['escrow_id']).upper()}",
+            "reference": f"ESCROW-{escrow_id.upper()}",
             "date": row["created_at"].isoformat() if row["created_at"] else None,
             "contract_id": None,
             "job_id": str(row["service_id"]),
