@@ -21,6 +21,8 @@ class ResolutionRequest(BaseModel):
 
 
 def ensure_table(db: Session) -> None:
+    # Compatibility guard for databases that existed before migration 024.
+    # Normal deployments create these tables through Alembic.
     db.execute(text("""
         CREATE TABLE IF NOT EXISTS warranty_revisits (
             id VARCHAR(64) PRIMARY KEY,
@@ -41,7 +43,6 @@ def ensure_table(db: Session) -> None:
     """))
     db.execute(text("CREATE INDEX IF NOT EXISTS ix_warranty_revisits_service ON warranty_revisits(service_id)"))
     db.execute(text("CREATE INDEX IF NOT EXISTS ix_warranty_revisits_worker ON warranty_revisits(worker_id,status)"))
-    db.commit()
 
 
 def notify(db: Session, user_id: str, title: str, message: str, related: str):
@@ -70,16 +71,33 @@ def participant_warranty(service_id: str, current_user: User, db: Session):
 @router.post("/{service_id}/warranty/revisit")
 def request_revisit(service_id: str, data: RevisitRequest, current_user: User = Depends(get_current_active_user), db: Session = Depends(get_db)):
     ensure_table(db)
-    warranty = participant_warranty(service_id, current_user, db)
+    # Lock the warranty row before checking for an active revisit. This closes the
+    # race where two simultaneous client requests could both pass the old check.
+    warranty = db.execute(text("""
+        SELECT w.id,w.service_id,w.client_id,w.worker_id,w.coverage_days,w.status,w.activated_at,w.expires_at,w.certificate_ref,
+               s.title
+        FROM service_warranties w JOIN services s ON s.id=w.service_id
+        WHERE w.service_id=:sid
+        FOR UPDATE OF w
+    """), {"sid": service_id}).mappings().first()
+    if not warranty:
+        raise HTTPException(404, "Este servicio todavía no tiene una garantía registrada")
+    if current_user.id not in {warranty['client_id'], warranty['worker_id']}:
+        raise HTTPException(403, "No tienes acceso a esta garantía")
+    if warranty['expires_at'] and warranty['expires_at'] < datetime.utcnow():
+        raise HTTPException(400, "La garantía SERVIYA ya venció")
     if current_user.id != warranty['client_id']:
         raise HTTPException(403, "La solicitud de revisita debe iniciarla el cliente")
+
     active = db.execute(text("""
         SELECT id,status FROM warranty_revisits
         WHERE service_id=:sid AND status IN ('SOLICITADA','PROGRAMADA','CORRECCION_EN_PROCESO','CORRECCION_REALIZADA','ESCALADA_ADMIN')
         ORDER BY created_at DESC LIMIT 1
+        FOR UPDATE
     """), {"sid": service_id}).mappings().first()
     if active:
         raise HTTPException(409, "Ya existe una revisita activa para esta garantía")
+
     rid = uuid.uuid4().hex
     db.execute(text("""
         INSERT INTO warranty_revisits
