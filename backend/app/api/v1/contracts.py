@@ -41,9 +41,11 @@ def _ensure_contract_table(db):
             client_user_agent TEXT NULL,
             worker_user_agent TEXT NULL,
             client_acceptance_hash VARCHAR(64) NULL,
-            worker_acceptance_hash VARCHAR(64) NULL
+            worker_acceptance_hash VARCHAR(64) NULL,
+            locked_at TIMESTAMP NULL
         )
     """))
+    db.execute(text("ALTER TABLE digital_contracts ADD COLUMN IF NOT EXISTS locked_at TIMESTAMP NULL"))
 
 
 def _contract_document(service, escrow, client, worker, admin_id, notes=""):
@@ -105,7 +107,7 @@ def list_contracts(current_user: User = Depends(get_current_active_user), db: Se
     services = db.query(Service).filter((Service.client_id == current_user.id) | (Service.worker_id == current_user.id)).all()
     contracts = []
     for service in services:
-        row = db.execute(text("SELECT id,contract_number,status,version,content_hash,generated_at,client_accepted_at,worker_accepted_at FROM digital_contracts WHERE service_id=:sid"), {"sid": service.id}).mappings().first()
+        row = db.execute(text("SELECT id,contract_number,status,version,content_hash,generated_at,client_accepted_at,worker_accepted_at,locked_at FROM digital_contracts WHERE service_id=:sid"), {"sid": service.id}).mappings().first()
         status_str = service.status.value if hasattr(service.status, "value") else str(service.status)
         escrow = db.query(Escrow).filter(Escrow.service_id == service.id).order_by(Escrow.created_at.desc()).first()
         contracts.append({
@@ -118,6 +120,7 @@ def list_contracts(current_user: User = Depends(get_current_active_user), db: Se
             "generated_at": str(row["generated_at"]) if row else None,
             "client_accepted_at": str(row["client_accepted_at"]) if row and row["client_accepted_at"] else None,
             "worker_accepted_at": str(row["worker_accepted_at"]) if row and row["worker_accepted_at"] else None,
+            "locked_at": str(row["locked_at"]) if row and row["locked_at"] else None,
         })
     db.commit()
     return {"contracts": contracts}
@@ -135,7 +138,7 @@ def get_contract(id: str, current_user: User = Depends(get_current_active_user),
     row = db.execute(text("SELECT * FROM digital_contracts WHERE service_id=:sid"), {"sid": service.id}).mappings().first()
     if not row:
         raise HTTPException(status_code=404, detail="El contrato digital todavía no ha sido emitido")
-    return {"contract": dict(row), "document": row["content_json"], "integrity": {"sha256": row["content_hash"], "immutable": True}}
+    return {"contract": dict(row), "document": row["content_json"], "integrity": {"sha256": row["content_hash"], "immutable": bool(row["locked_at"]), "locked_at": str(row["locked_at"]) if row["locked_at"] else None}}
 
 
 @router.post("/{id}/accept")
@@ -150,19 +153,36 @@ def accept_contract(id: str, request: Request, current_user: User = Depends(get_
         raise HTTPException(status_code=404, detail="Contrato digital no emitido")
     if row["status"] == "ANULADO":
         raise HTTPException(status_code=409, detail="Este contrato está anulado")
+
+    role = "CLIENTE" if current_user.id == service.client_id else "TRABAJADOR"
+    existing_at = row["client_accepted_at"] if role == "CLIENTE" else row["worker_accepted_at"]
+    existing_hash = row["client_acceptance_hash"] if role == "CLIENTE" else row["worker_acceptance_hash"]
+    if existing_at is not None and existing_hash:
+        return {"message":"La aceptación ya estaba registrada; se devuelve la evidencia original.","contract_number":row["contract_number"],"content_hash":row["content_hash"],"acceptance_hash":existing_hash,"accepted_at":str(existing_at),"status":row["status"],"locked_at":str(row["locked_at"]) if row["locked_at"] else None}
+    if row["locked_at"] is not None or row["status"] == "ACEPTADO_POR_AMBOS":
+        raise HTTPException(status_code=409, detail="El contrato ya fue aceptado por ambas partes y está bloqueado.")
+
     ip = request.headers.get("x-forwarded-for", request.client.host if request.client else "unknown").split(",")[0].strip()
     user_agent = request.headers.get("user-agent", "unknown")
     accepted_at = datetime.utcnow()
-    role = "CLIENTE" if current_user.id == service.client_id else "TRABAJADOR"
     acceptance_payload = f"{row['content_hash']}|{current_user.id}|{role}|{accepted_at.isoformat()}|{ip}|{user_agent}"
     acceptance_hash = hashlib.sha256(acceptance_payload.encode("utf-8")).hexdigest()
+    other_already_accepted = row["worker_accepted_at"] is not None if role == "CLIENTE" else row["client_accepted_at"] is not None
+
     if role == "CLIENTE":
-        db.execute(text("UPDATE digital_contracts SET client_accepted_at=COALESCE(client_accepted_at,:at),client_acceptance_ip=COALESCE(client_acceptance_ip,:ip),client_user_agent=COALESCE(client_user_agent,:ua),client_acceptance_hash=COALESCE(client_acceptance_hash,:h),status=CASE WHEN worker_accepted_at IS NOT NULL THEN 'ACEPTADO_POR_AMBOS' ELSE 'ACEPTADO_POR_CLIENTE' END WHERE service_id=:sid"), {"sid":service.id,"at":accepted_at,"ip":ip,"ua":user_agent,"h":acceptance_hash})
+        db.execute(text("UPDATE digital_contracts SET client_accepted_at=:at,client_acceptance_ip=:ip,client_user_agent=:ua,client_acceptance_hash=:h,status=CASE WHEN worker_accepted_at IS NOT NULL THEN 'ACEPTADO_POR_AMBOS' ELSE 'ACEPTADO_POR_CLIENTE' END,locked_at=CASE WHEN worker_accepted_at IS NOT NULL THEN COALESCE(locked_at,CURRENT_TIMESTAMP) ELSE locked_at END WHERE service_id=:sid AND locked_at IS NULL"), {"sid":service.id,"at":accepted_at,"ip":ip,"ua":user_agent,"h":acceptance_hash})
     else:
-        db.execute(text("UPDATE digital_contracts SET worker_accepted_at=COALESCE(worker_accepted_at,:at),worker_acceptance_ip=COALESCE(worker_acceptance_ip,:ip),worker_user_agent=COALESCE(worker_user_agent,:ua),worker_acceptance_hash=COALESCE(worker_acceptance_hash,:h),status=CASE WHEN client_accepted_at IS NOT NULL THEN 'ACEPTADO_POR_AMBOS' ELSE 'ACEPTADO_POR_TRABAJADOR' END WHERE service_id=:sid"), {"sid":service.id,"at":accepted_at,"ip":ip,"ua":user_agent,"h":acceptance_hash})
+        db.execute(text("UPDATE digital_contracts SET worker_accepted_at=:at,worker_acceptance_ip=:ip,worker_user_agent=:ua,worker_acceptance_hash=:h,status=CASE WHEN client_accepted_at IS NOT NULL THEN 'ACEPTADO_POR_AMBOS' ELSE 'ACEPTADO_POR_TRABAJADOR' END,locked_at=CASE WHEN client_accepted_at IS NOT NULL THEN COALESCE(locked_at,CURRENT_TIMESTAMP) ELSE locked_at END WHERE service_id=:sid AND locked_at IS NULL"), {"sid":service.id,"at":accepted_at,"ip":ip,"ua":user_agent,"h":acceptance_hash})
+
     _notify(db, service.worker_id if role == "CLIENTE" else service.client_id, "Contrato digital aceptado", f"{role} aceptó el contrato {row['contract_number']}. Hash de integridad: {row['content_hash']}", "CONTRACT_ACCEPTED", service.id)
+    if other_already_accepted:
+        _notify(db, service.client_id, "Contrato digital bloqueado", f"El contrato {row['contract_number']} fue aceptado por ambas partes y quedó bloqueado como evidencia.", "CONTRACT_LOCKED", service.id)
+        _notify(db, service.worker_id, "Contrato digital bloqueado", f"El contrato {row['contract_number']} fue aceptado por ambas partes y quedó bloqueado como evidencia.", "CONTRACT_LOCKED", service.id)
     db.commit()
-    return {"message":"Aceptación registrada como evidencia electrónica.","contract_number":row["contract_number"],"content_hash":row["content_hash"],"acceptance_hash":acceptance_hash}
+
+    final_row = db.execute(text("SELECT status,client_accepted_at,worker_accepted_at,locked_at,client_acceptance_hash,worker_acceptance_hash FROM digital_contracts WHERE service_id=:sid"), {"sid":service.id}).mappings().first()
+    final_hash = final_row["client_acceptance_hash"] if role == "CLIENTE" else final_row["worker_acceptance_hash"]
+    return {"message":"Aceptación registrada como evidencia electrónica.","contract_number":row["contract_number"],"content_hash":row["content_hash"],"acceptance_hash":final_hash,"accepted_at":str(final_row["client_accepted_at"] if role == "CLIENTE" else final_row["worker_accepted_at"]),"status":final_row["status"],"locked_at":str(final_row["locked_at"]) if final_row["locked_at"] else None}
 
 
 @router.get("/{id}/document")
