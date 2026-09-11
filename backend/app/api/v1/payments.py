@@ -13,6 +13,7 @@ router = APIRouter(prefix="/payments", tags=["Pagos y Custodia (Escrow)"])
 
 class EscrowPaymentSchema(BaseModel): service_id: str
 class BankTransferEscrowSchema(BaseModel): service_id: str; bank_account_id: Optional[int] = None; voucher_url: str
+class WalletEscrowSchema(BaseModel): service_id: str
 class EscrowReleaseSchema(BaseModel): service_id: str
 class RefundSchema(BaseModel): service_id: str; reason: Optional[str] = "Reembolso solicitado por el cliente"
 
@@ -29,9 +30,45 @@ def _agreed_price(db, service_id):
         raise HTTPException(400,"Primero deben negociar y acordar el precio final. El presupuesto de publicación es solo orientativo.")
     return float(row["negotiated_price_rd"])
 
+def _ensure_worker_wallet(db, worker_id):
+    wallet=db.execute(text("SELECT id FROM wallets WHERE worker_id=:w FOR UPDATE"),{"w":worker_id}).mappings().first()
+    if not wallet:
+        db.execute(text("INSERT INTO wallets (worker_id,available_balance,pending_custody_balance,total_earnings,total_commissions,total_withdrawn) VALUES (:w,0,0,0,0,0)"),{"w":worker_id})
+        wallet=db.execute(text("SELECT id FROM wallets WHERE worker_id=:w FOR UPDATE"),{"w":worker_id}).mappings().one()
+    return wallet
+
 @router.post("/escrow")
 def pay_escrow(data:EscrowPaymentSchema,current_user:User=Depends(get_current_active_user),db:Session=Depends(get_db)):
-    raise HTTPException(400,"No se puede poner dinero en Custodia directamente. Primero realiza el depósito, sube el voucher y espera la verificación de Administración.")
+    raise HTTPException(400,"No se puede poner dinero en Custodia directamente. Primero realiza el depósito, sube el voucher y espera la verificación de Administración, o utiliza tu saldo disponible de Billetera SERVIYA.")
+
+@router.post("/escrow-wallet")
+def pay_escrow_from_wallet(data:WalletEscrowSchema,current_user:User=Depends(get_current_active_user),db:Session=Depends(get_db)):
+    service=db.query(Service).filter(Service.id==data.service_id).with_for_update().first()
+    if not service: raise HTTPException(404,"Servicio no encontrado")
+    if service.client_id != current_user.id: raise HTTPException(403,"Solamente el cliente puede pagar este servicio")
+    if not service.worker_id: raise HTTPException(400,"Primero debes seleccionar un trabajador.")
+    if service.status != "TRABAJADOR_SELECCIONADO": raise HTTPException(400,"Este servicio no está esperando el pago en Custodia.")
+    amount=_agreed_price(db,service.id)
+    existing=db.query(Escrow).filter(Escrow.service_id==service.id,Escrow.status.in_(["PENDIENTE_VERIFICACION","RETENIDO","EN_DISPUTA","PENDIENTE_APROBACION"])).first()
+    if existing: raise HTTPException(400,"Este servicio ya tiene un depósito registrado o una Custodia activa.")
+    wallet=db.execute(text("SELECT id,available_balance FROM client_wallets WHERE client_id=:c FOR UPDATE"),{"c":current_user.id}).mappings().first()
+    available=float(wallet["available_balance"] or 0) if wallet else 0.0
+    if not wallet or available < amount:
+        raise HTTPException(400,f"Saldo insuficiente en Billetera SERVIYA. Disponible: RD$ {available:,.2f}; requerido: RD$ {amount:,.2f}.")
+    rate=float(settings.PLATFORM_COMMISSION_PERCENT); commission=round(amount*rate/100,2); payout=round(amount-commission,2); otp=f"{random.randint(100000,999999)}"
+    escrow=Escrow(service_id=service.id,client_id=current_user.id,worker_id=service.worker_id,total_amount_rd=amount,commission_rate_percent=rate,commission_amount_rd=commission,worker_payout_rd=payout,status="RETENIDO",payment_method="BILLETERA_SERVIYA",release_otp=otp,otp_verified=False)
+    db.add(escrow); db.flush()
+    db.execute(text("UPDATE client_wallets SET available_balance=available_balance-:a,total_spent=COALESCE(total_spent,0)+:a,updated_at=CURRENT_TIMESTAMP WHERE id=:id"),{"a":amount,"id":wallet["id"]})
+    ref=f"ESCROW-WALLET-{uuid.uuid4().hex[:8].upper()}"
+    _tx(db,current_user.id,amount,"PAGO_CUSTODIA_BILLETERA","RETENIDO",f"Pago en Custodia desde Billetera SERVIYA | escrow={escrow.id} | servicio={service.id}",ref)
+    worker_wallet=_ensure_worker_wallet(db,service.worker_id)
+    db.execute(text("UPDATE wallets SET pending_custody_balance=COALESCE(pending_custody_balance,0)+:a WHERE id=:id"),{"a":amount,"id":worker_wallet["id"]})
+    custody_ref=f"CUSTODY-{str(escrow.id)[:8].upper()}"
+    db.execute(text("INSERT INTO transactions (user_id,amount,type,status,reference_code,created_at) SELECT :u,:amount,'CUSTODIA_TRABAJO','RETENIDO',:ref,CURRENT_TIMESTAMP WHERE NOT EXISTS (SELECT 1 FROM transactions WHERE user_id=:u AND reference_code=:ref)"),{"u":service.worker_id,"amount":amount,"ref":custody_ref})
+    db.add(Notification(user_id=current_user.id,title="Pago en Custodia realizado",message=f"RD$ {amount:,.2f} fue descontado de tu Billetera y puesto en Custodia SERVIYA.",type="WALLET_ESCROW_PAID",related_entity_id=service.id))
+    db.add(Notification(user_id=service.worker_id,title="Fondos en Custodia SERVIYA",message=f"Hay RD$ {amount:,.2f} retenidos para tu servicio. Puedes comenzar el trabajo; el dinero no estará disponible para retiro hasta la liberación administrativa.",type="PAYMENT",related_entity_id=service.id))
+    db.commit()
+    return {"message":"Pago realizado con tu Billetera SERVIYA y fondos puestos en Custodia.","escrow_id":escrow.id,"reference":ref,"status":"RETENIDO","approved_by_admin":True,"payment_method":"BILLETERA_SERVIYA","agreed_price_rd":amount,"wallet_available_rd":available-amount}
 
 @router.post("/escrow-bank-transfer")
 def bank_transfer_escrow(data:BankTransferEscrowSchema,current_user:User=Depends(get_current_active_user),db:Session=Depends(get_db)):
@@ -72,5 +109,4 @@ def request_release_approval(data:EscrowReleaseSchema,current_user:User=Depends(
 
 @router.post("/refund")
 def refund_escrow(data:RefundSchema,current_user:User=Depends(get_current_active_user),db:Session=Depends(get_db)):
-    # Financial refunds are administrative settlements. A client cannot execute one directly.
     raise HTTPException(409,"El reembolso directo está deshabilitado. Solicita una revisión o disputa; Administración debe autorizar y registrar el reembolso.")
