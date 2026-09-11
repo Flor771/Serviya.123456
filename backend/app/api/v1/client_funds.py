@@ -8,7 +8,14 @@ router = APIRouter(prefix="/client-funds", tags=["Fondos del Cliente"])
 
 @router.get("")
 def get_client_funds(current_user: User = Depends(get_current_active_user), db: Session = Depends(get_db)):
-    if str(getattr(current_user, "role", "")).upper() != "CLIENTE":
+    # A dual-role account may have role=TRABAJADOR while actively using CLIENTE.
+    # The endpoint must honor the active role, not only the base account role.
+    active_role = str(getattr(current_user, "active_role", "") or getattr(current_user, "role", "")).upper()
+    if active_role == "CLIENT":
+        active_role = "CLIENTE"
+    if active_role == "WORKER":
+        active_role = "TRABAJADOR"
+    if active_role != "CLIENTE":
         raise HTTPException(403, "Esta información está disponible solamente para clientes.")
 
     rows = db.execute(text("""
