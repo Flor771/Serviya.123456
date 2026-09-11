@@ -32,12 +32,10 @@ def upgrade() -> None:
             sa.Column("certificate_ref", sa.String(length=120), nullable=True),
         )
 
-    op.create_index(
-        "uq_service_warranties_service",
-        "service_warranties",
-        ["service_id"],
-        unique=True,
-    )
+    op.execute("""
+        CREATE UNIQUE INDEX IF NOT EXISTS uq_service_warranties_service
+        ON service_warranties(service_id)
+    """)
 
     op.execute("""
         CREATE UNIQUE INDEX IF NOT EXISTS uq_warranty_active_revisit_service
@@ -54,5 +52,5 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     op.execute("DROP INDEX IF EXISTS uq_warranty_active_revisit_service")
-    op.drop_index("uq_service_warranties_service", table_name="service_warranties")
+    op.execute("DROP INDEX IF EXISTS uq_service_warranties_service")
     # Keep historical warranty records if this migration is rolled back.
