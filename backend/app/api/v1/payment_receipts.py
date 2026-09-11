@@ -1,0 +1,99 @@
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import text
+from sqlalchemy.orm import Session
+from app.core.deps import get_db, get_current_active_user
+from app.models.models import User
+
+router = APIRouter(prefix="/payment-receipts", tags=["Comprobantes de pago"])
+
+
+def _elapsed_work_seconds(db, service_id, completed_at):
+    rows = db.execute(text("SELECT status,created_at FROM service_work_status_history WHERE service_id=:sid AND status IN ('TRABAJANDO','FINALIZANDO') ORDER BY created_at ASC, id ASC"), {"sid": service_id}).mappings().all()
+    started = next((r["created_at"] for r in rows if r["status"] == "TRABAJANDO"), None)
+    finishing = next((r["created_at"] for r in reversed(rows) if r["status"] == "FINALIZANDO"), None)
+    end = finishing or completed_at
+    if not started or not end:
+        return None, started, finishing
+    seconds = max(0, int((end - started).total_seconds()))
+    return seconds, started, finishing
+
+
+def _build_receipt(db, service_id):
+    row = db.execute(text("""
+        SELECT s.id AS service_id,s.title,s.description,s.category_name,s.service_date,s.service_time,s.estimated_duration,
+               s.negotiated_price_rd,s.price_agreed_at,s.created_at,s.completion_summary,s.completion_submitted_at,
+               e.id AS escrow_id,e.total_amount_rd,e.commission_rate_percent,e.commission_amount_rd,e.worker_payout_rd,e.status AS escrow_status,e.payment_method,e.created_at AS custody_created_at,e.released_at,
+               c.id AS client_id,COALESCE(NULLIF(TRIM(CONCAT(COALESCE(c.first_name,''),' ',COALESCE(c.last_name,''))),''),c.email) AS client_name,
+               w.id AS worker_id,COALESCE(NULLIF(TRIM(CONCAT(COALESCE(w.first_name,''),' ',COALESCE(w.last_name,''))),''),w.email) AS worker_name
+        FROM services s
+        JOIN escrows e ON e.service_id=s.id
+        LEFT JOIN users c ON c.id=s.client_id
+        LEFT JOIN users w ON w.id=s.worker_id
+        WHERE s.id=:sid AND e.status='LIBERADO'
+        ORDER BY e.released_at DESC NULLS LAST,e.created_at DESC LIMIT 1
+    """), {"sid": service_id}).mappings().first()
+    if not row:
+        return None
+    elapsed, started_at, finishing_at = _elapsed_work_seconds(db, service_id, row["completion_submitted_at"])
+    total = float(row["total_amount_rd"] or 0)
+    commission = round(total * 0.10, 2)
+    payout = round(total - commission, 2)
+    return {
+        "service_id": row["service_id"],
+        "escrow_id": row["escrow_id"],
+        "reference": f"ADMIN-RELEASE-{str(row['service_id'])[:8].upper()}",
+        "status": "PAGO_LIBERADO",
+        "service_title": row["title"],
+        "service_description": row["description"],
+        "category": row["category_name"],
+        "client_id": row["client_id"],
+        "client_name": row["client_name"],
+        "worker_id": row["worker_id"],
+        "worker_name": row["worker_name"],
+        "scheduled_date": row["service_date"],
+        "scheduled_time": row["service_time"],
+        "estimated_duration": row["estimated_duration"],
+        "agreement_date": str(row["price_agreed_at"]) if row["price_agreed_at"] else None,
+        "service_created_at": str(row["created_at"]) if row["created_at"] else None,
+        "custody_at": str(row["custody_created_at"]) if row["custody_created_at"] else None,
+        "started_at": str(started_at) if started_at else None,
+        "finishing_at": str(finishing_at) if finishing_at else None,
+        "completed_at": str(row["completion_submitted_at"]) if row["completion_submitted_at"] else None,
+        "released_at": str(row["released_at"]) if row["released_at"] else None,
+        "work_duration_seconds": elapsed,
+        "work_duration_label": (f"{elapsed // 3600} h {(elapsed % 3600) // 60} min" if elapsed is not None else None),
+        "completion_summary": row["completion_summary"],
+        "payment_method": row["payment_method"],
+        "total_paid_by_client_rd": total,
+        "commission_percent": 10.0,
+        "commission_rd": commission,
+        "worker_net_rd": payout,
+        "rules": [
+            "El cliente paga antes de iniciar y los fondos permanecen protegidos en Custodia SERVIYA.",
+            "El trabajador no recibe el dinero mientras el servicio permanece en Custodia.",
+            "El cliente aprueba la finalización y Administración verifica y autoriza la liberación.",
+            "La comisión SERVIYA aplicada a este comprobante es 10% del monto pagado.",
+            "El trabajador recibe el neto después de la comisión; luego puede solicitar retiro a su cuenta bancaria configurada."
+        ]
+    }
+
+
+@router.get("")
+def list_payment_receipts(current_user: User = Depends(get_current_active_user), db: Session = Depends(get_db)):
+    rows = db.execute(text("SELECT s.id FROM services s JOIN escrows e ON e.service_id=s.id WHERE e.status='LIBERADO' AND (s.client_id=:uid OR s.worker_id=:uid) ORDER BY e.released_at DESC NULLS LAST,e.created_at DESC LIMIT 50"), {"uid": current_user.id}).scalars().all()
+    receipts = []
+    for service_id in rows:
+        receipt = _build_receipt(db, service_id)
+        if receipt:
+            receipts.append(receipt)
+    return {"receipts": receipts}
+
+
+@router.get("/{service_id}")
+def get_payment_receipt(service_id: str, current_user: User = Depends(get_current_active_user), db: Session = Depends(get_db)):
+    receipt = _build_receipt(db, service_id)
+    if not receipt:
+        raise HTTPException(404, "El comprobante estará disponible cuando Administración haya liberado el pago.")
+    if current_user.id not in {receipt["client_id"], receipt["worker_id"]}:
+        raise HTTPException(403, "No tienes acceso a este comprobante")
+    return {"receipt": receipt}
