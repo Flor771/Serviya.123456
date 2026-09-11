@@ -12,15 +12,12 @@ class DisputeResolution(BaseModel):
     resolution: str = Field(pattern='^(TRABAJADOR|CLIENTE|MANTENER)$')
     notes: str = Field(min_length=5, max_length=1500)
 
-
 def _notify(db, user_id, title, message, kind, related):
     if user_id:
         db.execute(text("INSERT INTO notifications (id,user_id,title,message,type,read,related_entity_id,created_at) VALUES (:id,:u,:t,:m,:k,false,:r,CURRENT_TIMESTAMP)"), {'id': uuid.uuid4().hex, 'u': user_id, 't': title, 'm': message, 'k': kind, 'r': related})
 
-
 def _audit(db, admin_id, action, target_id, notes):
     db.execute(text("INSERT INTO admin_audit_logs (admin_id,action,resource,target_id,details,timestamp) VALUES (:a,:action,'disputes',:id,:details,CURRENT_TIMESTAMP)"), {'a': admin_id, 'action': action, 'id': str(target_id), 'details': notes})
-
 
 @router.get('/disputes')
 def get_admin_disputes(admin_user: User = Depends(require_admin), db: Session = Depends(get_db)):
@@ -40,7 +37,6 @@ def get_admin_disputes(admin_user: User = Depends(require_admin), db: Session = 
         ORDER BY d.created_at DESC
     ''')).mappings().all()
     return {'disputes':[dict(r) for r in rows]}
-
 
 @router.post('/disputes/{dispute_id}/resolve')
 def resolve_dispute(dispute_id: str, data: DisputeResolution, admin_user: User = Depends(require_admin), db: Session = Depends(get_db)):
@@ -83,14 +79,23 @@ def resolve_dispute(dispute_id: str, data: DisputeResolution, admin_user: User =
         db.execute(text("UPDATE wallets SET available_balance=COALESCE(available_balance,0)+:p,pending_custody_balance=GREATEST(COALESCE(pending_custody_balance,0)-:t,0),total_earnings=COALESCE(total_earnings,0)+:p,total_commissions=COALESCE(total_commissions,0)+:c WHERE id=:id"), {'id': wallet['id'], 'p': payout, 't': total, 'c': commission})
         ref = f'DISPUTE-RELEASE-{str(dispute_id)[:8].upper()}'
         db.execute(text("INSERT INTO wallet_transactions (id,wallet_id,user_id,type,amount_rd,description,reference,status,created_at) SELECT :id,:wid,:u,'LIBERACION_DISPUTA',:p,:d,:ref,'EXITOSO',CURRENT_TIMESTAMP WHERE NOT EXISTS (SELECT 1 FROM wallet_transactions WHERE reference=:ref)"), {'id': str(uuid.uuid4()), 'wid': wallet['id'], 'u': dispute['worker_id'], 'p': payout, 'd': f'Resolución administrativa de disputa {dispute_id}', 'ref': ref})
+        db.execute(text("INSERT INTO transactions (user_id,amount,type,status,reference_code,created_at) SELECT :u,:p,'LIBERACION_DISPUTA','COMPLETADO',:ref,CURRENT_TIMESTAMP WHERE NOT EXISTS (SELECT 1 FROM transactions WHERE user_id=:u AND reference_code=:ref)"), {'u': dispute['worker_id'], 'p': payout, 'ref': ref})
         db.execute(text("UPDATE services SET status='COMPLETADA' WHERE id=:id"), {'id': dispute['service_id']})
         message = f'Administración resolvió la disputa a favor del trabajador. Se liberaron RD$ {payout:,.2f} al trabajador.'
         _notify(db, dispute['worker_id'], 'Disputa resuelta a tu favor', message, 'DISPUTA_RESUELTA', dispute_id)
         _notify(db, dispute['client_id'], 'Disputa resuelta', f'Administración resolvió la disputa. El pago fue liberado al trabajador. Motivo: {notes}', 'DISPUTA_RESUELTA', dispute_id)
     else:
+        # Refund is credited to the client's SERVIYA wallet atomically with the administrative resolution.
+        client_wallet = db.execute(text("SELECT id FROM client_wallets WHERE client_id=:c FOR UPDATE"), {'c': dispute['client_id']}).mappings().first()
+        if not client_wallet:
+            db.execute(text("INSERT INTO client_wallets (client_id) VALUES (:c) ON CONFLICT (client_id) DO NOTHING"), {'c': dispute['client_id']})
+            client_wallet = db.execute(text("SELECT id FROM client_wallets WHERE client_id=:c FOR UPDATE"), {'c': dispute['client_id']}).mappings().one()
         db.execute(text("UPDATE escrows SET status='REEMBOLSADO',released_at=CURRENT_TIMESTAMP WHERE id=:id"), {'id': dispute['escrow_id']})
+        db.execute(text("UPDATE client_wallets SET available_balance=COALESCE(available_balance,0)+:a,total_refunded=COALESCE(total_refunded,0)+:a,updated_at=CURRENT_TIMESTAMP WHERE id=:id"), {'a': total, 'id': client_wallet['id']})
+        ref = f'DISPUTE-REFUND-{str(dispute_id)[:8].upper()}'
+        db.execute(text("INSERT INTO transactions (user_id,amount,type,status,reference_code,created_at) SELECT :u,:a,'REEMBOLSO_ADMIN','EXITOSO',:ref,CURRENT_TIMESTAMP WHERE NOT EXISTS (SELECT 1 FROM transactions WHERE user_id=:u AND reference_code=:ref)"), {'u': dispute['client_id'], 'a': total, 'ref': ref})
         db.execute(text("UPDATE services SET status='CANCELADA' WHERE id=:id"), {'id': dispute['service_id']})
-        message = f'Administración resolvió la disputa a favor del cliente. El pago de RD$ {total:,.2f} quedó marcado como REEMBOLSADO para gestionar su devolución.'
+        message = f'Administración resolvió la disputa a favor del cliente. RD$ {total:,.2f} fue acreditado a la Billetera SERVIYA.'
         _notify(db, dispute['client_id'], 'Disputa resuelta a tu favor', message, 'DISPUTA_RESUELTA', dispute_id)
         _notify(db, dispute['worker_id'], 'Disputa resuelta', f'Administración resolvió la disputa a favor del cliente. Motivo: {notes}', 'DISPUTA_RESUELTA', dispute_id)
 
