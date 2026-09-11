@@ -28,10 +28,6 @@ def _record_transaction(db: Session, user_id: str, amount: float, tx_type: str, 
     db.execute(text("INSERT INTO transactions (user_id, amount, type, status, reference_code, created_at) VALUES (:user_id, :amount, :type, :status, :reference, CURRENT_TIMESTAMP)"), {"user_id": user_id, "amount": amount, "type": tx_type, "status": status_value, "reference": reference})
 
 
-def _record_financial_movement(db: Session, wallet_id: int, amount: float, movement_type: str, description: str):
-    db.execute(text("INSERT INTO financial_movements (wallet_id, contract_id, movement_type, amount_dop, description, created_at) VALUES (:wallet_id, NULL, :movement_type, :amount, :description, CURRENT_TIMESTAMP)"), {"wallet_id": wallet_id, "movement_type": movement_type, "amount": amount, "description": description})
-
-
 def _role(user):
     return user.role.value if hasattr(user.role, "value") else str(user.role)
 
@@ -78,7 +74,7 @@ def get_wallet(current_user: User = Depends(get_current_active_user), db: Sessio
     if not wallet:
         return {"wallet": {"id": None, "user_id": current_user.id, "worker_id": None, "available_rd": 0.0, "escrow_rd": custody_total, "pending_rd": 0.0, "total_received_rd": 0.0, "total_spent_rd": 0.0, "can_withdraw": False}, "transactions": transactions, "withdrawals": withdrawals, "worker_bank_account": dict(saved_account) if saved_account else None, "custody_jobs": custody_jobs}
 
-    pending_withdrawal = float(wallet.pending_custody_balance or 0)
+    pending_withdrawal = sum(float(r["amount"] or 0) for r in withdrawal_rows if str(r["status"]).upper() == "PENDIENTE") if role_str == "TRABAJADOR" else 0.0
     return {"wallet": {"id": wallet.id, "user_id": wallet.worker_id, "worker_id": wallet.worker_id, "available_rd": float(wallet.available_balance or 0), "escrow_rd": custody_total, "pending_rd": pending_withdrawal, "total_received_rd": float(wallet.total_earnings or 0), "total_spent_rd": float(wallet.total_withdrawn or 0), "can_withdraw": role_str == "TRABAJADOR"}, "transactions": transactions, "withdrawals": withdrawals, "worker_bank_account": dict(saved_account) if saved_account else None, "custody_jobs": custody_jobs}
 
 
@@ -102,7 +98,6 @@ def deposit(data: DepositSchema, current_user: User = Depends(get_current_active
         wallet = Wallet(worker_id=current_user.id, available_balance=0.0, pending_custody_balance=0.0, total_earnings=0.0, total_commissions=0.0, total_withdrawn=0.0); db.add(wallet); db.flush()
     wallet.available_balance += data.amount_rd
     _record_transaction(db, current_user.id, data.amount_rd, "DEPOSITO", "EXITOSO", f"Depósito via {data.payment_method}", ref)
-    _record_financial_movement(db, wallet.id, data.amount_rd, "DEPOSITO", "Depósito a billetera del trabajador")
     db.commit()
     return {"message": f"Depósito de RD$ {data.amount_rd:,.2f} procesado exitosamente.", "reference": ref, "available_rd": wallet.available_balance}
 
@@ -111,19 +106,19 @@ def deposit(data: DepositSchema, current_user: User = Depends(get_current_active
 def withdraw(data: WithdrawSchema, current_user: User = Depends(get_current_active_user), db: Session = Depends(get_db)):
     if _role(current_user) != "TRABAJADOR":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Acceso denegado. Solamente los usuarios con rol TRABAJADOR pueden solicitar retiros de fondos.")
-    account = db.execute(text("SELECT id,bank_name,account_type,account_number,account_holder_name,account_holder_cedula FROM worker_bank_accounts WHERE worker_id=:worker_id AND is_active=true FOR UPDATE"), {"worker_id": current_user.id}).mappings().first()
+    account = db.execute(text("SELECT id,bank_name,account_type,account_number,account_holder_name,account_holder_cedula FROM worker_bank_accounts WHERE worker_id=:worker_id AND is_active=true ORDER BY id DESC LIMIT 1 FOR UPDATE"), {"worker_id": current_user.id}).mappings().first()
     if not account:
         raise HTTPException(status_code=400, detail="Primero debes registrar tu cuenta bancaria en SERVIYA.")
+    if data.amount_rd <= 0:
+        raise HTTPException(status_code=400, detail="El monto del retiro debe ser mayor que RD$ 0.")
     if data.amount_rd < settings.MIN_WITHDRAWAL_RD:
         raise HTTPException(status_code=400, detail=f"El monto mínimo de retiro es RD$ {settings.MIN_WITHDRAWAL_RD:,.2f}")
     wallet = db.query(Wallet).filter(Wallet.worker_id == current_user.id).with_for_update().first()
     if not wallet or float(wallet.available_balance or 0) < data.amount_rd:
         raise HTTPException(status_code=400, detail="Saldo insuficiente en Billetera disponible.")
-    wallet.available_balance -= data.amount_rd
-    wallet.pending_custody_balance += data.amount_rd
     ref = f"WITH-{uuid.uuid4().hex[:8].upper()}"
-    withdrawal = db.execute(text("INSERT INTO withdrawals (worker_id, amount, method, account_number, account_type, bank_account_id, account_holder_name, account_holder_cedula, reference_code, status, created_at) VALUES (:worker_id,:amount,:method,:account_number,:account_type,:bank_account_id,:holder,:cedula,:reference,:status,CURRENT_TIMESTAMP) RETURNING id"), {"worker_id": current_user.id, "amount": data.amount_rd, "method": account["bank_name"], "account_number": account["account_number"], "account_type": account["account_type"], "bank_account_id": account["id"], "holder": account["account_holder_name"], "cedula": account["account_holder_cedula"], "reference": ref, "status": "PENDIENTE"}).scalar_one()
+    withdrawal = db.execute(text("INSERT INTO withdrawals (worker_id, amount, method, account_number, account_type, bank_account_id, account_holder_name, account_holder_cedula, reference_code, status, created_at) VALUES (:worker_id,:amount,:method,:account_number,:account_type,:bank_account_id,:holder,:cedula,:reference,'PENDIENTE',CURRENT_TIMESTAMP) RETURNING id"), {"worker_id": current_user.id, "amount": data.amount_rd, "method": account["bank_name"], "account_number": account["account_number"], "account_type": account["account_type"], "bank_account_id": account["id"], "holder": account["account_holder_name"], "cedula": account["account_holder_cedula"], "reference": ref}).scalar_one()
+    wallet.available_balance -= data.amount_rd
     _record_transaction(db, current_user.id, data.amount_rd, "RETIRO", "PENDIENTE", f"Solicitud de retiro {ref} a {account['bank_name']} terminada en {str(account['account_number'])[-4:]}", ref)
-    _record_financial_movement(db, wallet.id, -data.amount_rd, "RETIRO_SOLICITADO", f"Retiro {ref} solicitado a {account['bank_name']}")
     db.commit()
-    return {"message": f"Solicitud de retiro por RD$ {data.amount_rd:,.2f} enviada a revisión administrativa.", "withdrawal_id": withdrawal, "reference": ref, "bank_name": account["bank_name"], "account_number": account["account_number"], "available_rd": wallet.available_balance, "pending_rd": wallet.pending_custody_balance}
+    return {"message": f"Solicitud de retiro por RD$ {data.amount_rd:,.2f} enviada a revisión administrativa.", "withdrawal_id": withdrawal, "reference": ref, "bank_name": account["bank_name"], "account_number": account["account_number"], "available_rd": wallet.available_balance, "pending_rd": data.amount_rd}
