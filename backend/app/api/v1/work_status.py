@@ -4,7 +4,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 from app.core.deps import get_db, get_current_active_user
-from app.models.models import Service, User, UserRoleEnum
+from app.models.models import Service, User
 
 router = APIRouter(prefix="/work-status", tags=["Estado del trabajo"])
 
@@ -18,9 +18,6 @@ ALLOWED = {
 class WorkStatusUpdate(BaseModel):
     status: str
     note: Optional[str] = Field(default=None, max_length=500)
-
-def role(u):
-    return u.role.value if hasattr(u.role, "value") else str(u.role)
 
 def ensure_access(service: Service, user: User):
     if user.id not in {service.client_id, service.worker_id}:
@@ -54,7 +51,6 @@ def update_work_status(service_id: str, data: WorkStatusUpdate, current_user: Us
     if service_status not in {"TRABAJADOR_SELECCIONADO", "EN_PROGRESO"}:
         raise HTTPException(400, "El estado solo puede actualizarse mientras el trabajo está asignado o en progreso")
     db.execute(text("INSERT INTO service_work_status_history (service_id, changed_by_user_id, status, note, created_at) VALUES (:sid,:uid,:status,:note,CURRENT_TIMESTAMP)"), {"sid": service_id, "uid": current_user.id, "status": status, "note": data.note.strip() if data.note else None})
-    # The official completion flow remains authoritative: status updates never release or move funds.
-    db.execute(text("INSERT INTO notifications (user_id,title,message,type,is_read,created_at) VALUES (:uid,:title,:msg,:typ,false,CURRENT_TIMESTAMP)"), {"uid": service.client_id, "title": "Actualización del trabajo", "message": f"El técnico actualizó el trabajo a: {ALLOWED[status]}." + (f" Nota: {data.note.strip()}" if data.note else ""), "typ": "WORK_STATUS"})
+    db.execute(text("INSERT INTO notifications (user_id,title,message,type,is_read,created_at,related_entity_id) VALUES (:uid,:title,:message,:typ,false,CURRENT_TIMESTAMP,:related)"), {"uid": service.client_id, "title": "Actualización del trabajo", "message": f"El técnico actualizó el trabajo a: {ALLOWED[status]}." + (f" Nota: {data.note.strip()}" if data.note else ""), "typ": "WORK_STATUS", "related": service_id})
     db.commit()
     return {"message": "Estado del trabajo actualizado", "status": status, "label": ALLOWED[status]}
