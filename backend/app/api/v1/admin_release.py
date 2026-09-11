@@ -91,11 +91,12 @@ def approve_release(service_id:str,data:ReleaseApproval,admin_user:User=Depends(
     if not worker_wallet:
         db.execute(text("INSERT INTO wallets (worker_id,available_balance,pending_custody_balance,total_earnings,total_commissions,total_withdrawn) VALUES (:w,0,0,0,0,0)"),{"w":escrow['worker_id']})
         worker_wallet=db.execute(text("SELECT id FROM wallets WHERE worker_id=:w FOR UPDATE"),{"w":escrow['worker_id']}).mappings().one()
-    payout=float(escrow['worker_payout_rd'] or 0); commission=float(escrow['commission_amount_rd'] or 0); now=datetime.utcnow()
+    payout=float(escrow['worker_payout_rd'] or 0); commission=float(escrow['commission_amount_rd'] or 0); total=float(escrow['total_amount_rd'] or 0); now=datetime.utcnow()
     db.execute(text("UPDATE escrows SET status='LIBERADO',released_at=:now,otp_verified=true WHERE id=:id"),{"id":escrow['id'],'now':now})
-    db.execute(text("UPDATE wallets SET available_balance=COALESCE(available_balance,0)+:p,total_earnings=COALESCE(total_earnings,0)+:p,total_commissions=COALESCE(total_commissions,0)+:c WHERE id=:id"),{"id":worker_wallet['id'],'p':payout,'c':commission})
-    db.execute(text("INSERT INTO financial_movements (wallet_id,contract_id,movement_type,amount_dop,description,created_at) VALUES (:w,NULL,'LIBERACION_ADMIN',:p,:d,CURRENT_TIMESTAMP)"),{"w":worker_wallet['id'],'p':payout,'d':f"Liberación administrativa del servicio {service_id}"})
-    db.execute(text("INSERT INTO transactions (user_id,amount,type,status,reference_code,created_at) VALUES (:u,:p,'LIBERACION_ADMIN','COMPLETADO',:ref,CURRENT_TIMESTAMP)"),{"u":escrow['worker_id'],'p':payout,'ref':f"ADMIN-RELEASE-{service_id[:8].upper()}"})
+    db.execute(text("UPDATE wallets SET available_balance=COALESCE(available_balance,0)+:p,pending_custody_balance=GREATEST(COALESCE(pending_custody_balance,0)-:t,0),total_earnings=COALESCE(total_earnings,0)+:p,total_commissions=COALESCE(total_commissions,0)+:c WHERE id=:id"),{"id":worker_wallet['id'],'p':payout,'t':total,'c':commission})
+    release_ref=f"ADMIN-RELEASE-{service_id[:8].upper()}"
+    db.execute(text("INSERT INTO wallet_transactions (wallet_id,user_id,type,amount_rd,description,reference,status,created_at) SELECT :wid,:u,'LIBERACION_ADMIN',:p,:d,:ref,'EXITOSO',CURRENT_TIMESTAMP WHERE NOT EXISTS (SELECT 1 FROM wallet_transactions WHERE reference=:ref)"),{"wid":worker_wallet['id'],"u":escrow['worker_id'],"p":payout,"d":f"Liberación administrativa del servicio {service_id}","ref":release_ref})
+    db.execute(text("INSERT INTO transactions (user_id,amount,type,status,reference_code,created_at) SELECT :u,:p,'LIBERACION_ADMIN','COMPLETADO',:ref,CURRENT_TIMESTAMP WHERE NOT EXISTS (SELECT 1 FROM transactions WHERE user_id=:u AND reference_code=:ref)"),{"u":escrow['worker_id'],"p":payout,"ref":release_ref})
     db.execute(text("UPDATE services SET status='COMPLETADA' WHERE id=:sid"),{"sid":service_id})
     warranty=db.execute(text("SELECT id FROM service_warranties WHERE service_id=:sid LIMIT 1"),{"sid":service_id}).scalar()
     if not warranty:
