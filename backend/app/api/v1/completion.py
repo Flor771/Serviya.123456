@@ -40,11 +40,18 @@ def execute_work(service_id: str, current_user: User = Depends(get_current_activ
 
 @router.post("/{service_id}/submit")
 def submit_completion(service_id: str, data: CompletionSubmitSchema, current_user: User = Depends(get_current_active_user), db: Session = Depends(get_db)):
-    s=db.execute(text("SELECT id,client_id,worker_id,status,completion_submitted FROM services WHERE id=:id FOR UPDATE"),{"id":service_id}).mappings().first()
+    s=db.execute(text("SELECT id,client_id,worker_id,status,completion_submitted,completion_photos FROM services WHERE id=:id FOR UPDATE"),{"id":service_id}).mappings().first()
     if not s: raise HTTPException(404,"Servicio no encontrado")
     if s["worker_id"] != current_user.id: raise HTTPException(403,"Solo el técnico asignado puede enviar el trabajo a revisión")
     if s["status"] != "EN_PROGRESO": raise HTTPException(400,"El trabajo debe estar en progreso para enviarlo a revisión")
     if s["completion_submitted"]: raise HTTPException(400,"Este trabajo ya fue enviado a revisión")
+    photos = s["completion_photos"] or []
+    if isinstance(photos, str):
+        import json
+        try: photos = json.loads(photos)
+        except Exception: photos = []
+    if not isinstance(photos, list) or not photos:
+        raise HTTPException(400,"Debes subir al menos una foto de evidencia antes de marcar el trabajo como terminado")
     otp=f"{__import__('random').randint(100000,999999)}"
     db.execute(text("UPDATE services SET completion_submitted=true,completion_summary=:summary,completion_submitted_at=CURRENT_TIMESTAMP WHERE id=:id"),{"summary":data.summary,"id":service_id})
     db.execute(text("UPDATE escrows SET release_otp=:otp WHERE service_id=:sid AND status='RETENIDO'"),{"otp":otp,"sid":service_id})
@@ -73,10 +80,11 @@ def approve_completion(service_id: str, current_user: User = Depends(get_current
 
 @router.get("/{service_id}")
 def get_completion(service_id: str, current_user: User = Depends(get_current_active_user), db: Session = Depends(get_db)):
-    s=db.execute(text("SELECT id,client_id,worker_id,status,completion_submitted,completion_summary,completion_submitted_at FROM services WHERE id=:id"),{"id":service_id}).mappings().first()
+    s=db.execute(text("SELECT id,client_id,worker_id,status,completion_submitted,completion_summary,completion_submitted_at,completion_photos FROM services WHERE id=:id"),{"id":service_id}).mappings().first()
     if not s: raise HTTPException(404,"Servicio no encontrado")
     if current_user.id not in {s["client_id"],s["worker_id"]}: raise HTTPException(403,"No tienes acceso a este trabajo")
-    return {"service_id":service_id,"completion_submitted":bool(s["completion_submitted"]),"summary":s["completion_summary"],"submitted_at":str(s["completion_submitted_at"]) if s["completion_submitted_at"] else None,"status":s["status"].value if hasattr(s["status"],"value") else str(s["status"])}
+    photos = s["completion_photos"] or []
+    return {"service_id":service_id,"completion_submitted":bool(s["completion_submitted"]),"summary":s["completion_summary"],"submitted_at":str(s["completion_submitted_at"]) if s["completion_submitted_at"] else None,"status":s["status"].value if hasattr(s["status"],"value") else str(s["status"]),"photos":photos}
 
 @router.get("/{service_id}/warranty")
 def get_warranty(service_id: str, current_user: User = Depends(get_current_active_user), db: Session = Depends(get_db)):
