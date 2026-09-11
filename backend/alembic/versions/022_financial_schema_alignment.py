@@ -16,25 +16,21 @@ def upgrade() -> None:
 
     if "admin_audit_logs" in tables:
         cols = {c["name"]: c for c in inspector.get_columns("admin_audit_logs")}
-        if "target_id" in cols and str(cols["target_id"]["type"]).lower() not in {"varchar", "text", "character varying"}:
+        if "target_id" in cols and "integer" in str(cols["target_id"]["type"]).lower():
             op.execute("ALTER TABLE admin_audit_logs ALTER COLUMN target_id TYPE VARCHAR(255) USING target_id::text")
 
     if "wallet_transactions" in tables:
         op.execute("ALTER TABLE wallet_transactions ALTER COLUMN id SET DEFAULT (gen_random_uuid()::text)")
 
     if "escrows" in tables:
-        # SERVIYA's configured platform commission is 10%. Keep already released
-        # historical escrows unchanged; normalize only money still in the flow.
         op.execute("""
             UPDATE escrows
             SET commission_rate_percent = 10.0,
-                commission_amount_rd = ROUND(total_amount_rd * 0.10, 2),
-                worker_payout_rd = ROUND(total_amount_rd * 0.90, 2)
+                commission_amount_rd = ((total_amount_rd::numeric * 0.10)::numeric(18,2))::double precision,
+                worker_payout_rd = ((total_amount_rd::numeric * 0.90)::numeric(18,2))::double precision
             WHERE status IN ('PENDIENTE_VERIFICACION','RETENIDO','PENDIENTE_APROBACION','EN_DISPUTA')
         """)
-
         if "wallets" in tables:
-            # Rebuild custody balances from the authoritative escrow ledger.
             op.execute("UPDATE wallets SET pending_custody_balance = 0")
             op.execute("""
                 UPDATE wallets w
@@ -50,5 +46,4 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    # Financial data normalization is intentionally not reversed.
     pass
