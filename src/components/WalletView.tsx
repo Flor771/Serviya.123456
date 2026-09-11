@@ -3,7 +3,7 @@ import { useWallet } from '../context/WalletContext';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../services/api';
 import { WorkerBankAccountPanel } from './WorkerBankAccountPanel';
-import { Wallet as WalletIcon, Lock, Clock, ArrowUpRight, CheckCircle, Building2, ShieldCheck } from 'lucide-react';
+import { Wallet as WalletIcon, Lock, Clock, ArrowUpRight, CheckCircle, Building2, ShieldCheck, FileText, X } from 'lucide-react';
 
 interface SavedBankAccount {
   id: number | string;
@@ -14,6 +14,37 @@ interface SavedBankAccount {
   account_holder_cedula: string;
   is_active: boolean;
 }
+
+interface PaymentReceipt {
+  service_id: string;
+  reference: string;
+  status: string;
+  service_title: string;
+  service_description: string;
+  category?: string;
+  client_name?: string;
+  worker_name?: string;
+  scheduled_date?: string;
+  scheduled_time?: string;
+  estimated_duration?: string;
+  agreement_date?: string;
+  custody_at?: string;
+  started_at?: string;
+  finishing_at?: string;
+  completed_at?: string;
+  released_at?: string;
+  work_duration_label?: string;
+  completion_summary?: string;
+  payment_method?: string;
+  total_paid_by_client_rd: number;
+  commission_percent: number;
+  commission_rd: number;
+  worker_net_rd: number;
+  rules: string[];
+}
+
+const money = (value: number) => `RD$ ${Number(value || 0).toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const dateTime = (value?: string) => value ? new Date(value).toLocaleString('es-DO') : 'No registrado';
 
 export const WalletView: React.FC = () => {
   const { wallet, transactions, withdrawRD } = useWallet();
@@ -28,6 +59,15 @@ export const WalletView: React.FC = () => {
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
+  const [receipts, setReceipts] = useState<PaymentReceipt[]>([]);
+  const [selectedReceipt, setSelectedReceipt] = useState<PaymentReceipt | null>(null);
+
+  const loadReceipts = () => {
+    if (!isWorker && !isClient) return;
+    api.get<{ receipts: PaymentReceipt[] }>('/payment-receipts')
+      .then(data => setReceipts(data.receipts || []))
+      .catch(() => setReceipts([]));
+  };
 
   useEffect(() => {
     if (!isWorker) {
@@ -48,6 +88,10 @@ export const WalletView: React.FC = () => {
       });
     return () => { cancelled = true; };
   }, [isWorker]);
+
+  useEffect(() => {
+    loadReceipts();
+  }, [isWorker, isClient, transactions.length]);
 
   const maskAccount = (number: string) => {
     const clean = String(number || '');
@@ -111,10 +155,17 @@ export const WalletView: React.FC = () => {
 
       <WorkerBankAccountPanel />
 
+      {receipts.length > 0 && <div className="bg-white p-6 rounded-3xl border border-emerald-200 shadow-sm space-y-4">
+        <div className="flex items-center gap-2"><FileText className="w-5 h-5 text-emerald-600" /><div><h2 className="text-lg font-black text-slate-900">Comprobantes de pago</h2><p className="text-xs text-slate-500">Cada pago liberado por Administración tiene su comprobante completo.</p></div></div>
+        <div className="space-y-2">{receipts.map(receipt => <div key={receipt.service_id} className="p-4 bg-emerald-50/60 rounded-2xl border border-emerald-100 flex items-center justify-between gap-3"><div><span className="font-black text-slate-900 block">{receipt.service_title}</span><span className="text-[11px] text-slate-500 block mt-1">Pago liberado • {dateTime(receipt.released_at)}</span><span className="text-[11px] text-slate-500">Ref: {receipt.reference}</span></div><button onClick={() => setSelectedReceipt(receipt)} className="shrink-0 px-3 py-2 rounded-xl bg-emerald-600 text-white text-xs font-bold flex items-center gap-1.5"><FileText className="w-3.5 h-3.5" />Ver factura</button></div>)}</div>
+      </div>}
+
       <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-4">
         <h2 className="text-lg font-bold text-slate-900">Historial de Movimientos Billetera</h2>
         {transactions.length === 0 ? <p className="text-xs text-slate-500 text-center py-8">Aún no registras movimientos en tu billetera SERVIYA.</p> : <div className="space-y-2">{transactions.map(tx => <div key={tx.id} className="p-3.5 bg-slate-50 rounded-2xl border border-slate-100 flex items-center justify-between gap-3 text-xs"><div><span className="font-bold text-slate-900 block">{tx.description}</span><span className="text-[11px] text-slate-500">{new Date(tx.created_at).toLocaleString()} • Ref: {tx.reference}</span></div><div className="text-right"><span className="font-black text-sm block">RD$ {tx.amount_rd.toLocaleString()}</span><span className="text-[10px] font-bold text-slate-400 uppercase">{tx.status}</span></div></div>)}</div>}
       </div>
+
+      {selectedReceipt && <div className="fixed inset-0 z-[60] bg-slate-950/75 backdrop-blur-sm p-4 overflow-y-auto"><div className="min-h-full flex items-center justify-center"><div className="bg-white rounded-3xl max-w-2xl w-full shadow-2xl overflow-hidden my-6"><div className="bg-slate-900 text-white p-6"><div className="flex items-start justify-between gap-4"><div><p className="text-xs font-bold tracking-widest text-emerald-400 uppercase">SERVIYA</p><h3 className="text-xl sm:text-2xl font-black mt-1">Comprobante de pago y desembolso</h3><p className="text-xs text-slate-400 mt-1">Trabajo • Confianza • Oportunidades</p></div><button onClick={() => setSelectedReceipt(null)} className="p-2 rounded-xl bg-white/10"><X className="w-5 h-5" /></button></div></div><div className="p-6 space-y-5"><div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm"><div><span className="text-[10px] uppercase font-bold text-slate-400">Servicio</span><p className="font-black text-slate-900">{selectedReceipt.service_title}</p></div><div><span className="text-[10px] uppercase font-bold text-slate-400">Referencia</span><p className="font-bold text-slate-900">{selectedReceipt.reference}</p></div><div><span className="text-[10px] uppercase font-bold text-slate-400">Cliente</span><p className="font-semibold text-slate-800">{selectedReceipt.client_name || '—'}</p></div><div><span className="text-[10px] uppercase font-bold text-slate-400">Trabajador</span><p className="font-semibold text-slate-800">{selectedReceipt.worker_name || '—'}</p></div><div><span className="text-[10px] uppercase font-bold text-slate-400">Fecha programada</span><p className="font-semibold text-slate-800">{selectedReceipt.scheduled_date || '—'} {selectedReceipt.scheduled_time || ''}</p></div><div><span className="text-[10px] uppercase font-bold text-slate-400">Duración estimada</span><p className="font-semibold text-slate-800">{selectedReceipt.estimated_duration || '—'}</p></div></div><div className="p-4 bg-slate-50 rounded-2xl border border-slate-200"><p className="text-[10px] uppercase font-bold text-slate-400 mb-1">Descripción</p><p className="text-sm text-slate-700">{selectedReceipt.service_description}</p>{selectedReceipt.completion_summary && <><p className="text-[10px] uppercase font-bold text-slate-400 mt-4 mb-1">Resumen de finalización</p><p className="text-sm text-slate-700">{selectedReceipt.completion_summary}</p></>}</div><div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs"><div className="p-3 bg-slate-50 rounded-xl"><b>Acuerdo:</b> {dateTime(selectedReceipt.agreement_date)}</div><div className="p-3 bg-slate-50 rounded-xl"><b>Entrada a Custodia:</b> {dateTime(selectedReceipt.custody_at)}</div><div className="p-3 bg-slate-50 rounded-xl"><b>Inicio registrado:</b> {dateTime(selectedReceipt.started_at)}</div><div className="p-3 bg-slate-50 rounded-xl"><b>Finalización:</b> {dateTime(selectedReceipt.completed_at)}</div><div className="p-3 bg-slate-50 rounded-xl"><b>Liberación:</b> {dateTime(selectedReceipt.released_at)}</div><div className="p-3 bg-slate-50 rounded-xl"><b>Tiempo trabajado:</b> {selectedReceipt.work_duration_label || 'No registrado'}</div></div><div className="border border-slate-200 rounded-2xl overflow-hidden"><div className="p-4 flex justify-between text-sm"><span>Total pagado por cliente</span><b>{money(selectedReceipt.total_paid_by_client_rd)}</b></div><div className="p-4 border-t border-slate-100 flex justify-between text-sm"><span>Comisión SERVIYA ({selectedReceipt.commission_percent}%)</span><b>- {money(selectedReceipt.commission_rd)}</b></div><div className="p-4 border-t border-slate-100 bg-emerald-50 flex justify-between text-base"><span className="font-black">Neto desembolsado al trabajador</span><b className="text-emerald-700">{money(selectedReceipt.worker_net_rd)}</b></div></div><div><h4 className="font-black text-slate-900 mb-2">Reglas aplicadas al pago</h4><ul className="space-y-2 text-xs text-slate-600 list-disc pl-5">{selectedReceipt.rules.map((rule, index) => <li key={index}>{rule}</li>)}</ul></div><div className="text-[10px] text-slate-400 border-t border-slate-100 pt-3">Estado: <b>{selectedReceipt.status}</b> • Método: {selectedReceipt.payment_method || 'Pago bancario'} • Emitido por el sistema al liberar la Custodia SERVIYA.</div></div></div></div>}
 
       {showWithdrawModal && savedAccount && <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/70 backdrop-blur-sm p-4 overflow-y-auto"><div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl my-auto"><h3 className="text-lg font-bold text-slate-900 mb-1">Solicitar retiro</h3><p className="text-xs text-slate-500 mb-4">El retiro se enviará a tu cuenta bancaria configurada. No tendrás que volver a escribir sus datos.</p><div className="mb-4 p-4 bg-slate-50 rounded-2xl border border-slate-200"><p className="text-[10px] font-bold uppercase text-slate-400">Cuenta de destino</p><p className="text-sm font-black text-slate-900 mt-1">{savedAccount.bank_name} • {savedAccount.account_type}</p><p className="text-xs text-slate-500 mt-1">{maskAccount(savedAccount.account_number)} • {savedAccount.account_holder_name}</p></div><form onSubmit={handleWithdraw} className="space-y-3"><input type="number" min="1" value={withdrawAmount} onChange={e => setWithdrawAmount(e.target.value === '' ? '' : Number(e.target.value))} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm" placeholder="Monto RD$" required /><div className="flex gap-2"><button type="button" onClick={() => setShowWithdrawModal(false)} className="flex-1 py-3 rounded-xl bg-slate-100 font-bold text-sm">Cancelar</button><button type="submit" disabled={submitting} className="flex-1 py-3 rounded-xl bg-blue-600 text-white font-bold text-sm disabled:opacity-50">{submitting ? 'Enviando...' : 'Confirmar retiro'}</button></div></form></div></div>}
     </div>
