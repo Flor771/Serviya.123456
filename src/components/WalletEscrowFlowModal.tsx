@@ -40,6 +40,7 @@ export const WalletEscrowFlowModal: React.FC<Props> = ({ serviceId, amount, onCl
     try {
       await api.post('/payments/escrow-bank-transfer', { service_id: serviceId, bank_account_id: Number(bankAccountId), voucher_url: voucher });
       setSubmitted(true);
+      onSuccess();
     } catch (e: any) {
       setError(e?.message || 'No se pudo registrar el voucher.');
     } finally { setBusy(false); }
@@ -61,7 +62,7 @@ export const WalletEscrowFlowModal: React.FC<Props> = ({ serviceId, amount, onCl
     <div className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-900/75 backdrop-blur-sm p-4 overflow-y-auto">
       <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200 relative my-6">
         <button onClick={onClose} disabled={busy} className="absolute top-4 right-4 text-slate-400 text-xs font-bold disabled:opacity-40">Cerrar</button>
-        <div className="flex items-center gap-3 pr-12"><div className="p-3 rounded-2xl bg-blue-50 text-blue-700"><Upload className="w-6 h-6" /></div><div><p className="text-[10px] uppercase tracking-widest font-black text-blue-700">Billetera SERVIYA</p><h2 className="text-xl font-black text-slate-900">Comprobar depósito</h2></div></div>
+        <div className="flex items-center gap-3 pr-12"><div className="p-3 rounded-2xl bg-blue-50 text-blue-700"><Upload className="w-6 h-6" /></div><div><p className="text-[10px] uppercase tracking-widest font-black text-blue-700">PAGO EN CUSTODIA</p><h2 className="text-xl font-black text-slate-900">Comprobar depósito</h2></div></div>
         <div className="mt-5 rounded-2xl bg-slate-900 text-white p-4"><p className="text-[10px] uppercase tracking-widest text-slate-400 font-bold">Precio acordado</p><p className="text-3xl font-black mt-1">RD$ {amount.toLocaleString()}</p><p className="text-xs text-slate-300 mt-2">Primero realizas el depósito a una cuenta oficial de SERVIYA y subes el voucher. Administración verifica la llegada del dinero antes de ponerlo en Custodia.</p></div>
         {error && <div className="mt-4 p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs font-semibold flex gap-2"><AlertCircle className="w-4 h-4 shrink-0" />{error}</div>}
         <div className="mt-5 space-y-4">
