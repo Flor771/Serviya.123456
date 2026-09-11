@@ -1,4 +1,4 @@
-const CACHE_NAME = 'serviya-v3';
+const CACHE_NAME = 'serviya-v4';
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
@@ -35,7 +35,6 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Navigation and application assets must prefer the newest deployed version.
   if (request.mode === 'navigate' || request.destination === 'script' || request.destination === 'style' || request.destination === 'font') {
     event.respondWith(
       fetch(request).then((response) => {
