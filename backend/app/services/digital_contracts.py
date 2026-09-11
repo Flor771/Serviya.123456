@@ -1,7 +1,6 @@
 from sqlalchemy import text
 from app.database.database import engine
 
-
 def ensure_digital_contracts() -> None:
     with engine.begin() as conn:
         conn.execute(text("CREATE EXTENSION IF NOT EXISTS pgcrypto"))
@@ -21,7 +20,7 @@ def ensure_digital_contracts() -> None:
         """))
         conn.execute(text("""
             CREATE OR REPLACE FUNCTION serviya_issue_digital_contract() RETURNS trigger AS $$
-            DECLARE svc RECORD; client RECORD; worker RECORD; contract_no TEXT; payload JSONB; payload_text TEXT;
+            DECLARE svc RECORD; client RECORD; worker RECORD; contract_no TEXT; payload JSONB; payload_text TEXT; inserted_contract BOOLEAN := FALSE;
             BEGIN
                 IF NEW.status='RETENIDO' AND COALESCE(OLD.status,'')<>'RETENIDO' THEN
                     SELECT s.* INTO svc FROM services s WHERE s.id=NEW.service_id;
@@ -31,7 +30,7 @@ def ensure_digital_contracts() -> None:
                     payload=jsonb_build_object(
                         'document_type','CONTRATO_DIGITAL_DE_PRESTACION_DE_SERVICIOS_SERVIYA','platform','SERVIYA','version',1,
                         'contract_number',contract_no,'issued_at',CURRENT_TIMESTAMP,
-                        'service',jsonb_build_object('id',svc.id,'title',svc.title,'description',svc.description,'category',svc.category_name,'subcategory',svc.subcategory,'province',svc.province,'municipality',svc.municipality,'address_approx',svc.address_approx,'service_date',svc.service_date,'service_time',svc.service_time,'estimated_duration',svc.estimated_duration,'requirements',COALESCE(svc.requirements,'[]'::jsonb)),
+                        'service',jsonb_build_object('id',svc.id,'title',svc.title,'description',svc.description,'category',svc.category_name,'subcategory',svc.subcategory,'province',svc.province,'municipality',svc.municipality,'address_approx',svc.address_approx,'service_date',svc.service_date,'service_time',svc.service_time,'estimated_duration',svc.estimated_duration,'requirements',to_jsonb(COALESCE(svc.requirements,'[]'::json))),
                         'agreement',jsonb_build_object('negotiation_status',svc.negotiation_status,'negotiated_price_rd',svc.negotiated_price_rd,'price_agreed_at',svc.price_agreed_at,'payment_type',svc.payment_type),
                         'parties',jsonb_build_object('client',jsonb_build_object('id',client.id,'name',TRIM(COALESCE(client.first_name,'')||' '||COALESCE(client.last_name,'')),'email',client.email,'phone',client.phone),'worker',jsonb_build_object('id',worker.id,'name',TRIM(COALESCE(worker.first_name,'')||' '||COALESCE(worker.last_name,'')),'email',worker.email,'phone',worker.phone)),
                         'custody',jsonb_build_object('escrow_id',NEW.id,'status',NEW.status,'total_amount_rd',NEW.total_amount_rd,'commission_percent',10.0,'commission_rd',NEW.commission_amount_rd,'worker_payout_rd',NEW.worker_payout_rd,'payment_method',NEW.payment_method,'voucher_received',(NEW.voucher_url IS NOT NULL),'custody_activated_at',CURRENT_TIMESTAMP),
@@ -42,6 +41,12 @@ def ensure_digital_contracts() -> None:
                     INSERT INTO digital_contracts(id,service_id,escrow_id,contract_number,version,status,content_json,content_text,content_hash,generated_at,generated_by_admin)
                     VALUES(gen_random_uuid()::text,NEW.service_id,NEW.id,contract_no,1,'EMITIDO',payload,payload_text,encode(digest(payload_text,'sha256'),'hex'),CURRENT_TIMESTAMP,'ADMIN_APPROVE_DEPOSIT')
                     ON CONFLICT(service_id) DO NOTHING;
+                    INSERT INTO notifications(id,user_id,title,message,type,related_entity_id,read,created_at)
+                    SELECT gen_random_uuid()::text,client.id,'Contrato digital disponible','El pago fue verificado y el contrato digital del servicio ya está disponible para leer y firmar.','CONTRACT_ISSUED',NEW.service_id,false,CURRENT_TIMESTAMP
+                    WHERE client.id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM notifications n WHERE n.user_id=client.id AND n.type='CONTRACT_ISSUED' AND n.related_entity_id=NEW.service_id);
+                    INSERT INTO notifications(id,user_id,title,message,type,related_entity_id,read,created_at)
+                    SELECT gen_random_uuid()::text,worker.id,'Contrato digital disponible','El pago fue verificado y quedó retenido en Custodia. El contrato digital del servicio ya está disponible para leer y firmar.','CONTRACT_ISSUED',NEW.service_id,false,CURRENT_TIMESTAMP
+                    WHERE worker.id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM notifications n WHERE n.user_id=worker.id AND n.type='CONTRACT_ISSUED' AND n.related_entity_id=NEW.service_id);
                 END IF;
                 RETURN NEW;
             END; $$ LANGUAGE plpgsql;
