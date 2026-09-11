@@ -23,8 +23,8 @@ def _record_wallet_ledger(db: Session, wallet_id: int, user_id: str, tx_type: st
     db.execute(text("INSERT INTO wallet_transactions (wallet_id,user_id,type,amount_rd,description,reference,status,created_at) VALUES (:wallet_id,:user_id,:type,:amount,:description,:reference,'EXITOSO',CURRENT_TIMESTAMP) ON CONFLICT (reference) DO NOTHING"), {"wallet_id": wallet_id, "user_id": user_id, "type": tx_type, "amount": amount, "description": description, "reference": reference})
 
 
-def _record_financial_movement(db: Session, wallet_id: int, movement_type: str, amount: float, description: str):
-    db.execute(text("INSERT INTO financial_movements (wallet_id,movement_type,amount_dop,description,created_at) SELECT :wallet_id,:movement_type,:amount,:description,CURRENT_TIMESTAMP WHERE NOT EXISTS (SELECT 1 FROM financial_movements WHERE wallet_id=:wallet_id AND movement_type=:movement_type AND description=:description)"), {"wallet_id": wallet_id, "movement_type": movement_type, "amount": amount, "description": description})
+def _record_financial_movement(db: Session, wallet_id: int, movement_type: str, amount: float, description: str, reference: str):
+    db.execute(text("INSERT INTO financial_movements (wallet_id,reference,movement_type,amount_dop,description,created_at) VALUES (:wallet_id,:reference,:movement_type,:amount,:description,CURRENT_TIMESTAMP) ON CONFLICT (reference) DO NOTHING"), {"wallet_id": wallet_id, "reference": reference, "movement_type": movement_type, "amount": amount, "description": description})
 
 
 def _role(user):
@@ -37,30 +37,9 @@ def get_wallet(current_user: User = Depends(get_current_active_user), db: Sessio
     tx_rows = db.execute(text("SELECT id, amount, type, status, reference_code, created_at FROM transactions WHERE user_id=:user_id ORDER BY created_at DESC"), {"user_id": current_user.id}).mappings().all()
     transactions = [{"id": r["id"], "type": r["type"], "amount_rd": float(r["amount"]), "description": r["type"], "reference": r["reference_code"], "status": r["status"], "created_at": str(r["created_at"])} for r in tx_rows]
 
-    # CLIENTE no tiene billetera de depósito. Los fondos solo se pagan directamente
-    # a la Custodia de un trabajo que ya fue negociado y acordado. client_wallets
-    # puede existir internamente para registrar reembolsos administrativos, pero
-    # nunca se expone como saldo para depositar ni como fuente de pago de Custodia.
     if role_str == "CLIENTE":
         refunded = db.execute(text("SELECT COALESCE(total_refunded,0) FROM client_wallets WHERE client_id=:client_id"), {"client_id": current_user.id}).scalar() or 0
-        return {
-            "wallet": {
-                "id": None,
-                "user_id": current_user.id,
-                "client_id": current_user.id,
-                "available_rd": 0.0,
-                "escrow_rd": 0.0,
-                "pending_rd": 0.0,
-                "total_deposited_rd": 0.0,
-                "total_spent_rd": 0.0,
-                "total_refunded_rd": float(refunded),
-                "can_withdraw": False,
-                "can_deposit": False,
-                "deposit_mode": "SOLO_CUSTODIA_POR_TRABAJO_ACORDADO",
-            },
-            "transactions": transactions,
-            "withdrawals": [],
-        }
+        return {"wallet": {"id": None,"user_id": current_user.id,"client_id": current_user.id,"available_rd": 0.0,"escrow_rd": 0.0,"pending_rd": 0.0,"total_deposited_rd": 0.0,"total_spent_rd": 0.0,"total_refunded_rd": float(refunded),"can_withdraw": False,"can_deposit": False,"deposit_mode": "SOLO_CUSTODIA_POR_TRABAJO_ACORDADO"},"transactions": transactions,"withdrawals": []}
 
     wallet = db.query(Wallet).filter(Wallet.worker_id == current_user.id).first()
     if role_str == "TRABAJADOR" and not wallet:
@@ -82,16 +61,14 @@ def get_wallet(current_user: User = Depends(get_current_active_user), db: Sessio
             custody_jobs.append({"escrow_id": r["escrow_id"], "service_id": r["service_id"], "title": r["title"], "amount_rd": amount, "escrow_amount_rd": float(r["total_amount_rd"] or 0), "status": r["status"], "service_status": r["service_status"], "created_at": str(r["created_at"])})
 
     if not wallet:
-        return {"wallet": {"id": None, "user_id": current_user.id, "worker_id": None, "available_rd": 0.0, "escrow_rd": custody_total, "pending_rd": 0.0, "total_received_rd": 0.0, "total_spent_rd": 0.0, "can_withdraw": False, "can_deposit": False}, "transactions": transactions, "withdrawals": withdrawals, "worker_bank_account": dict(saved_account) if saved_account else None, "custody_jobs": custody_jobs}
+        return {"wallet": {"id": None,"user_id": current_user.id,"worker_id": None,"available_rd": 0.0,"escrow_rd": custody_total,"pending_rd": 0.0,"total_received_rd": 0.0,"total_spent_rd": 0.0,"can_withdraw": False,"can_deposit": False},"transactions": transactions,"withdrawals": withdrawals,"worker_bank_account": dict(saved_account) if saved_account else None,"custody_jobs": custody_jobs}
 
     pending_withdrawal = sum(float(r["amount"] or 0) for r in withdrawal_rows if str(r["status"]).upper() == "PENDIENTE") if role_str == "TRABAJADOR" else 0.0
-    return {"wallet": {"id": wallet.id, "user_id": wallet.worker_id, "worker_id": wallet.worker_id, "available_rd": float(wallet.available_balance or 0), "escrow_rd": custody_total, "pending_rd": pending_withdrawal, "total_received_rd": float(wallet.total_earnings or 0), "total_spent_rd": float(wallet.total_withdrawn or 0), "can_withdraw": role_str == "TRABAJADOR", "can_deposit": False}, "transactions": transactions, "withdrawals": withdrawals, "worker_bank_account": dict(saved_account) if saved_account else None, "custody_jobs": custody_jobs}
+    return {"wallet": {"id": wallet.id,"user_id": wallet.worker_id,"worker_id": wallet.worker_id,"available_rd": float(wallet.available_balance or 0),"escrow_rd": custody_total,"pending_rd": pending_withdrawal,"total_received_rd": float(wallet.total_earnings or 0),"total_spent_rd": float(wallet.total_withdrawn or 0),"can_withdraw": role_str == "TRABAJADOR","can_deposit": False},"transactions": transactions,"withdrawals": withdrawals,"worker_bank_account": dict(saved_account) if saved_account else None,"custody_jobs": custody_jobs}
 
 
 @router.post("/deposit")
 def deposit(current_user: User = Depends(get_current_active_user)):
-    # No existe depósito general de saldo. El cliente paga únicamente después de
-    # negociar/acordar un trabajo y ese pago se registra directamente en Custodia.
     raise HTTPException(status_code=status.HTTP_410_GONE, detail="Los depósitos generales están deshabilitados. Primero negocia y acuerda un trabajo; luego paga ese trabajo directamente en Custodia SERVIYA.")
 
 
@@ -115,6 +92,6 @@ def withdraw(data: WithdrawSchema, current_user: User = Depends(get_current_acti
     description = f"Solicitud de retiro {ref} a {account['bank_name']} terminada en {str(account['account_number'])[-4:]}"
     _record_transaction(db, current_user.id, data.amount_rd, "RETIRO", "PENDIENTE", description, ref)
     _record_wallet_ledger(db, wallet.id, current_user.id, "RETIRO_SOLICITADO", data.amount_rd, description, ref)
-    _record_financial_movement(db, wallet.id, "RETIRO_SOLICITADO", -data.amount_rd, description)
+    _record_financial_movement(db, wallet.id, "RETIRO_SOLICITADO", -data.amount_rd, description, f"WITHDRAWAL-REQUEST-{withdrawal}")
     db.commit()
     return {"message": f"Solicitud de retiro por RD$ {data.amount_rd:,.2f} enviada a revisión administrativa.", "withdrawal_id": withdrawal, "reference": ref, "bank_name": account["bank_name"], "account_number": account["account_number"], "available_rd": wallet.available_balance, "pending_rd": data.amount_rd}
