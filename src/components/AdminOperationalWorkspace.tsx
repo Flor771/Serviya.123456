@@ -2,6 +2,7 @@ import React,{useEffect,useState} from 'react';
 import {api} from '../services/api';
 import {RefreshCw,Activity,CheckCircle2,Landmark,Wallet,Scale,FileCheck2,Headphones,Eye} from 'lucide-react';
 import {AdminAlerts} from './AdminAlerts';
+import {AdminAnnouncementsPanel} from './AdminAnnouncementsPanel';
 
 type Props={role:string;name:string};
 type Row=Record<string,any>;
@@ -29,6 +30,7 @@ export const AdminOperationalWorkspace:React.FC<Props>=({role,name})=>{
  if(loading)return <section className="bg-white rounded-3xl border p-6 flex items-center gap-2 font-bold"><RefreshCw className="w-4 h-4 animate-spin"/>Cargando datos reales de {name}…</section>;
  return <section className="space-y-4">
   <AdminAlerts/>
+  <AdminAnnouncementsPanel/>
   {message&&<div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-sm font-bold">✓ {message}</div>}
   {error&&<div className="p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-sm font-bold">⚠ {error}<button onClick={load} className="ml-3 underline">Reintentar</button></div>}
   <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-5 flex items-center justify-between gap-3"><div><p className="text-[10px] font-black uppercase text-slate-400">Herramienta operativa</p><h3 className="text-xl font-black mt-1">{title}</h3><p className="text-xs text-slate-500 mt-1">Conectado a PostgreSQL. Las acciones críticas se guardan en auditoría.</p></div><button onClick={load} className="px-3 py-2 rounded-xl border font-bold inline-flex items-center gap-2"><RefreshCw className="w-4 h-4"/>Actualizar</button></div>
