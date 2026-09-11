@@ -99,12 +99,21 @@ def resolve_dispute_snapshot(dispute_id: str, data: DisputeResolution, admin_use
         _notify(db, dispute["worker_id"], "Disputa resuelta a tu favor", message, "DISPUTA_RESUELTA", dispute_id)
         _notify(db, dispute["client_id"], "Disputa resuelta", f"Administración resolvió la disputa a favor del trabajador. Motivo: {notes}", "DISPUTA_RESUELTA", dispute_id)
     else:
+        # A client refund is still a custody settlement: remove the gross amount
+        # from the worker's pending custody balance before crediting the separate
+        # administrative refund ledger. This keeps escrow and wallet accounting in sync.
+        wallet = db.execute(text("SELECT id,pending_custody_balance FROM wallets WHERE worker_id=:w FOR UPDATE"), {"w": dispute["worker_id"]}).mappings().first()
+        if not wallet:
+            raise HTTPException(409, "No existe la billetera de Custodia del trabajador para aplicar el reembolso.")
+        if float(wallet["pending_custody_balance"] or 0) + 0.01 < gross:
+            raise HTTPException(409, "El saldo de Custodia del trabajador no cubre el reembolso histórico.")
         client_wallet = db.execute(text("SELECT id FROM client_wallets WHERE client_id=:c FOR UPDATE"), {"c": dispute["client_id"]}).mappings().first()
         if not client_wallet:
             db.execute(text("INSERT INTO client_wallets (client_id) VALUES (:c) ON CONFLICT (client_id) DO NOTHING"), {"c": dispute["client_id"]})
             client_wallet = db.execute(text("SELECT id FROM client_wallets WHERE client_id=:c FOR UPDATE"), {"c": dispute["client_id"]}).mappings().one()
         ref = f"DISPUTE-REFUND-{str(dispute_id)[:8].upper()}"
         db.execute(text("UPDATE escrows SET status='REEMBOLSADO',released_at=CURRENT_TIMESTAMP WHERE id=:id AND status IN ('EN_DISPUTA','RETENIDO')"), {"id": dispute["escrow_id"]})
+        db.execute(text("UPDATE wallets SET pending_custody_balance=COALESCE(pending_custody_balance,0)-:g WHERE id=:id"), {"g": gross, "id": wallet["id"]})
         db.execute(text("UPDATE client_wallets SET available_balance=COALESCE(available_balance,0)+:a,total_refunded=COALESCE(total_refunded,0)+:a,updated_at=CURRENT_TIMESTAMP WHERE id=:id"), {"a": gross, "id": client_wallet["id"]})
         db.execute(text("INSERT INTO transactions (user_id,amount,type,status,reference_code,created_at) SELECT :u,:a,'REEMBOLSO_ADMIN','EXITOSO',:ref,CURRENT_TIMESTAMP WHERE NOT EXISTS (SELECT 1 FROM transactions WHERE user_id=:u AND reference_code=:ref)"), {"u": dispute["client_id"], "a": gross, "ref": ref})
         db.execute(text("UPDATE services SET status='CANCELADA' WHERE id=:id"), {"id": dispute["service_id"]})
