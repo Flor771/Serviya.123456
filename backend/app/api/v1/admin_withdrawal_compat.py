@@ -22,11 +22,12 @@ def update_withdrawal_status(withdrawal_id: int, data: WithdrawalStatusBody, adm
     if row["status"] != "PENDIENTE":
         raise HTTPException(409, "El retiro ya fue procesado y no puede confirmarse nuevamente.")
     worker = db.execute(text("SELECT id, first_name, last_name, phone, email FROM users WHERE id=:id"), {"id": row["worker_id"]}).mappings().first()
+    amount = float(row["amount"] or 0)
+    wallet = db.execute(text("SELECT id FROM wallets WHERE worker_id=:worker_id FOR UPDATE"), {"worker_id": row["worker_id"]}).mappings().first()
+    if not wallet:
+        raise HTTPException(400, "El trabajador no tiene billetera.")
+
     if requested == "COMPLETADO":
-        wallet = db.execute(text("SELECT id FROM wallets WHERE worker_id=:worker_id FOR UPDATE"), {"worker_id": row["worker_id"]}).mappings().first()
-        if not wallet:
-            raise HTTPException(400, "El trabajador no tiene billetera.")
-        amount = float(row["amount"] or 0)
         db.execute(text("UPDATE withdrawals SET status='COMPLETADO' WHERE id=:id"), {"id": withdrawal_id})
         db.execute(text("UPDATE wallets SET pending_custody_balance=GREATEST(0,COALESCE(pending_custody_balance,0)-:amount), total_withdrawn=COALESCE(total_withdrawn,0)+:amount WHERE id=:wallet_id"), {"amount": amount, "wallet_id": wallet["id"]})
         db.execute(text("UPDATE transactions SET status='COMPLETADO' WHERE user_id=:uid AND type='RETIRO' AND status='PENDIENTE' AND created_at=(SELECT MAX(created_at) FROM transactions WHERE user_id=:uid AND type='RETIRO' AND status='PENDIENTE')"), {"uid": row["worker_id"]})
@@ -34,12 +35,10 @@ def update_withdrawal_status(withdrawal_id: int, data: WithdrawalStatusBody, adm
         message = "Retiro confirmado: Administración confirmó que el pago llegó a la cuenta bancaria registrada."
     else:
         db.execute(text("UPDATE withdrawals SET status='RECHAZADO' WHERE id=:id"), {"id": withdrawal_id})
-        wallet = db.execute(text("SELECT id FROM wallets WHERE worker_id=:worker_id FOR UPDATE"), {"worker_id": row["worker_id"]}).mappings().first()
-        if wallet:
-            amount = float(row["amount"] or 0)
-            db.execute(text("UPDATE wallets SET pending_custody_balance=GREATEST(0,COALESCE(pending_custody_balance,0)-:amount), available_balance=COALESCE(available_balance,0)+:amount WHERE id=:wallet_id"), {"amount": amount, "wallet_id": wallet["id"]})
+        db.execute(text("UPDATE wallets SET pending_custody_balance=GREATEST(0,COALESCE(pending_custody_balance,0)-:amount), available_balance=COALESCE(available_balance,0)+:amount WHERE id=:wallet_id"), {"amount": amount, "wallet_id": wallet["id"]})
         message = "Tu solicitud de retiro fue rechazada por Administración. El saldo fue devuelto a tu Billetera SERVIYA."
-    db.execute(text("INSERT INTO notifications (id,user_id,title,message,type,is_read,related_entity_id,created_at) VALUES (gen_random_uuid()::text,:uid,:title,:message,'RETIRO',false,:related,CURRENT_TIMESTAMP)"), {"uid": row["worker_id"], "title": "Retiro actualizado", "message": message, "related": str(withdrawal_id)})
+
+    db.execute(text("INSERT INTO notifications (id,user_id,title,message,type,read,related_entity_id,created_at) VALUES (gen_random_uuid()::text,:uid,:title,:message,'RETIRO',false,:related,CURRENT_TIMESTAMP)"), {"uid": row["worker_id"], "title": "Retiro actualizado", "message": message, "related": str(withdrawal_id)})
     db.execute(text("INSERT INTO admin_audit_logs (admin_id,action,resource,target_id,details,timestamp) VALUES (:aid,:action,'withdrawals',:id,:details,CURRENT_TIMESTAMP)"), {"aid": admin_user.id, "action": "WITHDRAWAL_CONFIRMED" if requested == "COMPLETADO" else "WITHDRAWAL_REJECTED", "id": withdrawal_id, "details": (data.notes or message) + f" | Destinatario: {worker['first_name'] if worker else ''} {worker['last_name'] if worker else ''} | Banco: {row['method']} | Cuenta: {row['account_number']} | Referencia: {row['reference_code'] or withdrawal_id}"})
     db.commit()
     return {"message": message, "withdrawal_id": withdrawal_id, "status": requested, "recipient": {"worker_id": row["worker_id"], "name": f"{worker['first_name']} {worker['last_name']}" if worker else None, "bank_name": row["method"], "account_type": row["account_type"], "account_number": row["account_number"], "account_holder_name": row["account_holder_name"], "reference": row["reference_code"]}}
