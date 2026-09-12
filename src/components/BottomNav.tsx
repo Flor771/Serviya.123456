@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Home, Search, PlusCircle, Wallet, User as UserIcon, BriefcaseBusiness, MessageSquare, Bell, ShieldCheck, Layers, FileText, MoreHorizontal, X, ClipboardList, ChevronRight, Clock3, CheckCircle2, AlertTriangle, FileSignature } from 'lucide-react';
+import { Home, Search, PlusCircle, Wallet, User as UserIcon, BriefcaseBusiness, MessageSquare, Bell, ShieldCheck, Layers, FileText, MoreHorizontal, X, ClipboardList, ChevronRight, FileSignature } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../services/api';
 
@@ -7,20 +7,31 @@ interface BottomNavProps { activeTab:string; onNavigateTab:(tab:string)=>void; o
 
 type ContractSummary={id:string;service_id:string;title:string;price_rd:number;status:string;service_status:string;escrow_status:string;contract_number:string|null;version:number|null;generated_at:string|null;client_accepted_at:string|null;worker_accepted_at:string|null;locked_at:string|null};
 type ContractDetail={contract:any;document:any;integrity:any};
-const statusLabel:Record<string,string>={TRABAJADOR_SELECCIONADO:'Técnico seleccionado',EN_PROGRESO:'Trabajo en progreso',COMPLETADA:'Trabajo terminado',EN_DISPUTA:'En disputa'};
-const statusClass:Record<string,string>={TRABAJADOR_SELECCIONADO:'bg-blue-50 text-blue-700',EN_PROGRESO:'bg-amber-50 text-amber-700',COMPLETADA:'bg-emerald-50 text-emerald-700',EN_DISPUTA:'bg-red-50 text-red-700'};
 
 export const BottomNav:React.FC<BottomNavProps>=({activeTab,onNavigateTab,onOpenPublish,onOpenWallet,onOpenProfile,onOpenAuth,onOpenMessages,onOpenNotifications,onOpenVerification,onOpenDisputes,onOpenPolicies})=>{
  const {user}=useAuth();
  const activeRole=String(user?.activeRole||user?.role||'').toUpperCase();
  const isWorker=activeRole==='TRABAJADOR'; const isClient=activeRole==='CLIENTE';
- const [more,setMore]=useState(false); const [contractsOpen,setContractsOpen]=useState(false); const [contracts,setContracts]=useState<ContractSummary[]>([]); const [contractsLoading,setContractsLoading]=useState(false); const [selected,setSelected]=useState<ContractDetail|null>(null); const [detailLoading,setDetailLoading]=useState(false); const [accepting,setAccepting]=useState(false); const [feedback,setFeedback]=useState('');
+ const [more,setMore]=useState(false); const [contractsOpen,setContractsOpen]=useState(false); const [contracts,setContracts]=useState<ContractSummary[]>([]); const [contractsLoading,setContractsLoading]=useState(false); const [selected,setSelected]=useState<ContractDetail|null>(null); const [accepting,setAccepting]=useState(false); const [feedback,setFeedback]=useState('');
  const go=(fn?:()=>void)=>{setMore(false);if(user)fn?.();else onOpenAuth('login');};
  const loadContracts=async()=>{if(!user)return;setContractsLoading(true);setFeedback('');try{const data=await api.get<{contracts:ContractSummary[]}>('/contracts');setContracts(data?.contracts||[]);}catch(e:any){setContracts([]);setFeedback(e?.message||'No se pudieron cargar los contratos.');}finally{setContractsLoading(false);}};
  useEffect(()=>{if(contractsOpen)void loadContracts();},[contractsOpen,user?.id]);
- const openContracts=()=>{setMore(false);setSelected(null);setContractsOpen(true);};
- const openDetail=async(c:ContractSummary)=>{setDetailLoading(true);setFeedback('');try{const data=await api.get<ContractDetail>(`/contracts/${c.service_id}`);setSelected(data);}catch(e:any){setFeedback(e?.message||'No se pudo abrir el contrato.');}finally{setDetailLoading(false);}};
- const accept=async()=>{if(!selected?.contract?.service_id)return;setAccepting(true);setFeedback('');try{const data=await api.post<any>(`/contracts/${selected.contract.service_id}/accept`,{});setFeedback(data?.message||'Aceptación registrada correctamente.');await loadContracts();const fresh=await api.get<ContractDetail>(`/contracts/${selected.contract.service_id}`);setSelected(fresh);}catch(e:any){setFeedback(e?.message||'No se pudo aceptar el contrato.');}finally{setAccepting(false);}};
+ const openContracts=()=>{setMore(false);setSelected(null);setFeedback('');setContractsOpen(true);};
+ const openDetail=async(c:ContractSummary)=>{setFeedback('');try{const data=await api.get<ContractDetail>(`/contracts/${c.service_id}`);setSelected(data);}catch(e:any){setFeedback(e?.message||'No se pudo abrir el contrato.');}};
+ const accept=async()=>{
+  if(!selected?.contract?.service_id)return;
+  setAccepting(true);setFeedback('');
+  try{
+   const data=await api.post<any>(`/contracts/${selected.contract.service_id}/accept`,{});
+   const message='Aceptado exitosamente';
+   setContracts(prev=>prev.map(c=>c.service_id===selected.contract.service_id?{...c,status:data?.status||'ACEPTADO',client_accepted_at:isClient?new Date().toISOString():c.client_accepted_at,worker_accepted_at:isWorker?new Date().toISOString():c.worker_accepted_at}:c));
+   setSelected(null);
+   setContractsOpen(false);
+   setMore(false);
+   setFeedback('');
+   window.alert(message);
+  }catch(e:any){setFeedback(e?.message||'No se pudo aceptar el contrato.');}finally{setAccepting(false);}
+ };
  const roleText=isWorker?'TRABAJADOR / TÉCNICO':'CLIENTE';
  return <>
   <div className="md:hidden fixed bottom-0 left-0 right-0 z-[70] bg-slate-900 border-t border-slate-800 text-slate-400 px-1.5 py-1.5 shadow-2xl"><div className="grid grid-cols-5 gap-1 max-w-lg mx-auto">
