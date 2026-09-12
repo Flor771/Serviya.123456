@@ -5,7 +5,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from app.core.config import settings
-from app.services.digital_contracts import ensure_digital_contracts
 from app.api.v1.router import api_router
 
 logger = logging.getLogger("serviya")
@@ -15,12 +14,10 @@ origins=["https://serviya-admin.onrender.com","https://serviya-com-odg.onrender.
 app.add_middleware(CORSMiddleware,allow_origins=origins,allow_credentials=True,allow_methods=["*"],allow_headers=["*"])
 app.include_router(api_router)
 
-digital_contracts_ready = False
-try:
-    ensure_digital_contracts()
-    digital_contracts_ready = True
-except Exception:
-    logger.exception("No se pudo inicializar el sistema de contratos digitales")
+# Contract tables/triggers are owned by Alembic migrations. Do not recreate the
+# legacy trigger at application startup, because it only handled escrow UPDATEs
+# and could overwrite the INSERT-capable migration trigger.
+digital_contracts_ready = True
 
 @app.get("/api/v1/health")
 def health_check():
