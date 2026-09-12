@@ -3,6 +3,7 @@ import {api} from '../services/api';
 import {ShieldCheck,RefreshCw} from 'lucide-react';
 import {AdminPanelV2} from './AdminPanelV2';
 import {AdminAlerts} from './AdminAlerts';
+import {AdminContractsWindow} from './AdminContractsWindow';
 
 export const AdminRoleWindows:React.FC=()=>{
  const [loading,setLoading]=useState(true); const [error,setError]=useState(''); const [refresh,setRefresh]=useState(0);
@@ -18,8 +19,9 @@ export const AdminRoleWindows:React.FC=()=>{
   </header>
   <main className="max-w-[1500px] mx-auto p-3 sm:p-5 space-y-4">
    <AdminAlerts/>
-   <section className="rounded-3xl bg-white border border-slate-200 shadow-sm p-5 sm:p-6"><p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Acceso administrativo único</p><h2 className="text-2xl font-black mt-1">Administrador</h2><p className="text-sm text-slate-500 mt-1 max-w-3xl">Una sola consola para administrar toda la plataforma: usuarios, servicios, verificaciones, depósitos, Custodia, liberaciones, retiros, cuentas bancarias, soporte, disputas y auditoría.</p></section>
+   <section className="rounded-3xl bg-white border border-slate-200 shadow-sm p-5 sm:p-6"><p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Acceso administrativo único</p><h2 className="text-2xl font-black mt-1">Administrador</h2><p className="text-sm text-slate-500 mt-1 max-w-3xl">Una sola consola para administrar toda la plataforma: usuarios, servicios, verificaciones, depósitos, Custodia, liberaciones, retiros, cuentas bancarias, soporte, disputas, contratos digitales y auditoría.</p></section>
    <AdminPanelV2/>
+   <AdminContractsWindow/>
   </main>
  </div>;
 };
