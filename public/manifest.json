@@ -11,18 +11,5 @@
   "background_color": "#F8FAFC",
   "categories": ["business", "services", "utilities"],
   "lang": "es-DO",
-  "icons": [
-    {
-      "src": "/serviya-icon.svg",
-      "sizes": "180x180",
-      "type": "image/svg+xml",
-      "purpose": "any"
-    },
-    {
-      "src": "/serviya-icon.svg",
-      "sizes": "180x180",
-      "type": "image/svg+xml",
-      "purpose": "maskable"
-    }
-  ]
+  "icons": [{"src":"/serviya-icon.svg","sizes":"180x180","type":"image/svg+xml","purpose":"any maskable"}]
 }
