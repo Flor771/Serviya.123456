@@ -23,8 +23,8 @@ def _record_wallet_ledger(db: Session, wallet_id: int, user_id: str, tx_type: st
     db.execute(text("INSERT INTO wallet_transactions (wallet_id,user_id,type,amount_rd,description,reference,status,created_at) VALUES (:wallet_id,:user_id,:type,:amount,:description,:reference,'EXITOSO',CURRENT_TIMESTAMP) ON CONFLICT (reference) DO NOTHING"), {"wallet_id": wallet_id, "user_id": user_id, "type": tx_type, "amount": amount, "description": description, "reference": reference})
 
 
-def _record_financial_movement(db: Session, wallet_id: int, movement_type: str, amount: float, description: str):
-    db.execute(text("INSERT INTO financial_movements (wallet_id,movement_type,amount_dop,description,created_at) SELECT :wallet_id,:movement_type,:amount,:description,CURRENT_TIMESTAMP WHERE NOT EXISTS (SELECT 1 FROM financial_movements WHERE wallet_id=:wallet_id AND movement_type=:movement_type AND description=:description)"), {"wallet_id": wallet_id, "movement_type": movement_type, "amount": amount, "description": description})
+def _record_financial_movement(db: Session, wallet_id: int, movement_type: str, amount: float, description: str, reference: str):
+    db.execute(text("INSERT INTO financial_movements (wallet_id,reference,movement_type,amount_dop,description,created_at) VALUES (:wallet_id,:reference,:movement_type,:amount,:description,CURRENT_TIMESTAMP) ON CONFLICT (reference) DO NOTHING"), {"wallet_id": wallet_id, "reference": reference, "movement_type": movement_type, "amount": amount, "description": description})
 
 
 def _role(user):
@@ -115,6 +115,7 @@ def withdraw(data: WithdrawSchema, current_user: User = Depends(get_current_acti
     description = f"Solicitud de retiro {ref} a {account['bank_name']} terminada en {str(account['account_number'])[-4:]}"
     _record_transaction(db, current_user.id, data.amount_rd, "RETIRO", "PENDIENTE", description, ref)
     _record_wallet_ledger(db, wallet.id, current_user.id, "RETIRO_SOLICITADO", data.amount_rd, description, ref)
-    _record_financial_movement(db, wallet.id, "RETIRO_SOLICITADO", -data.amount_rd, description)
+    movement_ref = f"WITHDRAWAL-REQUEST-{withdrawal}"
+    _record_financial_movement(db, wallet.id, "RETIRO_SOLICITADO", -data.amount_rd, description, movement_ref)
     db.commit()
     return {"message": f"Solicitud de retiro por RD$ {data.amount_rd:,.2f} enviada a revisión administrativa.", "withdrawal_id": withdrawal, "reference": ref, "bank_name": account["bank_name"], "account_number": account["account_number"], "available_rd": wallet.available_balance, "pending_rd": data.amount_rd}
