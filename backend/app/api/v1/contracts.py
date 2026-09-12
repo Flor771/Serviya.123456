@@ -55,46 +55,34 @@ def _contract_document(service, escrow, client, worker, admin_id, notes=""):
     payout = float(escrow.worker_payout_rd or round(total * 0.90, 2))
     content = {
         "document_type": "CONTRATO_DIGITAL_DE_PRESTACION_DE_SERVICIOS_SERVIYA",
-        "platform": "SERVIYA",
-        "version": 1,
+        "platform": "SERVIYA", "version": 1,
         "contract_number": f"SRV-CON-{str(service.id)[:8].upper()}-{str(escrow.id)[:8].upper()}",
-        "issued_at": generated_at,
-        "issued_by_admin_id": str(admin_id),
-        "service": {
-            "id": str(service.id), "title": service.title, "description": service.description,
-            "category": service.category_name, "subcategory": service.subcategory,
-            "province": service.province, "municipality": service.municipality,
-            "address_approx": service.address_approx, "service_date": service.service_date,
-            "service_time": service.service_time, "estimated_duration": service.estimated_duration,
-            "requirements": service.requirements or [], "images": service.images or [],
-        },
-        "agreement": {
-            "negotiation_status": service.negotiation_status,
-            "negotiated_price_rd": float(service.negotiated_price_rd or 0),
-            "price_agreed_at": service.price_agreed_at.isoformat() if service.price_agreed_at else None,
-            "payment_type": service.payment_type,
-        },
-        "parties": {
-            "client": {"id": str(client.id), "name": f"{client.first_name} {client.last_name}", "email": client.email, "phone": client.phone},
-            "worker": {"id": str(worker.id), "name": f"{worker.first_name} {worker.last_name}", "email": worker.email, "phone": worker.phone},
-        },
-        "custody": {
-            "escrow_id": str(escrow.id), "status": escrow.status, "total_amount_rd": total,
-            "commission_percent": 10.0, "commission_rd": commission, "worker_payout_rd": payout,
-            "payment_method": escrow.payment_method, "voucher_received": bool(escrow.voucher_url),
-            "custody_activated_at": generated_at,
-        },
-        "terms": [
-            "El precio de este contrato corresponde al precio final acordado entre cliente y trabajador.",
-            "El pago fue depositado para este trabajo específico y quedó retenido en Custodia SERVIYA tras verificación administrativa.",
-            "El trabajador se obliga a ejecutar el servicio descrito y a entregar evidencia de finalización cuando corresponda.",
-            "La confirmación del cliente no libera automáticamente los fondos; la liberación final corresponde exclusivamente a Administración SERVIYA.",
-            "SERVIYA registra las actuaciones, estados, comprobantes y aprobaciones relacionadas con este contrato para fines de trazabilidad y prueba.",
-            "Las partes deben conservar este documento y sus comprobantes. Las controversias se tramitan mediante el procedimiento de disputas de SERVIYA.",
-            "La garantía y sus condiciones se rigen por las políticas vigentes de SERVIYA asociadas al servicio.",
-        ],
+        "issued_at": generated_at, "issued_by_admin_id": str(admin_id),
+        "service": {"id": str(service.id), "title": service.title, "description": service.description,
+                    "category": service.category_name, "subcategory": service.subcategory,
+                    "province": service.province, "municipality": service.municipality,
+                    "address_approx": service.address_approx, "service_date": service.service_date,
+                    "service_time": service.service_time, "estimated_duration": service.estimated_duration,
+                    "requirements": service.requirements or [], "images": service.images or []},
+        "agreement": {"negotiation_status": service.negotiation_status,
+                      "negotiated_price_rd": float(service.negotiated_price_rd or 0),
+                      "price_agreed_at": service.price_agreed_at.isoformat() if service.price_agreed_at else None,
+                      "payment_type": service.payment_type},
+        "parties": {"client": {"id": str(client.id), "name": f"{client.first_name} {client.last_name}", "email": client.email, "phone": client.phone},
+                    "worker": {"id": str(worker.id), "name": f"{worker.first_name} {worker.last_name}", "email": worker.email, "phone": worker.phone}},
+        "custody": {"escrow_id": str(escrow.id), "status": escrow.status, "total_amount_rd": total,
+                     "commission_percent": 10.0, "commission_rd": commission, "worker_payout_rd": payout,
+                     "payment_method": escrow.payment_method, "voucher_received": bool(escrow.voucher_url),
+                     "custody_activated_at": generated_at},
+        "terms": ["El precio de este contrato corresponde al precio final acordado entre cliente y trabajador.",
+                  "El pago fue depositado para este trabajo específico y quedó retenido en Custodia SERVIYA tras verificación administrativa.",
+                  "El trabajador se obliga a ejecutar el servicio descrito y a entregar evidencia de finalización cuando corresponda.",
+                  "La confirmación del cliente no libera automáticamente los fondos; la liberación final corresponde exclusivamente a Administración SERVIYA.",
+                  "SERVIYA registra las actuaciones, estados, comprobantes y aprobaciones relacionadas con este contrato para fines de trazabilidad y prueba.",
+                  "Las partes deben conservar este documento y sus comprobantes. Las controversias se tramitan mediante el procedimiento de disputas de SERVIYA.",
+                  "La garantía y sus condiciones se rigen por las políticas vigentes de SERVIYA asociadas al servicio."],
         "admin_notes": notes or "Depósito verificado y contrato digital emitido.",
-        "legal_notice": "Este documento electrónico constituye un registro de la operación, del acuerdo y de las actuaciones registradas en SERVIYA. Su valor probatorio o fuerza contractual frente a terceros dependerá de la legislación aplicable y de las formalidades que dicha legislación exija; para operaciones que requieran una formalidad especial se recomienda asesoría legal y, cuando corresponda, firma electrónica cualificada o notarización.",
+        "legal_notice": "Este documento electrónico constituye un registro de la operación, del acuerdo y de las actuaciones registradas en SERVIYA. Su valor probatorio o fuerza contractual frente a terceros dependerá de la legislación aplicable y de las formalidades que dicha legislación exija; para operaciones que requieran una formalidad especial se recomienda asesoría legal y, cuando corresponda, firma electrónica cualificada o notarización."
     }
     content_text = json.dumps(content, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
     content_hash = hashlib.sha256(content_text.encode("utf-8")).hexdigest()
@@ -110,19 +98,15 @@ def list_contracts(current_user: User = Depends(get_current_active_user), db: Se
         row = db.execute(text("SELECT id,contract_number,status,version,content_hash,generated_at,client_accepted_at,worker_accepted_at,locked_at FROM digital_contracts WHERE service_id=:sid"), {"sid": service.id}).mappings().first()
         status_str = service.status.value if hasattr(service.status, "value") else str(service.status)
         escrow = db.query(Escrow).filter(Escrow.service_id == service.id).order_by(Escrow.created_at.desc()).first()
-        contracts.append({
-            "id": row["id"] if row else f"contract-{service.id}", "service_id": service.id,
+        contracts.append({"id": row["id"] if row else f"contract-{service.id}", "service_id": service.id,
             "title": service.title, "price_rd": service.negotiated_price_rd or service.price_rd,
             "status": row["status"] if row else "NO_EMITIDO", "service_status": status_str,
             "escrow_status": escrow.status if escrow else "NO_FINANCIADO",
-            "contract_number": row["contract_number"] if row else None,
-            "version": row["version"] if row else None, "content_hash": row["content_hash"] if row else None,
-            "generated_at": str(row["generated_at"]) if row else None,
+            "contract_number": row["contract_number"] if row else None, "version": row["version"] if row else None,
+            "content_hash": row["content_hash"] if row else None, "generated_at": str(row["generated_at"]) if row else None,
             "client_accepted_at": str(row["client_accepted_at"]) if row and row["client_accepted_at"] else None,
             "worker_accepted_at": str(row["worker_accepted_at"]) if row and row["worker_accepted_at"] else None,
-            "locked_at": str(row["locked_at"]) if row and row["locked_at"] else None,
-        })
-    db.commit()
+            "locked_at": str(row["locked_at"]) if row and row["locked_at"] else None})
     return {"contracts": contracts}
 
 
@@ -167,20 +151,34 @@ def accept_contract(id: str, request: Request, current_user: User = Depends(get_
     accepted_at = datetime.utcnow()
     acceptance_payload = f"{row['content_hash']}|{current_user.id}|{role}|{accepted_at.isoformat()}|{ip}|{user_agent}"
     acceptance_hash = hashlib.sha256(acceptance_payload.encode("utf-8")).hexdigest()
-    other_already_accepted = row["worker_accepted_at"] is not None if role == "CLIENTE" else row["client_accepted_at"] is not None
 
     if role == "CLIENTE":
-        db.execute(text("UPDATE digital_contracts SET client_accepted_at=:at,client_acceptance_ip=:ip,client_user_agent=:ua,client_acceptance_hash=:h,status=CASE WHEN worker_accepted_at IS NOT NULL THEN 'ACEPTADO_POR_AMBOS' ELSE 'ACEPTADO_POR_CLIENTE' END,locked_at=CASE WHEN worker_accepted_at IS NOT NULL THEN COALESCE(locked_at,CURRENT_TIMESTAMP) ELSE locked_at END WHERE service_id=:sid AND locked_at IS NULL"), {"sid":service.id,"at":accepted_at,"ip":ip,"ua":user_agent,"h":acceptance_hash})
+        update_sql = text("""UPDATE digital_contracts
+            SET client_accepted_at=:at, client_acceptance_ip=:ip, client_user_agent=:ua,
+                client_acceptance_hash=:h,
+                status=CASE WHEN worker_accepted_at IS NOT NULL THEN 'ACEPTADO_POR_AMBOS' ELSE 'ACEPTADO_POR_CLIENTE' END,
+                locked_at=CASE WHEN worker_accepted_at IS NOT NULL THEN COALESCE(locked_at,CURRENT_TIMESTAMP) ELSE locked_at END
+            WHERE service_id=:sid AND locked_at IS NULL
+            RETURNING status,client_accepted_at,worker_accepted_at,locked_at,client_acceptance_hash,worker_acceptance_hash""")
     else:
-        db.execute(text("UPDATE digital_contracts SET worker_accepted_at=:at,worker_acceptance_ip=:ip,worker_user_agent=:ua,worker_acceptance_hash=:h,status=CASE WHEN client_accepted_at IS NOT NULL THEN 'ACEPTADO_POR_AMBOS' ELSE 'ACEPTADO_POR_TRABAJADOR' END,locked_at=CASE WHEN client_accepted_at IS NOT NULL THEN COALESCE(locked_at,CURRENT_TIMESTAMP) ELSE locked_at END WHERE service_id=:sid AND locked_at IS NULL"), {"sid":service.id,"at":accepted_at,"ip":ip,"ua":user_agent,"h":acceptance_hash})
+        update_sql = text("""UPDATE digital_contracts
+            SET worker_accepted_at=:at, worker_acceptance_ip=:ip, worker_user_agent=:ua,
+                worker_acceptance_hash=:h,
+                status=CASE WHEN client_accepted_at IS NOT NULL THEN 'ACEPTADO_POR_AMBOS' ELSE 'ACEPTADO_POR_TRABAJADOR' END,
+                locked_at=CASE WHEN client_accepted_at IS NOT NULL THEN COALESCE(locked_at,CURRENT_TIMESTAMP) ELSE locked_at END
+            WHERE service_id=:sid AND locked_at IS NULL
+            RETURNING status,client_accepted_at,worker_accepted_at,locked_at,client_acceptance_hash,worker_acceptance_hash""")
 
+    final_row = db.execute(update_sql, {"sid": service.id, "at": accepted_at, "ip": ip, "ua": user_agent, "h": acceptance_hash}).mappings().first()
+    if not final_row:
+        raise HTTPException(status_code=409, detail="No se pudo registrar la aceptación del contrato. El contrato puede estar bloqueado; actualiza la ventana e inténtalo nuevamente.")
+
+    other_already_accepted = final_row["worker_accepted_at"] is not None if role == "CLIENTE" else final_row["client_accepted_at"] is not None
     _notify(db, service.worker_id if role == "CLIENTE" else service.client_id, "Contrato digital aceptado", f"{role} aceptó el contrato {row['contract_number']}. Hash de integridad: {row['content_hash']}", "CONTRACT_ACCEPTED", service.id)
     if other_already_accepted:
         _notify(db, service.client_id, "Contrato digital bloqueado", f"El contrato {row['contract_number']} fue aceptado por ambas partes y quedó bloqueado como evidencia.", "CONTRACT_LOCKED", service.id)
         _notify(db, service.worker_id, "Contrato digital bloqueado", f"El contrato {row['contract_number']} fue aceptado por ambas partes y quedó bloqueado como evidencia.", "CONTRACT_LOCKED", service.id)
     db.commit()
-
-    final_row = db.execute(text("SELECT status,client_accepted_at,worker_accepted_at,locked_at,client_acceptance_hash,worker_acceptance_hash FROM digital_contracts WHERE service_id=:sid"), {"sid":service.id}).mappings().first()
     final_hash = final_row["client_acceptance_hash"] if role == "CLIENTE" else final_row["worker_acceptance_hash"]
     return {"message":"Aceptación registrada como evidencia electrónica.","contract_number":row["contract_number"],"content_hash":row["content_hash"],"acceptance_hash":final_hash,"accepted_at":str(final_row["client_accepted_at"] if role == "CLIENTE" else final_row["worker_accepted_at"]),"status":final_row["status"],"locked_at":str(final_row["locked_at"]) if final_row["locked_at"] else None}
 
@@ -188,8 +186,7 @@ def accept_contract(id: str, request: Request, current_user: User = Depends(get_
 @router.get("/{id}/document")
 def contract_document(id: str, current_user: User = Depends(get_current_active_user), db: Session = Depends(get_db)):
     result = get_contract(id, current_user, db)
-    document = result["document"]
-    return {"contract_number": result["contract"]["contract_number"], "format": "SERVIYA_DIGITAL_CONTRACT_JSON", "sha256": result["integrity"]["sha256"], "document": document}
+    return {"contract_number": result["contract"]["contract_number"], "format": "SERVIYA_DIGITAL_CONTRACT_JSON", "sha256": result["integrity"]["sha256"], "document": result["document"]}
 
 
 @router.post("/{id}/confirm-completion")
