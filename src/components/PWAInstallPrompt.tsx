@@ -9,29 +9,17 @@ export const PWAInstallPrompt: React.FC = () => {
   if (isInstalled) return null;
 
   const handleInstall = async () => {
-    if (isInstallable) {
-      await install();
-      return;
-    }
+    if (isInstallable) { await install(); return; }
     setShowGuide(true);
   };
 
   return (
     <>
-      <div className="fixed right-3 bottom-[84px] sm:right-5 sm:bottom-5 z-40">
-        <button
-          id="serviya-install-button"
-          type="button"
-          onClick={handleInstall}
-          className="inline-flex items-center gap-1.5 rounded-full bg-slate-900/95 text-white px-2.5 py-1.5 sm:px-3 sm:py-2 shadow-md border border-white/20 active:scale-95 hover:bg-slate-800 transition font-bold text-[10px] sm:text-xs"
-          title="Instalar SERVIYA en este dispositivo"
-          aria-label="Instalar SERVIYA en este dispositivo"
-        >
-          {isInstallable ? <Download className="w-3.5 h-3.5" /> : <Smartphone className="w-3.5 h-3.5" />}
-          <span>Instalar</span>
+      <div className="fixed right-2.5 bottom-[78px] sm:right-4 sm:bottom-4 z-40">
+        <button id="serviya-install-button" type="button" onClick={handleInstall} className="inline-flex items-center gap-1 rounded-full bg-slate-900/95 text-white px-2 py-1 sm:px-2.5 sm:py-1.5 shadow-md border border-white/20 active:scale-95 hover:bg-slate-800 transition font-bold text-[9px] sm:text-[10px]" title="Instalar SERVIYA" aria-label="Instalar SERVIYA">
+          {isInstallable ? <Download className="w-3 h-3" /> : <Smartphone className="w-3 h-3" />}<span>Instalar</span>
         </button>
       </div>
-
       {showGuide && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/70 backdrop-blur-sm p-4">
           <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200 relative animate-in fade-in zoom-in duration-200">
