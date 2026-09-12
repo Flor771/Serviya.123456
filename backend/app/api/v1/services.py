@@ -85,6 +85,50 @@ def create_service(data: ServiceCreate, current_user: User = Depends(get_current
     db.add(s); db.commit(); db.refresh(s)
     return {"message": "Servicio publicado", "service": {"id": s.id, "title": s.title, "status": s.status.value if hasattr(s.status, "value") else str(s.status)}}
 
+@router.get("/{service_id}/applications")
+def get_service_applications(service_id: str, current_user: User = Depends(get_current_active_user), db: Session = Depends(get_db)):
+    """Return the applications for the owner of a service.
+
+    This endpoint powers the Client's "Postulaciones recibidas" window. It is
+    intentionally restricted to the service owner so proposal and worker data
+    cannot be exposed to unrelated users.
+    """
+    service = db.query(Service).filter(Service.id == service_id).first()
+    if not service:
+        raise HTTPException(status_code=404, detail="Servicio no encontrado")
+    if service.client_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Solo el cliente creador puede ver las postulaciones")
+
+    applications = db.query(Application).filter(Application.service_id == service_id).order_by(Application.created_at.desc()).all()
+    out = []
+    for app in applications:
+        worker = db.query(User).filter(User.id == app.worker_id).first()
+        if not worker:
+            continue
+        worker_profile = getattr(worker, "worker_profile", None)
+        status = app.status.value if hasattr(app.status, "value") else str(app.status)
+        out.append({
+            "id": str(app.id),
+            "service_id": str(app.service_id),
+            "worker_id": str(app.worker_id),
+            "worker_name": f"{worker.first_name} {worker.last_name}",
+            "worker_profession": getattr(worker_profile, "specialties", None) or "Trabajador / Técnico",
+            "worker_rating": float(getattr(worker, "rating", 5.0) or 5.0),
+            "worker_is_verified": bool(getattr(worker, "is_verified", False)),
+            "message": app.message,
+            "offered_price_rd": app.offered_price_rd,
+            "availability_note": app.availability_note,
+            "status": status,
+            "created_at": str(app.created_at),
+        })
+    return {
+        "service_id": str(service_id),
+        "count": len(out),
+        "applications": out,
+        "negotiation_status": getattr(service, "negotiation_status", None),
+        "negotiated_price_rd": getattr(service, "negotiated_price_rd", None),
+    }
+
 @router.get("/{service_id}")
 def get_service(service_id: str, db: Session = Depends(get_db)):
     s = db.query(Service).filter(Service.id == service_id).first()
