@@ -24,7 +24,13 @@ def _record_wallet_ledger(db: Session, wallet_id: int, user_id: str, tx_type: st
 
 
 def _record_financial_movement(db: Session, wallet_id: int, movement_type: str, amount: float, description: str, reference: str):
-    db.execute(text("INSERT INTO financial_movements (wallet_id,reference,movement_type,amount_dop,description,created_at) VALUES (:wallet_id,:reference,:movement_type,:amount,:description,CURRENT_TIMESTAMP) ON CONFLICT (reference) DO NOTHING"), {"wallet_id": wallet_id, "reference": reference, "movement_type": movement_type, "amount": amount, "description": description})
+    db.execute(text("""
+        INSERT INTO financial_movements (wallet_id,reference,movement_type,amount_dop,description,created_at)
+        SELECT :wallet_id,:reference,:movement_type,:amount,:description,CURRENT_TIMESTAMP
+        WHERE NOT EXISTS (
+            SELECT 1 FROM financial_movements WHERE reference = :reference
+        )
+    """), {"wallet_id": wallet_id, "reference": reference, "movement_type": movement_type, "amount": amount, "description": description})
 
 
 def _role(user):
@@ -65,10 +71,6 @@ def get_wallet(current_user: User = Depends(get_current_active_user), db: Sessio
     tx_rows = db.execute(text("SELECT id, amount, type, status, reference_code, created_at FROM transactions WHERE user_id=:user_id ORDER BY created_at DESC"), {"user_id": current_user.id}).mappings().all()
     transactions = [{"id": r["id"], "type": r["type"], "amount_rd": float(r["amount"]), "description": r["type"], "reference": r["reference_code"], "status": r["status"], "created_at": str(r["created_at"])} for r in tx_rows]
 
-    # CLIENTE no tiene billetera de depósito. Los fondos solo se pagan directamente
-    # a la Custodia de un trabajo que ya fue negociado y acordado. client_wallets
-    # puede existir internamente para registrar reembolsos administrativos, pero
-    # nunca se expone como saldo para depositar ni como fuente de pago de Custodia.
     if role_str == "CLIENTE":
         refunded = db.execute(text("SELECT COALESCE(total_refunded,0) FROM client_wallets WHERE client_id=:client_id"), {"client_id": current_user.id}).scalar() or 0
         return {
@@ -118,8 +120,6 @@ def get_wallet(current_user: User = Depends(get_current_active_user), db: Sessio
 
 @router.post("/deposit")
 def deposit(current_user: User = Depends(get_current_active_user)):
-    # No existe depósito general de saldo. El cliente paga únicamente después de
-    # negociar/acordar un trabajo y ese pago se registra directamente en Custodia.
     raise HTTPException(status_code=status.HTTP_410_GONE, detail="Los depósitos generales están deshabilitados. Primero negocia y acuerda un trabajo; luego paga ese trabajo directamente en Custodia SERVIYA.")
 
 
