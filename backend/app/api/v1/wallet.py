@@ -31,6 +31,34 @@ def _role(user):
     return user.role.value if hasattr(user.role, "value") else str(user.role)
 
 
+@router.get("/bank-accounts")
+def get_official_bank_accounts(current_user: User = Depends(get_current_active_user), db: Session = Depends(get_db)):
+    """Return only active SERVIYA-owned bank accounts used for job custody deposits."""
+    rows = db.execute(text("""
+        SELECT id, bank_name, account_number, account_type, account_holder,
+               rnc_cedula, is_active, is_primary
+        FROM bank_accounts
+        WHERE is_active = true
+          AND account_holder ILIKE '%SERVIYA%'
+        ORDER BY is_primary DESC, id DESC
+    """)).mappings().all()
+    return {
+        "bank_accounts": [
+            {
+                "id": r["id"],
+                "bank_name": r["bank_name"],
+                "account_number": r["account_number"],
+                "account_type": r["account_type"],
+                "account_holder": r["account_holder"],
+                "rnc_cedula": r["rnc_cedula"],
+                "is_active": r["is_active"],
+                "is_primary": r["is_primary"],
+            }
+            for r in rows
+        ]
+    }
+
+
 @router.get("")
 def get_wallet(current_user: User = Depends(get_current_active_user), db: Session = Depends(get_db)):
     role_str = _role(current_user)
