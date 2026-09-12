@@ -7,25 +7,23 @@ interface BeforeInstallPromptEvent extends Event {
 
 export function usePWAInstall() {
   const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
-  const [isInstalled, setIsInstalled] = useState<boolean>(false);
-  const [isIOS, setIsIOS] = useState<boolean>(false);
+  const [isInstalled, setIsInstalled] = useState(false);
+  const [isIOS, setIsIOS] = useState(false);
 
   useEffect(() => {
-    // Check if app is running in standalone mode (already installed)
-    const isStandalone =
+    const standalone =
       window.matchMedia('(display-mode: standalone)').matches ||
       (window.navigator as unknown as { standalone?: boolean }).standalone === true;
-    
-    setIsInstalled(isStandalone);
+    setIsInstalled(standalone);
 
-    // Detect iOS user agent
-    const userAgent = window.navigator.userAgent.toLowerCase();
-    const isIOSDevice = /iphone|ipad|ipod/.test(userAgent);
-    setIsIOS(isIOSDevice);
+    const ua = window.navigator.userAgent.toLowerCase();
+    const iOSByUA = /iphone|ipad|ipod/.test(ua);
+    const iPadOS = /macintosh/.test(ua) && navigator.maxTouchPoints > 1;
+    setIsIOS(iOSByUA || iPadOS);
 
-    const handleBeforeInstallPrompt = (e: Event) => {
-      e.preventDefault();
-      setDeferredPrompt(e as BeforeInstallPromptEvent);
+    const handleBeforeInstallPrompt = (event: Event) => {
+      event.preventDefault();
+      setDeferredPrompt(event as BeforeInstallPromptEvent);
     };
 
     const handleAppInstalled = () => {
@@ -46,9 +44,9 @@ export function usePWAInstall() {
     if (!deferredPrompt) return false;
     await deferredPrompt.prompt();
     const { outcome } = await deferredPrompt.userChoice;
+    setDeferredPrompt(null);
     if (outcome === 'accepted') {
       setIsInstalled(true);
-      setDeferredPrompt(null);
       return true;
     }
     return false;
@@ -58,6 +56,6 @@ export function usePWAInstall() {
     isInstallable: !!deferredPrompt,
     isInstalled,
     isIOS,
-    install
+    install,
   };
 }
