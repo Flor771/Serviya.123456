@@ -23,7 +23,10 @@ def _process_completed(withdrawal_id: int, admin_user: User, db: Session):
     wallet = db.execute(text("SELECT id FROM wallets WHERE worker_id=:worker_id FOR UPDATE"), {"worker_id": row["worker_id"]}).mappings().first()
     if not wallet:
         raise HTTPException(400, "El trabajador no tiene billetera.")
-    db.execute(text("UPDATE withdrawals SET status='COMPLETADO' WHERE id=:id AND status='PENDIENTE'"), {"id": withdrawal_id})
+    result = db.execute(text("UPDATE withdrawals SET status='COMPLETADO' WHERE id=:id AND status='PENDIENTE'"), {"id": withdrawal_id})
+    if result.rowcount != 1:
+        db.rollback()
+        raise HTTPException(409, "El retiro cambió de estado antes de procesarse; no se aplicaron fondos.")
     db.execute(text("UPDATE wallets SET total_withdrawn=COALESCE(total_withdrawn,0)+:amount WHERE id=:wallet_id"), {"amount": amount, "wallet_id": wallet["id"]})
     db.execute(text("UPDATE transactions SET status='COMPLETADO' WHERE user_id=:uid AND type='RETIRO' AND status='PENDIENTE' AND reference_code=:reference"), {"uid": row["worker_id"], "reference": row["reference_code"]})
     process_ref = f"WITHDRAWAL-{withdrawal_id}"
@@ -58,7 +61,10 @@ def update_withdrawal_status(withdrawal_id: int, data: WithdrawalStatusBody, adm
     wallet = db.execute(text("SELECT id FROM wallets WHERE worker_id=:worker_id FOR UPDATE"), {"worker_id": row["worker_id"]}).mappings().first()
     if not wallet:
         raise HTTPException(400, "El trabajador no tiene billetera.")
-    db.execute(text("UPDATE withdrawals SET status='RECHAZADO' WHERE id=:id AND status='PENDIENTE'"), {"id": withdrawal_id})
+    result = db.execute(text("UPDATE withdrawals SET status='RECHAZADO' WHERE id=:id AND status='PENDIENTE'"), {"id": withdrawal_id})
+    if result.rowcount != 1:
+        db.rollback()
+        raise HTTPException(409, "El retiro cambió de estado antes de rechazarse; no se devolvió saldo.")
     db.execute(text("UPDATE wallets SET available_balance=COALESCE(available_balance,0)+:amount WHERE id=:wallet_id"), {"amount": amount, "wallet_id": wallet["id"]})
     db.execute(text("UPDATE transactions SET status='RECHAZADO' WHERE user_id=:uid AND type='RETIRO' AND status='PENDIENTE' AND reference_code=:reference"), {"uid": row["worker_id"], "reference": row["reference_code"]})
     reject_ref = f"WITHDRAWAL-REJECT-{withdrawal_id}"
