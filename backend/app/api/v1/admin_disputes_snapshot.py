@@ -55,7 +55,6 @@ def resolve_dispute_snapshot(dispute_id: str, data: DisputeResolution, admin_use
         raise HTTPException(404, "Disputa activa no encontrada")
     if not dispute["escrow_id"] or dispute["escrow_status"] not in ("EN_DISPUTA", "RETENIDO"):
         raise HTTPException(409, "La disputa no tiene una Custodia activa que pueda resolverse")
-
     if resolution == "MANTENER":
         db.execute(text("UPDATE disputes SET status='EN_REVISION',resolution_notes=:notes WHERE id=:id"), {"id": dispute_id, "notes": notes})
         db.execute(text("UPDATE escrows SET status='EN_DISPUTA' WHERE id=:id"), {"id": dispute["escrow_id"]})
@@ -65,7 +64,6 @@ def resolve_dispute_snapshot(dispute_id: str, data: DisputeResolution, admin_use
         _audit(db, admin_user.id, "ADMIN_DISPUTE_REVIEW", dispute_id, notes)
         db.commit()
         return {"message": "La disputa quedó en revisión y el dinero permanece congelado en Custodia.", "status": "EN_REVISION", "resolution": "MANTENER"}
-
     gross = float(dispute["gross_service_amount_rd"] if dispute["gross_service_amount_rd"] is not None else (dispute["total_amount_rd"] or 0))
     commission = float(dispute["platform_commission_rd"] if dispute["platform_commission_rd"] is not None else (dispute["commission_amount_rd"] or 0))
     isr = float(dispute["isr_withheld_rd"] or 0)
@@ -81,7 +79,6 @@ def resolve_dispute_snapshot(dispute_id: str, data: DisputeResolution, admin_use
             raise HTTPException(409, "El snapshot fiscal no cuadra y la disputa no puede liquidarse automáticamente.")
     elif abs((commission + net) - gross) > 0.01:
         raise HTTPException(409, "La liquidación histórica no cuadra con el bruto.")
-
     if resolution == "TRABAJADOR":
         wallet = db.execute(text("SELECT id,pending_custody_balance FROM wallets WHERE worker_id=:w FOR UPDATE"), {"w": dispute["worker_id"]}).mappings().first()
         if not wallet:
@@ -117,7 +114,6 @@ def resolve_dispute_snapshot(dispute_id: str, data: DisputeResolution, admin_use
         message = f"Administración resolvió la disputa a favor del cliente. RD$ {gross:,.2f} fue acreditado como reembolso administrativo."
         _notify(db, dispute["client_id"], "Disputa resuelta a tu favor", message, "DISPUTA_RESUELTA", dispute_id)
         _notify(db, dispute["worker_id"], "Disputa resuelta", f"Administración resolvió la disputa a favor del cliente. Motivo: {notes}", "DISPUTA_RESUELTA", dispute_id)
-
     db.execute(text("UPDATE disputes SET status='RESUELTA',resolution_notes=:notes WHERE id=:id"), {"id": dispute_id, "notes": notes})
     _audit(db, admin_user.id, f"ADMIN_DISPUTE_RESOLVE_{resolution}", dispute_id, f"{notes} | gross={gross}; commission={commission}; isr={isr}; itbis={itbis}; net={net}; fiscal_rule={dispute['fiscal_rule_code'] or 'PENDIENTE_CLASIFICACION'}; tax_mode={dispute['tax_mode'] or 'CONFIGURACION'}")
     db.commit()
