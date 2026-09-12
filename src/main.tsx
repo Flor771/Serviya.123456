@@ -2,9 +2,9 @@ import { StrictMode, type ComponentType } from 'react';
 import { createRoot } from 'react-dom/client';
 import * as AppModule from './App.tsx';
 import './index.css';
+import { PWAInstallPrompt } from './components/PWAInstallPrompt';
 
-// App.tsx currently exposes the root component as a named export.
-// Resolve it without requiring a default export so Render's Vite build succeeds.
+// App.tsx actualmente expone el componente raíz como export nombrado.
 const App = (AppModule as typeof AppModule & { default?: ComponentType }).default
   ?? (AppModule as typeof AppModule & { App?: ComponentType }).App;
 
@@ -15,5 +15,6 @@ if (!App) {
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <App />
+    <PWAInstallPrompt />
   </StrictMode>,
 );
