@@ -9,7 +9,7 @@ interface SavedBankAccount{ id:number|string; bank_name:string; account_type:str
 interface PaymentReceipt{service_id:string;reference:string;status:string;service_title:string;service_description:string;client_name?:string;worker_name?:string;worker_bank_name?:string;worker_account_type?:string;worker_account_number?:string;worker_account_holder?:string;scheduled_date?:string;scheduled_time?:string;estimated_duration?:string;agreement_date?:string;custody_at?:string;started_at?:string;completed_at?:string;released_at?:string;work_duration_label?:string;completion_summary?:string;payment_method?:string;total_paid_by_client_rd:number;commission_percent:number;commission_rd:number;worker_net_rd:number;rules:string[]}
 const money=(v:number)=>`RD$ ${Number(v||0).toLocaleString('es-DO',{minimumFractionDigits:2,maximumFractionDigits:2})}`;
 const dateTime=(v?:string)=>v?new Date(v).toLocaleString('es-DO'):'No registrado';
-const mask=(n:string)=>String(n||'').length<=4?String(n||''):`•••• ${String(n).slice(-4)}`;
+const mask=(n:string)=>{const value=String(n||'');return value.length<=4?value:'•••• '+value.slice(-4)};
 type WindowName='history'|'bank'|'receipts'|null;
 
 export const WalletView:React.FC=()=>{
