@@ -3,7 +3,7 @@ from typing import Sequence, Union
 from alembic import op
 import sqlalchemy as sa
 
-revision: str = "027_contract_issue_on_escrow_create"
+revision: str = "027_issue_contracts"
 down_revision: Union[str, None] = "026_escrow_ledger_linkage"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
