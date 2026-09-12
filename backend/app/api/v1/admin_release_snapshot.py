@@ -70,13 +70,16 @@ def approve_release_snapshot(service_id: str, data: ReleaseApproval, admin_user:
     now = datetime.utcnow()
     release_ref = f"ADMIN-RELEASE-{service_id[:8].upper()}"
 
-    db.execute(text("""
+    result = db.execute(text("""
         UPDATE escrows
         SET status='LIBERADO', released_at=:now,
             commission_amount_rd=:commission,
             worker_payout_rd=:net
         WHERE id=:id AND status='PENDIENTE_APROBACION'
     """), {"id": escrow["id"], "now": now, "commission": commission, "net": net})
+    if result.rowcount != 1:
+        db.rollback()
+        raise HTTPException(409, "La liberación cambió de estado antes de completarse; no se aplicaron fondos.")
 
     db.execute(text("""
         UPDATE wallets
