@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { ArrowRight, BellRing, ChevronLeft, ChevronRight, Image as ImageIcon, X } from 'lucide-react';
 import { api } from '../services/api';
+import { ExamplesSection } from './ExamplesSection';
 
 type Announcement = {
   id: number;
@@ -24,11 +25,10 @@ export const AnnouncementsSection: React.FC<{ onNavigateTab?: (tab: string) => v
       .catch(() => setItems([]));
   }, []);
 
-  if (!items.length) return null;
   const priorityClass = (p: string) => p === 'URGENTE' ? 'bg-red-50 text-red-700 border-red-100' : p === 'IMPORTANTE' ? 'bg-amber-50 text-amber-700 border-amber-100' : 'bg-blue-50 text-blue-700 border-blue-100';
 
-  return <>
-    <section className="space-y-4">
+  return <div className="space-y-8">
+    {items.length > 0 && <section className="space-y-4">
       <div className="flex items-end justify-between gap-3">
         <div><p className="text-[11px] font-black uppercase tracking-widest text-blue-600">Comunicación oficial</p><h2 className="mt-1 text-2xl font-black text-slate-900">📢 Anuncios</h2><p className="mt-1 text-xs text-slate-500">Novedades y avisos oficiales de SERVIYA.</p></div>
       </div>
@@ -38,7 +38,9 @@ export const AnnouncementsSection: React.FC<{ onNavigateTab?: (tab: string) => v
           <div className="p-5"><span className={`inline-flex rounded-lg border px-2 py-1 text-[10px] font-black uppercase ${priorityClass(item.priority)}`}>{item.priority}</span><h3 className="mt-3 font-black text-slate-900">{item.title}</h3><p className="mt-1 line-clamp-3 text-xs leading-relaxed text-slate-500">{item.body}</p><span className="mt-4 inline-flex items-center gap-1 text-xs font-black text-blue-600">Ver anuncio <ArrowRight className="w-4 h-4" /></span></div>
         </button>)}
       </div>
-    </section>
+    </section>}
+
+    <ExamplesSection />
 
     {selected && <div className="fixed inset-0 z-[80] bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setSelected(null)}>
       <div className="w-full max-w-2xl max-h-[90vh] overflow-auto rounded-3xl bg-white shadow-2xl" onClick={e => e.stopPropagation()}>
@@ -47,5 +49,5 @@ export const AnnouncementsSection: React.FC<{ onNavigateTab?: (tab: string) => v
         <div className="p-6"><h2 className="text-2xl font-black text-slate-900">{selected.title}</h2><p className="mt-4 whitespace-pre-line text-sm leading-relaxed text-slate-600">{selected.body}</p>{selected.action_label && <button onClick={() => { if (selected.action_tab && onNavigateTab) onNavigateTab(selected.action_tab); setSelected(null); }} className="mt-6 inline-flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-3 text-sm font-black text-white">{selected.action_label}<ArrowRight className="w-4 h-4"/></button>}</div>
       </div>
     </div>}
-  </>;
+  </div>;
 };
