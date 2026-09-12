@@ -38,7 +38,9 @@ def resolve_dispute_snapshot(dispute_id:str,data:DisputeResolution,admin_user:Us
     elif abs((commission+net)-gross)>0.01: raise HTTPException(409,"La liquidación histórica no cuadra con el bruto.")
     if resolution=="TRABAJADOR":
         wallet=db.execute(text("SELECT id,pending_custody_balance FROM wallets WHERE worker_id=:w FOR UPDATE"),{"w":dispute["worker_id"]}).mappings().first()
-        if not wallet: raise HTTPException(409,"No existe la billetera de Custodia del trabajador.")
+        if not wallet:
+            db.execute(text("INSERT INTO wallets (worker_id,available_balance,pending_custody_balance,total_earnings,total_commissions,total_withdrawn) VALUES (:w,0,0,0,0,0) ON CONFLICT (worker_id) DO NOTHING"),{"w":dispute["worker_id"]})
+            wallet=db.execute(text("SELECT id,pending_custody_balance FROM wallets WHERE worker_id=:w FOR UPDATE"),{"w":dispute["worker_id"]}).mappings().one()
         if float(wallet["pending_custody_balance"] or 0)+0.01<gross: raise HTTPException(409,"El saldo de Custodia del trabajador no cubre el monto histórico de la disputa.")
         ref=f"DISPUTE-RELEASE-{str(dispute_id)[:8].upper()}"
         result=db.execute(text("UPDATE escrows SET status='LIBERADO',released_at=CURRENT_TIMESTAMP,commission_amount_rd=:c,worker_payout_rd=:p WHERE id=:id AND status IN ('EN_DISPUTA','RETENIDO')"),{"id":dispute["escrow_id"],"c":commission,"p":net})
