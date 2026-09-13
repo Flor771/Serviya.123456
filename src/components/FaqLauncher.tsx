@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { ArrowRight, HelpCircle, X } from 'lucide-react';
+import { ArrowRight, HelpCircle } from 'lucide-react';
 
 const FAQ_TITLE = 'Preguntas frecuentes y mini tutorial';
 const FAQ_SELECTOR = '[data-serviya-faq-legacy="true"]';
@@ -8,17 +8,12 @@ export const FaqLauncher: React.FC = () => {
   const [available, setAvailable] = useState(false);
 
   useEffect(() => {
-    const findFaq = () => {
-      const sections = Array.from(document.querySelectorAll('section'));
-      const section = sections.find(node => node.querySelector('h2')?.textContent?.includes(FAQ_TITLE)) as HTMLElement | undefined;
-      if (!section) return null;
-      section.dataset.serviyaFaqLegacy = 'true';
-      setAvailable(true);
-      return section;
-    };
-
-    const section = findFaq();
+    const sections = Array.from(document.querySelectorAll('section'));
+    const section = sections.find(node => node.querySelector('h2')?.textContent?.includes(FAQ_TITLE)) as HTMLElement | undefined;
     if (!section) return;
+
+    section.dataset.serviyaFaqLegacy = 'true';
+    setAvailable(true);
 
     const close = () => {
       section.classList.remove('serviya-faq-open');
