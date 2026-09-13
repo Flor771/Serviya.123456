@@ -8,6 +8,7 @@ import {AdminContractsWindow} from './AdminContractsWindow';
 import {AdminAnnouncementsPanel} from './AdminAnnouncementsPanel';
 import {AdminReleaseDossierPanel} from './AdminReleaseDossierPanel';
 import {AdminDepositDossierPanel} from './AdminDepositDossierPanel';
+import {AdminHistoryPanel} from './AdminHistoryPanel';
 
 export const AdminRoleWindows:React.FC=()=>{
  const [loading,setLoading]=useState(true); const [error,setError]=useState(''); const [refresh,setRefresh]=useState(0); const [showAnnouncements,setShowAnnouncements]=useState(false); const [retirosHost,setRetirosHost]=useState<HTMLElement|null>(null); const [depositosHost,setDepositosHost]=useState<HTMLElement|null>(null);
@@ -35,6 +36,7 @@ export const AdminRoleWindows:React.FC=()=>{
    <AdminAlerts/>
    <section className="rounded-3xl bg-white border border-slate-200 shadow-sm p-5 sm:p-6"><p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Acceso administrativo único</p><h2 className="text-2xl font-black mt-1">Administrador</h2><p className="text-sm text-slate-500 mt-1 max-w-3xl">Una sola consola para administrar toda la plataforma: usuarios, servicios, verificaciones, depósitos, Custodia, liberaciones, retiros, cuentas bancarias, soporte, disputas, contratos digitales y auditoría.</p></section>
    <AdminPanelV2/>
+   <AdminHistoryPanel/>
    <AdminContractsWindow/>
    {retirosHost&&createPortal(<AdminReleaseDossierPanel/>,retirosHost)}
    {depositosHost&&createPortal(<AdminDepositDossierPanel/>,depositosHost)}
