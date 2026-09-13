@@ -8,9 +8,9 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.core.deps import get_db, get_current_active_user
 from app.models.models import Service, Escrow, User, BankAccount, Notification
+from app.services.process_status import record_process
 
 router = APIRouter(prefix="/payments", tags=["Pagos y Custodia (Escrow)"])
-
 class EscrowPaymentSchema(BaseModel): service_id: str
 class BankTransferEscrowSchema(BaseModel): service_id: str; bank_account_id: Optional[int] = None; voucher_url: str
 class EscrowReleaseSchema(BaseModel): service_id: str
@@ -18,32 +18,23 @@ class RefundSchema(BaseModel): service_id: str; reason: Optional[str] = "Reembol
 
 def _tx(db, u, a, t, s, description, reference_code, voucher=None, bank_account_id=None):
     db.execute(text("INSERT INTO transactions (user_id,amount,type,status,reference_code,created_at,voucher_url,bank_account_id) VALUES (:u,:a,:t,:s,:r,CURRENT_TIMESTAMP,:v,:b)"), {"u":u,"a":a,"t":t,"s":s,"r":reference_code,"v":voucher,"b":bank_account_id})
-
 def _validate_voucher(v):
-    if not v or not v.startswith("data:image/") or len(v) > 900000:
-        raise HTTPException(400, "Debes subir el recibo/voucher del depósito (JPG, PNG o WebP, máximo 900 KB).")
-
+    if not v or not v.startswith("data:image/") or len(v) > 900000: raise HTTPException(400, "Debes subir el recibo/voucher del depósito (JPG, PNG o WebP, máximo 900 KB).")
 def _agreed_price(db, service_id):
     row=db.execute(text("SELECT negotiated_price_rd,negotiation_status FROM services WHERE id=:id"),{"id":service_id}).mappings().first()
-    if not row or row["negotiation_status"] != "ACORDADO" or row["negotiated_price_rd"] is None:
-        raise HTTPException(400,"Primero deben negociar y acordar el precio final. El presupuesto de publicación es solo orientativo.")
+    if not row or row["negotiation_status"] != "ACORDADO" or row["negotiated_price_rd"] is None: raise HTTPException(400,"Primero deben negociar y acordar el precio final. El presupuesto de publicación es solo orientativo.")
     return float(row["negotiated_price_rd"])
-
 def _ensure_worker_wallet(db, worker_id):
     wallet=db.execute(text("SELECT id FROM wallets WHERE worker_id=:w FOR UPDATE"),{"w":worker_id}).mappings().first()
     if not wallet:
-        db.execute(text("INSERT INTO wallets (worker_id,available_balance,pending_custody_balance,total_earnings,total_commissions,total_withdrawn) VALUES (:w,0,0,0,0,0)"),{"w":worker_id})
-        wallet=db.execute(text("SELECT id FROM wallets WHERE worker_id=:w FOR UPDATE"),{"w":worker_id}).mappings().one()
+        db.execute(text("INSERT INTO wallets (worker_id,available_balance,pending_custody_balance,total_earnings,total_commissions,total_withdrawn) VALUES (:w,0,0,0,0,0)"),{"w":worker_id}); wallet=db.execute(text("SELECT id FROM wallets WHERE worker_id=:w FOR UPDATE"),{"w":worker_id}).mappings().one()
     return wallet
-
 @router.post("/escrow")
 def pay_escrow(data:EscrowPaymentSchema,current_user:User=Depends(get_current_active_user),db:Session=Depends(get_db)):
     raise HTTPException(400,"El pago en Custodia debe hacerse únicamente desde el flujo del trabajo ya negociado y acordado. Usa la opción de pago en Custodia del trabajo y no una billetera general.")
-
 @router.post("/escrow-wallet")
 def pay_escrow_from_wallet(data:EscrowPaymentSchema,current_user:User=Depends(get_current_active_user),db:Session=Depends(get_db)):
     raise HTTPException(410,"El pago desde una Billetera general del cliente está deshabilitado. Primero negocia y acuerda el trabajo; luego realiza el depósito de ese trabajo directamente en Custodia SERVIYA mediante transferencia y voucher.")
-
 @router.post("/escrow-bank-transfer")
 def bank_transfer_escrow(data:BankTransferEscrowSchema,current_user:User=Depends(get_current_active_user),db:Session=Depends(get_db)):
     service=db.query(Service).filter(Service.id==data.service_id).with_for_update().first()
@@ -57,17 +48,16 @@ def bank_transfer_escrow(data:BankTransferEscrowSchema,current_user:User=Depends
     if db.query(Escrow).filter(Escrow.service_id==service.id,Escrow.status.in_(["PENDIENTE_VERIFICACION","RETENIDO","EN_DISPUTA","PENDIENTE_APROBACION"])).first(): raise HTTPException(400,"Este servicio ya tiene un depósito registrado o una Custodia activa.")
     rate=float(settings.PLATFORM_COMMISSION_PERCENT); commission=amount*rate/100; payout=amount-commission; otp=f"{random.randint(100000,999999)}"
     escrow=Escrow(service_id=service.id,client_id=current_user.id,worker_id=service.worker_id,total_amount_rd=amount,commission_rate_percent=rate,commission_amount_rd=commission,worker_payout_rd=payout,status="PENDIENTE_VERIFICACION",voucher_url=data.voucher_url,bank_account_id=data.bank_account_id,payment_method="TRANSFERENCIA_BANCARIA",release_otp=otp,otp_verified=False)
-    db.add(escrow); db.flush()
-    ref=f"ESCROW-BANK-{uuid.uuid4().hex[:8].upper()}"
+    db.add(escrow); db.flush(); ref=f"ESCROW-BANK-{uuid.uuid4().hex[:8].upper()}"
     description=f"Custodia {ref} | escrow={escrow.id} | servicio={service.id} | cliente={current_user.id} | trabajador={service.worker_id} | banco={account.bank_name if account else 'NO_ESPECIFICADO'} | cuenta={account.account_number if account else 'NO_ESPECIFICADA'}"
     _tx(db,current_user.id,amount,"PAGO_CUSTODIA_TRANSFERENCIA","PENDIENTE_VERIFICACION",description,ref,data.voucher_url,data.bank_account_id)
     admins=db.execute(text("SELECT id FROM users WHERE role='ADMIN'")).scalars().all()
+    for admin_id in admins: db.add(Notification(user_id=admin_id,title="Nuevo depósito pendiente de verificar",message=f"Depósito {ref}: RD$ {amount:,.2f}. Cliente #{current_user.id} → trabajador #{service.worker_id}. Verifica voucher, banco y cuenta antes de Custodia.",type="DEPOSIT_VERIFICATION",related_entity_id=service.id))
+    record_process(db, user_id=current_user.id, process_type="DEPOSITO_CUSTODIA", status="PENDIENTE_VERIFICACION", title="Voucher recibido", message=f"Tu comprobante fue recibido para {service.title}. El pago por RD$ {amount:,.2f} está pendiente de verificación administrativa.", next_step="Administración verificará el voucher y la cuenta seleccionada. El dinero todavía NO está en Custodia.", related_entity_id=service.id)
     for admin_id in admins:
-        db.add(Notification(user_id=admin_id,title="Nuevo depósito pendiente de verificar",message=f"Depósito {ref}: RD$ {amount:,.2f}. Cliente #{current_user.id} → trabajador #{service.worker_id}. Verifica voucher, banco y cuenta antes de Custodia.",type="DEPOSIT_VERIFICATION",related_entity_id=service.id))
-    db.add(Notification(user_id=current_user.id,title="Pago de Custodia pendiente de verificación",message=f"Tu voucher fue recibido para el servicio {service.title}. Pago de Custodia por RD$ {amount:,.2f} pendiente de verificación administrativa. SERVIYA está comprobando que el depósito llegó a la cuenta seleccionada. El dinero todavía NO está en Custodia.",type="DEPOSIT_PENDING_VERIFICATION",related_entity_id=service.id))
+        record_process(db, user_id=admin_id, process_type="DEPOSITO_CUSTODIA", status="PENDIENTE_VERIFICACION", title="Depósito pendiente de verificación", message=f"El depósito {ref} de RD$ {amount:,.2f} requiere revisión.", next_step="Verifica voucher, banco y cuenta antes de aprobar la Custodia.", related_entity_id=service.id)
     db.commit()
-    return {"message":"Voucher recibido. El pago de Custodia queda pendiente de verificación administrativa.","escrow_id":escrow.id,"reference":ref,"status":"PENDIENTE_VERIFICACION","voucher_received":True,"approved_by_admin":False,"agreed_price_rd":amount,"trace":{"service_id":service.id,"client_id":current_user.id,"worker_id":service.worker_id,"bank_account_id":data.bank_account_id}}
-
+    return {"message":"Voucher recibido. El pago de Custodia queda pendiente de verificación administrativa.","status":"PENDIENTE_VERIFICACION","escrow_id":escrow.id,"reference":ref,"voucher_received":True,"approved_by_admin":False,"agreed_price_rd":amount,"trace":{"service_id":service.id,"client_id":current_user.id,"worker_id":service.worker_id,"bank_account_id":data.bank_account_id}}
 @router.post("/release")
 def request_release_approval(data:EscrowReleaseSchema,current_user:User=Depends(get_current_active_user),db:Session=Depends(get_db)):
     escrow=db.query(Escrow).filter(Escrow.service_id==data.service_id).with_for_update().first()
@@ -76,11 +66,10 @@ def request_release_approval(data:EscrowReleaseSchema,current_user:User=Depends(
     if escrow.client_id != current_user.id: raise HTTPException(403,"Solamente el cliente creador puede solicitar la liberación.")
     row=db.execute(text("SELECT completion_submitted FROM services WHERE id=:id"),{"id":data.service_id}).mappings().first()
     if not row or not row["completion_submitted"]: raise HTTPException(400,"El técnico debe enviar primero la evidencia y el trabajo a revisión del cliente.")
-    escrow.status="PENDIENTE_APROBACION"
-    admins=db.execute(text("SELECT id FROM users WHERE role='ADMIN'")).scalars().all()
+    escrow.status="PENDIENTE_APROBACION"; admins=db.execute(text("SELECT id FROM users WHERE role='ADMIN'")).scalars().all()
     for admin_id in admins: db.add(Notification(user_id=admin_id,title="Liberación pendiente de aprobación",message=f"Custodia {escrow.id} | servicio {data.service_id} | trabajador {escrow.worker_id} | cliente {escrow.client_id}. Revisa y aprueba la liberación.",type="ADMIN_RELEASE_PENDING",related_entity_id=data.service_id))
+    record_process(db, user_id=current_user.id, process_type="LIBERACION", status="PENDIENTE_APROBACION", title="Solicitud de liberación recibida", message=f"Tu solicitud de liberación para {data.service_id} fue recibida correctamente.", next_step="Administración revisará y procesará la liberación.", related_entity_id=data.service_id)
     db.commit(); return {"message":"Confirmación recibida. La liberación queda pendiente de aprobación administrativa.","status":"PENDIENTE_APROBACION","approved_by_admin":False,"trace":{"escrow_id":escrow.id,"client_id":escrow.client_id,"worker_id":escrow.worker_id}}
-
 @router.post("/refund")
 def refund_escrow(data:RefundSchema,current_user:User=Depends(get_current_active_user),db:Session=Depends(get_db)):
     raise HTTPException(409,"El reembolso directo está deshabilitado. Solicita una revisión o disputa; Administración debe autorizar y registrar el reembolso.")
