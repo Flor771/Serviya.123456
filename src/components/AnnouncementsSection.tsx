@@ -3,6 +3,7 @@ import { ArrowRight, BellRing, ChevronLeft, ChevronRight, Image as ImageIcon, X 
 import { api } from '../services/api';
 import { ExamplesSection } from './ExamplesSection';
 import { ServiyaFlowVisual } from './ServiyaFlowVisual';
+import { FaqLauncher } from './FaqLauncher';
 
 type Announcement = {
   id: number;
@@ -44,6 +45,8 @@ export const AnnouncementsSection: React.FC<{ onNavigateTab?: (tab: string) => v
     <ServiyaFlowVisual />
 
     <ExamplesSection />
+
+    <FaqLauncher />
 
     {selected && <div className="fixed inset-0 z-[80] bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setSelected(null)}>
       <div className="w-full max-w-2xl max-h-[90vh] overflow-auto rounded-3xl bg-white shadow-2xl" onClick={e => e.stopPropagation()}>
