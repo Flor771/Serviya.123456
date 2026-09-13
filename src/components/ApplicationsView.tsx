@@ -41,6 +41,12 @@ export const ApplicationsView: React.FC<Props> = ({ onOpenService }) => {
   const accepted = items.filter(a => a.status === 'SELECCIONADO');
   const rejected = items.filter(a => a.status === 'RECHAZADO');
 
+  const openNegotiation = (service: Service) => {
+    window.dispatchEvent(new CustomEvent('serviya:navigate', {
+      detail: { destination: 'chat', serviceId: String(service.id) },
+    }));
+  };
+
   const group = (title: string, list: MyApplication[], tone: string) => list.length ? (
     <section className="space-y-3">
       <div className="flex items-center justify-between gap-2">
@@ -78,7 +84,7 @@ export const ApplicationsView: React.FC<Props> = ({ onOpenService }) => {
 
               <div className="px-4 pb-4 sm:px-5 sm:pb-5">
                 {acceptedNow ? (
-                  <button onClick={() => onOpenService(s)} className="w-full inline-flex items-center justify-center gap-2 py-3 rounded-xl bg-blue-600 text-white text-xs font-black hover:bg-blue-700">
+                  <button onClick={() => openNegotiation(s)} className="w-full inline-flex items-center justify-center gap-2 py-3 rounded-xl bg-blue-600 text-white text-xs font-black hover:bg-blue-700">
                     <MessageSquare className="w-4 h-4" /> Abrir sesión y negociar
                   </button>
                 ) : a.status === 'PENDIENTE' ? (
