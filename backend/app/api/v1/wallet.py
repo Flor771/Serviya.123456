@@ -27,9 +27,7 @@ def _record_financial_movement(db: Session, wallet_id: int, movement_type: str, 
     db.execute(text("""
         INSERT INTO financial_movements (wallet_id,reference,movement_type,amount_dop,description,created_at)
         SELECT :wallet_id,:reference,:movement_type,:amount,:description,CURRENT_TIMESTAMP
-        WHERE NOT EXISTS (
-            SELECT 1 FROM financial_movements WHERE reference = :reference
-        )
+        WHERE NOT EXISTS (SELECT 1 FROM financial_movements WHERE reference = :reference)
     """), {"wallet_id": wallet_id, "reference": reference, "movement_type": movement_type, "amount": amount, "description": description})
 
 
@@ -39,13 +37,16 @@ def _role(user):
 
 @router.get("/bank-accounts")
 def get_official_bank_accounts(current_user: User = Depends(get_current_active_user), db: Session = Depends(get_db)):
-    """Return only active SERVIYA-owned bank accounts used for job custody deposits."""
+    """Return every active SERVIYA receiving account configured by Administration.
+
+    These accounts are the platform's official deposit destinations. Worker payout
+    accounts live in the separate worker_bank_accounts table and are never exposed here.
+    """
     rows = db.execute(text("""
         SELECT id, bank_name, account_number, account_type, account_holder,
                rnc_cedula, is_active, is_primary
         FROM bank_accounts
         WHERE is_active = true
-          AND account_holder ILIKE '%SERVIYA%'
         ORDER BY is_primary DESC, id DESC
     """)).mappings().all()
     return {
@@ -109,7 +110,7 @@ def get_wallet(current_user: User = Depends(get_current_active_user), db: Sessio
         for r in custody_rows:
             amount = float(r["worker_payout_rd"] or r["total_amount_rd"] or 0)
             custody_total += amount
-            custody_jobs.append({"escrow_id": r["escrow_id"], "service_id": r["service_id"], "title": r["title"], "amount_rd": amount, "escrow_amount_rd": float(r["total_amount_rd"] or 0), "status": r["status"], "service_status": r["service_status"], "created_at": str(r["created_at"])})
+            custody_jobs.append({"escrow_id": r["escrow_id"], "service_id": r["service_id"], "title": r["title"], "amount_rd": amount, "escrow_amount_rd": float(r["total_amount_rd"] or 0), "status": r["status"], "service_status": r["service_status"], "created_at": str(r["created_at"])} )
 
     if not wallet:
         return {"wallet": {"id": None, "user_id": current_user.id, "worker_id": None, "available_rd": 0.0, "escrow_rd": custody_total, "pending_rd": 0.0, "total_received_rd": 0.0, "total_spent_rd": 0.0, "can_withdraw": False, "can_deposit": False}, "transactions": transactions, "withdrawals": withdrawals, "worker_bank_account": dict(saved_account) if saved_account else None, "custody_jobs": custody_jobs}
