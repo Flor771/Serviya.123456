@@ -3,16 +3,17 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-    <title>SERVIYA.do 🇩🇴 — Trabajo • Confianza • Oportunidades</title>
-    <meta name="description" content="Plataforma dominicana para conectar clientes con trabajadores y profesionales que ofrecen servicios." />
-    <meta property="og:title" content="SERVIYA.do 🇩🇴 — Trabajo • Confianza • Oportunidades" />
-    <meta property="og:description" content="Plataforma dominicana para conectar clientes con trabajadores y profesionales que ofrecen servicios." />
+    <title>SERVIYA — Trabajo • Confianza • Oportunidades</title>
+    <meta name="description" content="SERVIYA: conecta clientes con trabajadores y profesionales en República Dominicana. Desde el trabajo más pequeño hasta el trabajo más grande." />
+    <meta property="og:title" content="SERVIYA — Trabajo • Confianza • Oportunidades" />
+    <meta property="og:description" content="Conecta clientes con trabajadores y profesionales en República Dominicana. Desde el trabajo más pequeño hasta el trabajo más grande." />
     <meta property="og:type" content="website" />
+    <meta property="og:image" content="/serviya-contract-logo.svg" />
     <meta name="theme-color" content="#002D62" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <meta name="apple-mobile-web-app-title" content="SERVIYA.do" />
+    <meta name="apple-mobile-web-app-title" content="SERVIYA" />
     <link rel="manifest" href="/manifest.json" />
     <link rel="apple-touch-icon" href="/serviya-contract-logo.svg" />
     <link rel="icon" type="image/svg+xml" href="/serviya-contract-logo.svg" />
@@ -22,32 +23,26 @@
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
     <script>
-      // Registro de PWA y botón de instalación para Android/Chrome.
       let deferredInstallPrompt = null;
-
       window.addEventListener('beforeinstallprompt', (event) => {
         event.preventDefault();
         deferredInstallPrompt = event;
         window.dispatchEvent(new CustomEvent('serviya:pwa-install-ready'));
       });
-
       window.addEventListener('appinstalled', () => {
         deferredInstallPrompt = null;
         const button = document.getElementById('serviya-install-button');
         if (button) button.remove();
       });
-
       window.addEventListener('serviya:request-pwa-install', async () => {
         if (!deferredInstallPrompt) return;
         deferredInstallPrompt.prompt();
         await deferredInstallPrompt.userChoice;
         deferredInstallPrompt = null;
       });
-
       function showInstallButton() {
         if (window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true) return;
         if (document.getElementById('serviya-install-button')) return;
-
         const button = document.createElement('button');
         button.id = 'serviya-install-button';
         button.type = 'button';
@@ -57,9 +52,7 @@
         button.onclick = () => window.dispatchEvent(new Event('serviya:request-pwa-install'));
         document.body.appendChild(button);
       }
-
       window.addEventListener('serviya:pwa-install-ready', showInstallButton);
-
       if ('serviceWorker' in navigator && window.location.protocol !== 'http:') {
         window.addEventListener('load', () => {
           navigator.serviceWorker.register('/sw.js')
