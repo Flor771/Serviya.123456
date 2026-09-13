@@ -22,7 +22,6 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({ onClose 
 
   const navigate = (n: any) => {
     const route = classify(n);
-    // Close this window first. The App-level navigation handler then closes every other overlay before opening the destination.
     onClose();
     window.dispatchEvent(new CustomEvent('serviya:navigate', { detail: {
       tab: route.tab,
@@ -34,11 +33,11 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({ onClose 
     }}));
   };
 
-  const openRelated = async (n: any) => {
-    // Close immediately; never leave the notification window covering the destination.
+  const openRelated = (n: any) => {
+    // Navigation is immediate. Marking the notification read happens in the background and can never block the destination.
     onClose();
-    try { if (n.id) { try { await api.patch(`/notifications/${n.id}/read`); } catch {} } }
-    finally { navigate(n); }
+    if (n.id) api.patch(`/notifications/${n.id}/read`).catch(() => {});
+    navigate(n);
   };
 
   return <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/70 backdrop-blur-sm p-4">
