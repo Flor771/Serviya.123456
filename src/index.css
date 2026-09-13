@@ -1,1 +1,13 @@
 @import "tailwindcss";
+
+/* Identidad oficial SERVIYA en el contrato digital. Se mantiene dentro de la misma ventana del contrato. */
+div[class*="z-[90]"] > div[class*="bottom-0"]::before {
+  content: "";
+  display: block;
+  width: 88px;
+  height: 88px;
+  margin: 0 auto 10px;
+  background: url('/serviya-contract-logo.svg') center / contain no-repeat;
+  border-radius: 18px;
+  flex: 0 0 auto;
+}
