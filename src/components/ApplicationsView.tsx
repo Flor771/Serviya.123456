@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { ClipboardList, Clock3, CheckCircle2, XCircle, MessageSquare, RefreshCw, ChevronRight } from 'lucide-react';
+import { ClipboardList, Clock3, CheckCircle2, XCircle, MessageSquare, RefreshCw, ChevronRight, Handshake } from 'lucide-react';
 import { api } from '../services/api';
 import { Application, Service } from '../types';
 
@@ -8,8 +8,8 @@ interface MyApplication extends Application {
 }
 
 interface Props {
-  onOpenService: (service: Service) => void;
-  onOpenChat: (serviceId: string, receiverId: string) => void;
+  onOpenService?: (service: Service) => void;
+  onOpenChat?: (serviceId: string, receiverId: string) => void;
   onRefresh?: () => void;
 }
 
@@ -46,7 +46,20 @@ export const ApplicationsView: React.FC<Props> = ({ onOpenService, onOpenChat })
   const openNegotiation = (service: Service) => {
     const serviceId = String(service.id);
     const receiverId = String(service.client_id || '');
-    onOpenChat(serviceId, receiverId);
+    if (onOpenChat) {
+      onOpenChat(serviceId, receiverId);
+      return;
+    }
+    window.dispatchEvent(new CustomEvent('serviya:navigate', {
+      detail: { destination: 'chat', serviceId, receiverId },
+    }));
+  };
+
+  const openService = (service: Service) => {
+    if (onOpenService) onOpenService(service);
+    else window.dispatchEvent(new CustomEvent('serviya:navigate', {
+      detail: { destination: 'service', serviceId: String(service.id) },
+    }));
   };
 
   const group = (title: string, list: MyApplication[], tone: string) => list.length ? (
@@ -61,7 +74,7 @@ export const ApplicationsView: React.FC<Props> = ({ onOpenService, onOpenChat })
           const acceptedNow = a.status === 'SELECCIONADO' && s.worker_id;
           return (
             <article key={a.id} className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-              <button onClick={() => onOpenService(s)} className="w-full text-left p-4 sm:p-5 hover:bg-slate-50 transition">
+              <button onClick={() => openService(s)} className="w-full text-left p-4 sm:p-5 hover:bg-slate-50 transition">
                 <div className="flex items-start gap-3">
                   <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${acceptedNow ? 'bg-emerald-50 text-emerald-600' : a.status === 'RECHAZADO' ? 'bg-slate-100 text-slate-400' : 'bg-blue-50 text-blue-600'}`}>
                     {acceptedNow ? <CheckCircle2 className="w-5 h-5" /> : a.status === 'RECHAZADO' ? <XCircle className="w-5 h-5" /> : <Clock3 className="w-5 h-5" />}
@@ -87,14 +100,14 @@ export const ApplicationsView: React.FC<Props> = ({ onOpenService, onOpenChat })
               <div className="px-4 pb-4 sm:px-5 sm:pb-5">
                 {acceptedNow ? (
                   <button onClick={() => openNegotiation(s)} className="w-full inline-flex items-center justify-center gap-2 py-3 rounded-xl bg-blue-600 text-white text-xs font-black hover:bg-blue-700">
-                    <MessageSquare className="w-4 h-4" /> Abrir sesión y negociar
+                    <Handshake className="w-4 h-4" /> Iniciar negocio y negociar
                   </button>
                 ) : a.status === 'PENDIENTE' ? (
-                  <button onClick={() => onOpenService(s)} className="w-full inline-flex items-center justify-center gap-2 py-3 rounded-xl border border-blue-200 bg-blue-50 text-blue-700 text-xs font-black">
+                  <button onClick={() => openService(s)} className="w-full inline-flex items-center justify-center gap-2 py-3 rounded-xl border border-blue-200 bg-blue-50 text-blue-700 text-xs font-black">
                     <MessageSquare className="w-4 h-4" /> Abrir sesión / ver postulación
                   </button>
                 ) : (
-                  <button onClick={() => onOpenService(s)} className="w-full py-3 rounded-xl border border-slate-200 text-slate-600 text-xs font-bold">Ver servicio</button>
+                  <button onClick={() => openService(s)} className="w-full py-3 rounded-xl border border-slate-200 text-slate-600 text-xs font-bold">Ver servicio</button>
                 )}
               </div>
             </article>
@@ -111,7 +124,7 @@ export const ApplicationsView: React.FC<Props> = ({ onOpenService, onOpenChat })
           <div className="min-w-0">
             <p className="text-emerald-700 text-xs font-black uppercase tracking-wide">TRABAJADOR / TÉCNICO</p>
             <h1 className="text-2xl font-black text-slate-900 mt-1">Mis postulaciones</h1>
-            <p className="text-sm text-slate-500 mt-1 leading-relaxed">Aquí se agrupan todas las postulaciones que has enviado. Cuando una sea aceptada, puedes entrar a la misma sesión para negociar y continuar el trabajo.</p>
+            <p className="text-sm text-slate-500 mt-1 leading-relaxed">Aquí se agrupan todas las postulaciones que has enviado. Cuando una sea aceptada, puedes iniciar el negocio directamente con el cliente, negociar y continuar el trabajo.</p>
           </div>
           <button onClick={load} disabled={loading} className="p-2.5 rounded-xl border border-slate-200 text-slate-600 shrink-0" title="Actualizar"><RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} /></button>
         </div>
