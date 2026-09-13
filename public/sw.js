@@ -1,9 +1,8 @@
-const CACHE_NAME = 'serviya-v5';
+const CACHE_NAME = 'serviya-v6';
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
   '/manifest.json',
-  '/icon.svg',
   '/pwa-icon-192x192.svg',
   '/pwa-icon-512.svg',
   '/serviya-contract-logo.svg'
