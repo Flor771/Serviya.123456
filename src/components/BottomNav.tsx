@@ -16,6 +16,7 @@ export const BottomNav:React.FC<BottomNavProps>=({activeTab,onNavigateTab,onOpen
  const go=(fn?:()=>void)=>{setMore(false);if(user)fn?.();else onOpenAuth('login');};
  const loadContracts=async()=>{if(!user)return;setContractsLoading(true);setFeedback('');try{const data=await api.get<{contracts:ContractSummary[]}>('/contracts');setContracts(data?.contracts||[]);}catch(e:any){setContracts([]);setFeedback(e?.message||'No se pudieron cargar los contratos.');}finally{setContractsLoading(false);}};
  useEffect(()=>{if(contractsOpen)void loadContracts();},[contractsOpen,user?.id]);
+ useEffect(()=>{const handleContractNavigate=(event:Event)=>{const detail=(event as CustomEvent).detail||{};if(String(detail.destination||'')!=='contract')return;setMore(false);setSelected(null);setFeedback('');setContractsOpen(true);};window.addEventListener('serviya:navigate',handleContractNavigate);return()=>window.removeEventListener('serviya:navigate',handleContractNavigate);},[]);
  const openContracts=()=>{setMore(false);setSelected(null);setFeedback('');setContractsOpen(true);};
  const openDetail=async(c:ContractSummary)=>{setFeedback('');try{const data=await api.get<ContractDetail>(`/contracts/${c.service_id}`);setSelected(data);}catch(e:any){setFeedback(e?.message||'No se pudo abrir el contrato.');}};
  const accept=async()=>{
