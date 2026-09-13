@@ -64,9 +64,9 @@ def bank_transfer_escrow(data:BankTransferEscrowSchema,current_user:User=Depends
     admins=db.execute(text("SELECT id FROM users WHERE role='ADMIN'")).scalars().all()
     for admin_id in admins:
         db.add(Notification(user_id=admin_id,title="Nuevo depósito pendiente de verificar",message=f"Depósito {ref}: RD$ {amount:,.2f}. Cliente #{current_user.id} → trabajador #{service.worker_id}. Verifica voucher, banco y cuenta antes de Custodia.",type="DEPOSIT_VERIFICATION",related_entity_id=service.id))
-    db.add(Notification(user_id=current_user.id,title="Voucher recibido — verificación pendiente",message=f"Depósito {ref} recibido por RD$ {amount:,.2f}. Destinatario reservado: trabajador #{service.worker_id}. El dinero NO está en Custodia todavía.",type="DEPOSIT_PENDING_VERIFICATION",related_entity_id=service.id))
+    db.add(Notification(user_id=current_user.id,title="Pago de Custodia pendiente de verificación",message=f"Tu voucher fue recibido para el servicio {service.title}. Pago de Custodia por RD$ {amount:,.2f} pendiente de verificación administrativa. SERVIYA está comprobando que el depósito llegó a la cuenta seleccionada. El dinero todavía NO está en Custodia.",type="DEPOSIT_PENDING_VERIFICATION",related_entity_id=service.id))
     db.commit()
-    return {"message":"Voucher recibido. El depósito queda pendiente de verificación administrativa.","escrow_id":escrow.id,"reference":ref,"status":"PENDIENTE_VERIFICACION","voucher_received":True,"approved_by_admin":False,"agreed_price_rd":amount,"trace":{"service_id":service.id,"client_id":current_user.id,"worker_id":service.worker_id,"bank_account_id":data.bank_account_id}}
+    return {"message":"Voucher recibido. El pago de Custodia queda pendiente de verificación administrativa.","escrow_id":escrow.id,"reference":ref,"status":"PENDIENTE_VERIFICACION","voucher_received":True,"approved_by_admin":False,"agreed_price_rd":amount,"trace":{"service_id":service.id,"client_id":current_user.id,"worker_id":service.worker_id,"bank_account_id":data.bank_account_id}}
 
 @router.post("/release")
 def request_release_approval(data:EscrowReleaseSchema,current_user:User=Depends(get_current_active_user),db:Session=Depends(get_db)):
