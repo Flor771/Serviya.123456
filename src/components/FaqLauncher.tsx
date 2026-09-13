@@ -1,28 +1,33 @@
-import React, { useEffect, useState } from 'react';
+import React, { useLayoutEffect, useState } from 'react';
 import { ArrowRight, HelpCircle } from 'lucide-react';
 
 const FAQ_TITLE = 'Preguntas frecuentes y mini tutorial';
-const FAQ_SELECTOR = '[data-serviya-faq-legacy="true"]';
 
 export const FaqLauncher: React.FC = () => {
   const [available, setAvailable] = useState(false);
 
-  useEffect(() => {
-    const sections = Array.from(document.querySelectorAll('section'));
-    const section = sections.find(node => node.querySelector('h2')?.textContent?.includes(FAQ_TITLE)) as HTMLElement | undefined;
+  useLayoutEffect(() => {
+    const heading = Array.from(document.querySelectorAll('h1,h2,h3,h4'))
+      .find(node => node.textContent?.trim().includes(FAQ_TITLE));
+    if (!heading) return;
+
+    const section = (heading.closest('section') || heading.parentElement) as HTMLElement | null;
     if (!section) return;
 
     section.dataset.serviyaFaqLegacy = 'true';
+    section.style.setProperty('display', 'none', 'important');
     setAvailable(true);
 
     const close = () => {
       section.classList.remove('serviya-faq-open');
+      section.style.setProperty('display', 'none', 'important');
       document.body.classList.remove('serviya-faq-lock');
       document.getElementById('serviya-faq-close')?.remove();
     };
 
     const open = () => {
       section.classList.add('serviya-faq-open');
+      section.style.setProperty('display', 'block', 'important');
       document.body.classList.add('serviya-faq-lock');
       window.scrollTo({ top: 0, behavior: 'smooth' });
       if (!document.getElementById('serviya-faq-close')) {
@@ -51,8 +56,8 @@ export const FaqLauncher: React.FC = () => {
     <>
       <style>{`
         body.serviya-faq-lock { overflow: hidden; }
-        ${FAQ_SELECTOR} { display: none !important; }
-        ${FAQ_SELECTOR}.serviya-faq-open {
+        [data-serviya-faq-legacy="true"] { display: none !important; }
+        [data-serviya-faq-legacy="true"].serviya-faq-open {
           display: block !important;
           position: fixed !important;
           inset: 0 !important;
@@ -69,7 +74,7 @@ export const FaqLauncher: React.FC = () => {
           box-shadow: none !important;
         }
         @media (min-width: 640px) {
-          ${FAQ_SELECTOR}.serviya-faq-open { padding: 5.5rem 2rem 3rem !important; }
+          [data-serviya-faq-legacy="true"].serviya-faq-open { padding: 5.5rem 2rem 3rem !important; }
         }
       `}</style>
       <button
