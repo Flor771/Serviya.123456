@@ -9,6 +9,8 @@ interface MyApplication extends Application {
 
 interface Props {
   onOpenService: (service: Service) => void;
+  onOpenChat: (serviceId: string, receiverId: string) => void;
+  onRefresh?: () => void;
 }
 
 const statusLabel: Record<string, string> = {
@@ -17,7 +19,7 @@ const statusLabel: Record<string, string> = {
   RECHAZADO: 'No seleccionada',
 };
 
-export const ApplicationsView: React.FC<Props> = ({ onOpenService }) => {
+export const ApplicationsView: React.FC<Props> = ({ onOpenService, onOpenChat }) => {
   const [items, setItems] = useState<MyApplication[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -42,9 +44,9 @@ export const ApplicationsView: React.FC<Props> = ({ onOpenService }) => {
   const rejected = items.filter(a => a.status === 'RECHAZADO');
 
   const openNegotiation = (service: Service) => {
-    window.dispatchEvent(new CustomEvent('serviya:navigate', {
-      detail: { destination: 'chat', serviceId: String(service.id) },
-    }));
+    const serviceId = String(service.id);
+    const receiverId = String(service.client_id || '');
+    onOpenChat(serviceId, receiverId);
   };
 
   const group = (title: string, list: MyApplication[], tone: string) => list.length ? (
