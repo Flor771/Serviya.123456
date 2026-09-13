@@ -8,8 +8,15 @@
   "display": "standalone",
   "orientation": "portrait",
   "theme_color": "#002D62",
-  "background_color": "#F8FAFC",
+  "background_color": "#030d43",
   "categories": ["business", "services", "utilities"],
   "lang": "es-DO",
-  "icons": [{"src":"/serviya-icon.svg","sizes":"180x180","type":"image/svg+xml","purpose":"any maskable"}]
+  "icons": [
+    {
+      "src": "/serviya-contract-logo.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
 }
