@@ -1,12 +1,12 @@
-"""Add complete admin notifications for worker withdrawals.
+"""Add complete admin notifications for worker withdrawals and close all migration heads.
 
 Revision ID: 030_withdrawal_admin_alerts
-Revises: 029_reconcile_acceptance
+Revises: 029_reconcile_acceptance, 010_merge_migration_heads
 """
 from alembic import op
 
 revision = "030_withdrawal_admin_alerts"
-down_revision = "029_reconcile_acceptance"
+down_revision = ("029_reconcile_acceptance", "010_merge_migration_heads")
 branch_labels = None
 depends_on = None
 
