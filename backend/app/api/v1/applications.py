@@ -2,18 +2,16 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
-
 from app.core.deps import get_db, get_current_active_user
 from app.models.models import Application, Service, ServiceStatusEnum, ApplicationStatusEnum, Notification, User, UserRoleEnum
+from app.services.process_status import record_process
 
 router = APIRouter(prefix="/applications", tags=["Postulaciones"])
-
 class CreateApplicationSchema(BaseModel):
     service_id: str
     message: str
     offered_price_rd: float
     availability_note: Optional[str] = None
-
 class StartServiceSchema(BaseModel):
     note: Optional[str] = None
 
@@ -32,8 +30,9 @@ def apply_to_service(data: CreateApplicationSchema, current_user: User = Depends
     db.add(application)
     if service.status == ServiceStatusEnum.PUBLICADA: service.status = ServiceStatusEnum.RECIBIENDO_POSTULACIONES
     db.add(Notification(user_id=service.client_id, title="Nueva postulación recibida", message=f"{current_user.first_name} {current_user.last_name} se postuló a tu servicio: {service.title}.", type="NUEVA_POSTULACION", related_entity_id=service.id))
+    record_process(db, user_id=current_user.id, process_type="POSTULACION", status="ENVIADO", title="Postulación enviada", message=f"Tu postulación para {service.title} fue enviada correctamente.", next_step="Espera la decisión del cliente. Si eres seleccionado, podrás iniciar la negociación.", related_entity_id=service.id)
     db.commit(); db.refresh(application)
-    return {"message": "Postulación enviada exitosamente", "application": {"id": application.id, "service_id": application.service_id, "offered_price_rd": application.offered_price_rd, "status": application.status.value if hasattr(application.status, "value") else str(application.status)}}
+    return {"message": "Postulación enviada correctamente", "status": "ENVIADO", "application": {"id": application.id, "service_id": application.service_id, "offered_price_rd": application.offered_price_rd, "status": application.status.value if hasattr(application.status, "value") else str(application.status)}}
 
 @router.get("/mine")
 def get_my_applications(current_user: User = Depends(get_current_active_user), db: Session = Depends(get_db)):
@@ -44,10 +43,8 @@ def get_my_applications(current_user: User = Depends(get_current_active_user), d
     for a in applications:
         s = db.query(Service).filter(Service.id == a.service_id).first()
         if not s: continue
-        c = db.query(User).filter(User.id == s.client_id).first()
-        w = db.query(User).filter(User.id == s.worker_id).first() if s.worker_id else None
-        st = s.status.value if hasattr(s.status, "value") else str(s.status)
-        app_status = a.status.value if hasattr(a.status, "value") else str(a.status)
+        c = db.query(User).filter(User.id == s.client_id).first(); w = db.query(User).filter(User.id == s.worker_id).first() if s.worker_id else None
+        st = s.status.value if hasattr(s.status, "value") else str(s.status); app_status = a.status.value if hasattr(a.status, "value") else str(a.status)
         out.append({"id": str(a.id), "service_id": str(a.service_id), "worker_id": str(a.worker_id), "message": a.message, "offered_price_rd": a.offered_price_rd, "availability_note": a.availability_note, "status": app_status, "created_at": str(a.created_at), "service": {"id": s.id, "title": s.title, "description": s.description, "category_name": s.category_name, "subcategory": s.subcategory, "price_rd": s.price_rd, "negotiated_price_rd": getattr(s, "negotiated_price_rd", None), "negotiation_status": getattr(s, "negotiation_status", None), "province": s.province, "municipality": s.municipality, "address_approx": s.address_approx, "service_date": s.service_date, "service_time": s.service_time, "estimated_duration": s.estimated_duration, "images": s.images or [], "requirements": s.requirements or [], "status": st, "client_id": s.client_id, "client_name": f"{c.first_name} {c.last_name}" if c else "Cliente SERVIYA", "worker_id": s.worker_id, "worker_name": f"{w.first_name} {w.last_name}" if w else None, "created_at": str(s.created_at), "applications_count": db.query(Application).filter(Application.service_id == s.id).count()}})
     return {"applications": out, "count": len(out)}
 
@@ -60,13 +57,12 @@ def select_application(id: str, current_user: User = Depends(get_current_active_
     if service.client_id != current_user.id: raise HTTPException(status_code=403, detail="Solamente el cliente creador puede seleccionar técnico")
     if service.worker_id: raise HTTPException(status_code=400, detail="Este servicio ya tiene un técnico seleccionado")
     if app_item.status != ApplicationStatusEnum.PENDIENTE: raise HTTPException(status_code=400, detail="Esta postulación ya no está disponible para selección")
-    app_item.status = ApplicationStatusEnum.SELECCIONADO
-    service.worker_id = app_item.worker_id
-    service.status = ServiceStatusEnum.TRABAJADOR_SELECCIONADO
+    app_item.status = ApplicationStatusEnum.SELECCIONADO; service.worker_id = app_item.worker_id; service.status = ServiceStatusEnum.TRABAJADOR_SELECCIONADO
     db.add(Notification(user_id=app_item.worker_id, title="Postulación aceptada: inicia la negociación", message=f"Tu postulación fue aceptada para: {service.title}. Abre esta notificación para entrar directamente a la negociación y enviar tu contraoferta al cliente. No necesitas enviar un mensaje primero.", type="TRABAJADOR_SELECCIONADO", related_entity_id=service.id))
+    record_process(db, user_id=app_item.worker_id, process_type="POSTULACION", status="ACEPTADO", title="Postulación aceptada", message=f"Has sido seleccionado para el servicio {service.title}.", next_step="Puedes iniciar la negociación y enviar tu contraoferta al cliente.", related_entity_id=service.id)
     db.query(Application).filter(Application.service_id == service.id, Application.id != app_item.id, Application.status == ApplicationStatusEnum.PENDIENTE).update({Application.status: ApplicationStatusEnum.RECHAZADO}, synchronize_session=False)
     db.commit()
-    return {"message": "Técnico seleccionado exitosamente para el servicio", "service_id": service.id, "worker_id": app_item.worker_id}
+    return {"message": "Técnico seleccionado exitosamente para el servicio", "status": "ACEPTADO", "service_id": service.id, "worker_id": app_item.worker_id}
 
 @router.post("/service/{service_id}/start")
 def start_service(service_id: str, data: StartServiceSchema = StartServiceSchema(), current_user: User = Depends(get_current_active_user), db: Session = Depends(get_db)):
@@ -76,5 +72,7 @@ def start_service(service_id: str, data: StartServiceSchema = StartServiceSchema
     st = service.status.value if hasattr(service.status, "value") else str(service.status)
     if st != "EN_PROGRESO": raise HTTPException(status_code=400, detail="El trabajo puede iniciarse cuando el cliente haya depositado el pago en Custodia SERVIYA")
     db.add(Notification(user_id=service.client_id, title="Trabajo iniciado", message=f"El técnico {current_user.first_name} {current_user.last_name} inició el trabajo: {service.title}.", type="SERVICE_STARTED", related_entity_id=service.id))
+    record_process(db, user_id=current_user.id, process_type="TRABAJO", status="INICIADO", title="Trabajo iniciado oficialmente", message=f"El trabajo {service.title} fue iniciado oficialmente.", next_step="Realiza el trabajo y registra la evidencia correspondiente.", related_entity_id=service.id)
+    record_process(db, user_id=service.client_id, process_type="TRABAJO", status="INICIADO", title="Trabajo iniciado", message=f"El técnico inició oficialmente el trabajo {service.title}.", next_step="Puedes dar seguimiento al avance desde tu servicio.", related_entity_id=service.id)
     db.commit()
-    return {"message": "Trabajo iniciado. Ya puedes subir fotos de evidencia y coordinar por mensajes.", "service_id": service.id, "status": "EN_PROGRESO", "note": data.note}
+    return {"message": "Trabajo iniciado oficialmente.", "status": "INICIADO", "service_id": service.id, "note": data.note}
