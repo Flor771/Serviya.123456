@@ -7,19 +7,17 @@ import {AdminAlerts} from './AdminAlerts';
 import {AdminContractsWindow} from './AdminContractsWindow';
 import {AdminAnnouncementsPanel} from './AdminAnnouncementsPanel';
 import {AdminReleaseDossierPanel} from './AdminReleaseDossierPanel';
+import {AdminDepositDossierPanel} from './AdminDepositDossierPanel';
 
 export const AdminRoleWindows:React.FC=()=>{
- const [loading,setLoading]=useState(true); const [error,setError]=useState(''); const [refresh,setRefresh]=useState(0); const [showAnnouncements,setShowAnnouncements]=useState(false); const [retirosHost,setRetirosHost]=useState<HTMLElement|null>(null);
+ const [loading,setLoading]=useState(true); const [error,setError]=useState(''); const [refresh,setRefresh]=useState(0); const [showAnnouncements,setShowAnnouncements]=useState(false); const [retirosHost,setRetirosHost]=useState<HTMLElement|null>(null); const [depositosHost,setDepositosHost]=useState<HTMLElement|null>(null);
  useEffect(()=>{(async()=>{try{await api.get('/admin/super-admin/access');}catch(e:any){setError(e?.message||'No se pudo validar el acceso administrativo.')}finally{setLoading(false)}})()},[refresh]);
  useEffect(()=>{
   if(loading||error)return;
   const find=()=>{
    const headings=Array.from(document.querySelectorAll('h2')) as HTMLElement[];
-   const heading=headings.find(h=>h.textContent?.trim()==='Retiros');
-   const overlay=heading?.closest('.fixed.inset-0') as HTMLElement|null;
-   if(!overlay){setRetirosHost(null);return;}
-   const content=overlay.querySelector('.p-3.sm\\:p-6') as HTMLElement|null;
-   setRetirosHost(content||overlay.querySelector('.p-6') as HTMLElement|null);
+   const findHost=(title:string)=>{const heading=headings.find(h=>h.textContent?.trim()===title);const overlay=heading?.closest('.fixed.inset-0') as HTMLElement|null;if(!overlay)return null;return (overlay.querySelector('.p-3.sm\\:p-6')||overlay.querySelector('.p-6')||overlay) as HTMLElement;};
+   setRetirosHost(findHost('Retiros')); setDepositosHost(findHost('Depósitos y Custodia'));
   };
   find(); const observer=new MutationObserver(find); observer.observe(document.body,{subtree:true,childList:true});
   return()=>observer.disconnect();
@@ -39,6 +37,7 @@ export const AdminRoleWindows:React.FC=()=>{
    <AdminPanelV2/>
    <AdminContractsWindow/>
    {retirosHost&&createPortal(<AdminReleaseDossierPanel/>,retirosHost)}
+   {depositosHost&&createPortal(<AdminDepositDossierPanel/>,depositosHost)}
    {showAnnouncements&&<div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-sm p-3 sm:p-6 overflow-y-auto"><div className="max-w-6xl mx-auto pt-2 sm:pt-4"><div className="flex justify-end mb-2"><button onClick={()=>setShowAnnouncements(false)} className="w-10 h-10 rounded-xl bg-white text-slate-900 shadow-lg flex items-center justify-center" title="Cerrar anuncios"><X className="w-5 h-5"/></button></div><AdminAnnouncementsPanel/></div></div>}
   </main>
  </div>;
