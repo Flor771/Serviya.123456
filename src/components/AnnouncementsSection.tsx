@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { ArrowRight, BellRing, ChevronLeft, ChevronRight, Image as ImageIcon, X } from 'lucide-react';
 import { api } from '../services/api';
 import { ExamplesSection } from './ExamplesSection';
+import { ServiyaFlowVisual } from './ServiyaFlowVisual';
 
 type Announcement = {
   id: number;
@@ -39,6 +40,8 @@ export const AnnouncementsSection: React.FC<{ onNavigateTab?: (tab: string) => v
         </button>)}
       </div>
     </section>}
+
+    <ServiyaFlowVisual />
 
     <ExamplesSection />
 
