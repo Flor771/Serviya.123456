@@ -33,42 +33,67 @@
     <script type="module" src="/src/main.tsx"></script>
     <script>
       let deferredInstallPrompt = null;
+      let installButton = null;
+
       window.addEventListener('beforeinstallprompt', (event) => {
         event.preventDefault();
         deferredInstallPrompt = event;
         window.dispatchEvent(new CustomEvent('serviya:pwa-install-ready'));
       });
+
       window.addEventListener('appinstalled', () => {
         deferredInstallPrompt = null;
-        const button = document.getElementById('serviya-install-button');
-        if (button) button.remove();
+        if (installButton) installButton.remove();
+        installButton = null;
       });
-      window.addEventListener('serviya:request-pwa-install', async () => {
-        if (!deferredInstallPrompt) return;
-        deferredInstallPrompt.prompt();
-        await deferredInstallPrompt.userChoice;
-        deferredInstallPrompt = null;
-      });
-      function showInstallButton() {
-        if (window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true) return;
-        if (document.getElementById('serviya-install-button')) return;
-        const button = document.createElement('button');
-        button.id = 'serviya-install-button';
-        button.type = 'button';
-        button.textContent = '📲 Instalar SERVIYA';
-        button.setAttribute('aria-label', 'Instalar SERVIYA en el teléfono');
-        button.style.cssText = 'position:fixed;right:14px;bottom:78px;z-index:9999;border:0;border-radius:999px;padding:13px 18px;background:#0057B8;color:#fff;font:800 14px system-ui,-apple-system,sans-serif;box-shadow:0 10px 28px rgba(0,45,98,.28);cursor:pointer;';
-        button.onclick = () => window.dispatchEvent(new Event('serviya:request-pwa-install'));
-        document.body.appendChild(button);
+
+      function isStandalone() {
+        return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
       }
+
+      function getInstallHelp() {
+        const ua = navigator.userAgent || '';
+        if (/iPhone|iPad|iPod/i.test(ua)) {
+          return 'En iPhone/iPad: toca Compartir y luego “Agregar a pantalla de inicio”.';
+        }
+        if (/Android/i.test(ua)) {
+          return 'En Android: abre el menú ⋮ del navegador y elige “Instalar aplicación” o “Agregar a pantalla de inicio”.';
+        }
+        return 'Abre el menú de tu navegador y busca “Instalar SERVIYA” o “Agregar a pantalla de inicio”.';
+      }
+
+      async function requestInstall() {
+        if (isStandalone()) return;
+        if (deferredInstallPrompt) {
+          deferredInstallPrompt.prompt();
+          await deferredInstallPrompt.userChoice;
+          deferredInstallPrompt = null;
+          return;
+        }
+        alert(getInstallHelp());
+      }
+
+      function showInstallButton() {
+        if (isStandalone() || installButton) return;
+        installButton = document.createElement('button');
+        installButton.id = 'serviya-install-button';
+        installButton.type = 'button';
+        installButton.textContent = '📲 Instalar SERVIYA';
+        installButton.setAttribute('aria-label', 'Instalar SERVIYA en el teléfono');
+        installButton.style.cssText = 'position:fixed;right:14px;bottom:78px;z-index:99999;border:0;border-radius:999px;padding:13px 18px;background:#0057B8;color:#fff;font:800 14px system-ui,-apple-system,sans-serif;box-shadow:0 10px 28px rgba(0,45,98,.28);cursor:pointer;';
+        installButton.addEventListener('click', requestInstall);
+        document.body.appendChild(installButton);
+      }
+
       window.addEventListener('serviya:pwa-install-ready', showInstallButton);
-      if ('serviceWorker' in navigator && window.location.protocol !== 'http:') {
-        window.addEventListener('load', () => {
+      window.addEventListener('load', () => {
+        if (!isStandalone()) setTimeout(showInstallButton, 1200);
+        if ('serviceWorker' in navigator && window.location.protocol !== 'http:') {
           navigator.serviceWorker.register('/sw.js')
             .then(reg => console.log('Service Worker registrado:', reg.scope))
             .catch(err => console.log('Error al registrar Service Worker:', err));
-        });
-      }
+        }
+      });
     </script>
   </body>
 </html>
