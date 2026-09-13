@@ -20,24 +20,17 @@ class StartServiceSchema(BaseModel):
 @router.post("")
 def apply_to_service(data: CreateApplicationSchema, current_user: User = Depends(get_current_active_user), db: Session = Depends(get_db)):
     role_str = current_user.role.value if hasattr(current_user.role, "value") else str(current_user.role)
-    if role_str != UserRoleEnum.TRABAJADOR.value:
-        raise HTTPException(status_code=403, detail="Solo los trabajadores pueden postularse a servicios")
+    if role_str != UserRoleEnum.TRABAJADOR.value: raise HTTPException(status_code=403, detail="Solo los trabajadores pueden postularse a servicios")
     service = db.query(Service).filter(Service.id == data.service_id).first()
-    if not service:
-        raise HTTPException(status_code=404, detail="Servicio no encontrado")
-    if service.client_id == current_user.id:
-        raise HTTPException(status_code=400, detail="No puedes postularte a tu propio servicio")
-    if service.worker_id or service.status not in (ServiceStatusEnum.PUBLICADA, ServiceStatusEnum.RECIBIENDO_POSTULACIONES):
-        raise HTTPException(status_code=400, detail="Este servicio ya tiene un trabajador seleccionado. Las postulaciones están cerradas.")
-    if data.offered_price_rd <= 0:
-        raise HTTPException(status_code=400, detail="El precio ofrecido debe ser mayor que RD$0")
+    if not service: raise HTTPException(status_code=404, detail="Servicio no encontrado")
+    if service.client_id == current_user.id: raise HTTPException(status_code=400, detail="No puedes postularte a tu propio servicio")
+    if service.worker_id or service.status not in (ServiceStatusEnum.PUBLICADA, ServiceStatusEnum.RECIBIENDO_POSTULACIONES): raise HTTPException(status_code=400, detail="Este servicio ya tiene un trabajador seleccionado. Las postulaciones están cerradas.")
+    if data.offered_price_rd <= 0: raise HTTPException(status_code=400, detail="El precio ofrecido debe ser mayor que RD$0")
     existing = db.query(Application).filter(Application.service_id == data.service_id, Application.worker_id == current_user.id).first()
-    if existing:
-        raise HTTPException(status_code=400, detail="Ya se ha postulado previamente a este servicio.")
+    if existing: raise HTTPException(status_code=400, detail="Ya se ha postulado previamente a este servicio.")
     application = Application(service_id=data.service_id, worker_id=current_user.id, message=data.message, offered_price_rd=data.offered_price_rd, availability_note=data.availability_note, status=ApplicationStatusEnum.PENDIENTE)
     db.add(application)
-    if service.status == ServiceStatusEnum.PUBLICADA:
-        service.status = ServiceStatusEnum.RECIBIENDO_POSTULACIONES
+    if service.status == ServiceStatusEnum.PUBLICADA: service.status = ServiceStatusEnum.RECIBIENDO_POSTULACIONES
     db.add(Notification(user_id=service.client_id, title="Nueva postulación recibida", message=f"{current_user.first_name} {current_user.last_name} se postuló a tu servicio: {service.title}.", type="NUEVA_POSTULACION", related_entity_id=service.id))
     db.commit(); db.refresh(application)
     return {"message": "Postulación enviada exitosamente", "application": {"id": application.id, "service_id": application.service_id, "offered_price_rd": application.offered_price_rd, "status": application.status.value if hasattr(application.status, "value") else str(application.status)}}
@@ -45,8 +38,7 @@ def apply_to_service(data: CreateApplicationSchema, current_user: User = Depends
 @router.get("/mine")
 def get_my_applications(current_user: User = Depends(get_current_active_user), db: Session = Depends(get_db)):
     role_str = current_user.role.value if hasattr(current_user.role, "value") else str(current_user.role)
-    if role_str != UserRoleEnum.TRABAJADOR.value:
-        raise HTTPException(status_code=403, detail="Solo los trabajadores tienen postulaciones enviadas")
+    if role_str != UserRoleEnum.TRABAJADOR.value: raise HTTPException(status_code=403, detail="Solo los trabajadores tienen postulaciones enviadas")
     out = []
     applications = db.query(Application).filter(Application.worker_id == current_user.id).order_by(Application.created_at.desc()).all()
     for a in applications:
@@ -71,7 +63,7 @@ def select_application(id: str, current_user: User = Depends(get_current_active_
     app_item.status = ApplicationStatusEnum.SELECCIONADO
     service.worker_id = app_item.worker_id
     service.status = ServiceStatusEnum.TRABAJADOR_SELECCIONADO
-    db.add(Notification(user_id=app_item.worker_id, title="Has sido seleccionado", message=f"Fuiste seleccionado para el servicio: {service.title}. Cuando el depósito esté en Custodia SERVIYA podrás iniciar el trabajo.", type="TRABAJADOR_SELECCIONADO", related_entity_id=service.id))
+    db.add(Notification(user_id=app_item.worker_id, title="Postulación aceptada: inicia la negociación", message=f"Tu postulación fue aceptada para: {service.title}. Abre esta notificación para entrar directamente a la negociación y enviar tu contraoferta al cliente. No necesitas enviar un mensaje primero.", type="TRABAJADOR_SELECCIONADO", related_entity_id=service.id))
     db.query(Application).filter(Application.service_id == service.id, Application.id != app_item.id, Application.status == ApplicationStatusEnum.PENDIENTE).update({Application.status: ApplicationStatusEnum.RECHAZADO}, synchronize_session=False)
     db.commit()
     return {"message": "Técnico seleccionado exitosamente para el servicio", "service_id": service.id, "worker_id": app_item.worker_id}
