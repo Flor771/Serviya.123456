@@ -17,7 +17,8 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({ onClose 
     if (type === 'CONTRACT_ISSUED' || type === 'CONTRACT_PENDING' || type === 'CONTRACT_READY' || text.includes('contrato digital disponible') || text.includes('contrato digital')) return { destination: 'contract', tab: 'contratos', label: 'Abrir contrato digital y aceptar' };
     if (type === 'TRABAJADOR_SELECCIONADO' || text.includes('fuiste seleccionado') || text.includes('has sido seleccionado')) return { destination: 'service', tab: 'mis-servicios', label: 'Abrir negociación y contraoferta' };
     if (type.includes('MESSAGE') || type.includes('CHAT') || text.includes('mensaje')) return { destination: 'chat', tab: 'mensajes', label: 'Abrir mensajes' };
-    if (type.includes('APPLICATION') || type.includes('POSTUL') || text.includes('postulación') || text.includes('postulacion')) return { destination: 'applications', tab: 'postulaciones', label: 'Abrir postulaciones' };
+    // A postulation notification can belong to either role. Keep the main tab valid and let App open the related service modal; this avoids the nonexistent client "postulaciones" tab and the resulting blank screen.
+    if (type.includes('APPLICATION') || type.includes('POSTUL') || text.includes('postulación') || text.includes('postulacion')) return { destination: 'service', tab: '', label: 'Abrir postulación' };
     if (type.includes('DISPUTE') || type.includes('DISPUTA')) return { destination: 'dispute', tab: 'mis-trabajos', label: 'Abrir disputa' };
     if (type.includes('WALLET') || type.includes('WITHDRAW') || type.includes('RETIRO') || type.includes('DEPOSIT') || type.includes('PAYMENT')) return { destination: 'wallet', tab: 'billetera', label: 'Abrir depósito y custodia' };
     return { destination: 'service', tab: 'mis-trabajos', label: 'Abrir servicio' };
