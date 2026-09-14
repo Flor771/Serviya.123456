@@ -23,14 +23,9 @@ class VerificationDecision(BaseModel):
     notes: str | None = None
 
 
-def _category_sql():
-    return "COALESCE(v.verification_category, CASE WHEN UPPER(v.document_type) IN ('CEDULA_RD','CEDULA_FRONT','CEDULA_BACK') THEN 'CEDULA' WHEN UPPER(v.document_type) IN ('INFOTEP','INFOTEP_CERTIFICATE') THEN 'CERTIFICACION_TECNICA' ELSE UPPER(v.document_type) END)"
-
-
 def _worker_summary(db: Session, worker_id: str):
-    cat = _category_sql()
-    rows = db.execute(text(f"""
-        SELECT v.verification_category, v.document_type, v.document_name, v.document_url,
+    rows = db.execute(text("""
+        SELECT v.id, v.verification_category, v.document_type, v.document_name, v.document_url,
                v.status, v.admin_feedback, v.created_at, v.reviewed_at,
                u.first_name, u.last_name, u.email, u.phone, u.is_verified
         FROM verifications v
@@ -40,7 +35,8 @@ def _worker_summary(db: Session, worker_id: str):
     """), {"uid": worker_id}).mappings().all()
     approved = {}
     for r in rows:
-        category = r["verification_category"] or ("CEDULA" if str(r["document_type"] or "").upper() in {"CEDULA_RD","CEDULA_FRONT","CEDULA_BACK"} else ("CERTIFICACION_TECNICA" if str(r["document_type"] or "").upper() in {"INFOTEP","INFOTEP_CERTIFICATE"} else str(r["document_type"] or "").upper()))
+        dtype = str(r["document_type"] or "").upper()
+        category = r["verification_category"] or ("CEDULA" if dtype in {"CEDULA_RD","CEDULA_FRONT","CEDULA_BACK"} else ("CERTIFICACION_TECNICA" if dtype in {"INFOTEP","INFOTEP_CERTIFICATE"} else dtype))
         if category in CATEGORIES and category not in approved and r["status"] == "VERIFICADO":
             approved[category] = r
     stars = (1 if "CEDULA" in approved else 0) + sum(1 for c in CATEGORIES if c != "CEDULA" and c in approved)
