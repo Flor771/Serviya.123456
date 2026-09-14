@@ -1,139 +1,45 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { api, getAuthToken } from '../services/api';
-import { X, ShieldCheck, Camera, CheckCircle2, ImagePlus, Loader2 } from 'lucide-react';
+import { X, ShieldCheck, Camera, CheckCircle2, ImagePlus, Loader2, Award, FileText, Star } from 'lucide-react';
 
-interface VerificationModalProps {
-  onClose: () => void;
-}
-
+interface VerificationModalProps { onClose: () => void; }
 type Side = 'front' | 'back';
+type Category = 'CERTIFICACION_TECNICA'|'DIPLOMADO'|'EXPERIENCIA_ACREDITADA'|'LICENCIA_ESPECIALIDAD';
+
+const OPTIONALS:Array<{key:Category;label:string;hint:string}>= [
+ {key:'CERTIFICACION_TECNICA',label:'Certificación técnica',hint:'INFOTEP, curso técnico u otra certificación'},
+ {key:'DIPLOMADO',label:'Diplomado / formación profesional',hint:'Diplomado o formación especializada'},
+ {key:'EXPERIENCIA_ACREDITADA',label:'Experiencia o acreditación profesional',hint:'Documento que respalde experiencia o acreditación'},
+ {key:'LICENCIA_ESPECIALIDAD',label:'Licencia / especialidad',hint:'Licencia, matrícula o especialidad profesional'},
+];
 
 export const VerificationModal: React.FC<VerificationModalProps> = ({ onClose }) => {
-  const { user, refreshUser } = useAuth();
-  const [frontPreview, setFrontPreview] = useState('');
-  const [backPreview, setBackPreview] = useState('');
-  const [frontUrl, setFrontUrl] = useState(user?.cedula_front_url || '');
-  const [backUrl, setBackUrl] = useState(user?.cedula_back_url || '');
-  const [uploading, setUploading] = useState<Side | null>(null);
-  const [msgSuccess, setMsgSuccess] = useState('');
-  const [msgError, setMsgError] = useState('');
-  const frontInput = useRef<HTMLInputElement>(null);
-  const backInput = useRef<HTMLInputElement>(null);
+ const { user, refreshUser } = useAuth();
+ const [frontPreview,setFrontPreview]=useState(''); const [backPreview,setBackPreview]=useState('');
+ const [frontUrl,setFrontUrl]=useState(user?.cedula_front_url||''); const [backUrl,setBackUrl]=useState(user?.cedula_back_url||'');
+ const [uploading,setUploading]=useState<Side|null>(null); const [certUploading,setCertUploading]=useState<Category|null>(null);
+ const [summary,setSummary]=useState<any>(null); const [msgSuccess,setMsgSuccess]=useState(''); const [msgError,setMsgError]=useState('');
+ const frontInput=useRef<HTMLInputElement>(null); const backInput=useRef<HTMLInputElement>(null); const certInputs=useRef<Record<string,HTMLInputElement|null>>({});
+ const loadSummary=async()=>{try{const d=await api.get<any>('/verification/me');setSummary(d?.summary||null);}catch{setSummary(null)}};
+ useEffect(()=>{void loadSummary()},[]);
 
-  const uploadPhoto = async (side: Side, file: File) => {
-    setMsgError('');
-    setMsgSuccess('');
-    if (!file.type.startsWith('image/')) {
-      setMsgError('Selecciona una foto de la cédula.');
-      return;
-    }
-    if (file.size > 8 * 1024 * 1024) {
-      setMsgError('La foto no puede superar 8 MB.');
-      return;
-    }
-
-    const preview = URL.createObjectURL(file);
-    if (side === 'front') setFrontPreview(preview);
-    else setBackPreview(preview);
-
-    setUploading(side);
-    try {
-      const form = new FormData();
-      form.append('side', side);
-      form.append('photo', file);
-      const token = getAuthToken();
-      const base = (import.meta as any).env?.VITE_API_BASE_URL || '/api/v1';
-      const response = await fetch(`${base}/verification/upload-photo?side=${side}`, {
-        method: 'POST',
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-        body: form,
-      });
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(data.detail || data.message || 'No se pudo cargar la foto.');
-      if (side === 'front') setFrontUrl(data.url || '');
-      else setBackUrl(data.url || '');
-      setMsgSuccess(side === 'front' ? 'Foto frontal cargada correctamente.' : 'Foto posterior cargada correctamente.');
-      await refreshUser();
-    } catch (err: any) {
-      if (side === 'front') setFrontPreview('');
-      else setBackPreview('');
-      setMsgError(err.message || 'Error al cargar la foto.');
-    } finally {
-      setUploading(null);
-    }
-  };
-
-  const handleFile = (side: Side, event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (file) void uploadPhoto(side, file);
-    event.target.value = '';
-  };
-
-  const submitVerification = async () => {
-    setMsgError('');
-    if (!frontUrl || !backUrl) {
-      setMsgError('Carga la foto del frente y del dorso de la cédula.');
-      return;
-    }
-    try {
-      await api.post('/verification/upload', {
-        document_type: 'CEDULA_RD',
-        document_url: frontUrl,
-        notes: 'Cédula cargada mediante fotos directas: frente y dorso.'
-      });
-      setMsgSuccess('¡Cédula enviada para verificación! El equipo de SERVIYA revisará las fotos.');
-      await refreshUser();
-    } catch (err: any) {
-      setMsgError(err.message || 'Error al enviar la verificación.');
-    }
-  };
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/70 backdrop-blur-sm p-4">
-      <div className="bg-white rounded-3xl max-w-md w-full max-h-[92vh] overflow-y-auto p-5 sm:p-6 shadow-2xl border border-slate-200 relative">
-        <button onClick={onClose} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 p-2 rounded-xl" aria-label="Cerrar">
-          <X className="w-5 h-5" />
-        </button>
-
-        <div className="flex items-center gap-2 mb-2 pr-8">
-          <ShieldCheck className="w-6 h-6 text-blue-600 shrink-0" />
-          <h3 className="text-lg font-bold text-slate-900">Verificación de Cédula RD</h3>
-        </div>
-        <p className="text-xs text-slate-500 mb-4">
-          Sube fotos claras de tu cédula para obtener el distintivo <strong>“✓ Trabajador verificado”</strong>.
-        </p>
-
-        {msgError && <div className="mb-3 p-3 bg-red-50 border border-red-100 text-red-700 text-xs rounded-xl">{msgError}</div>}
-        {msgSuccess && <div className="mb-3 p-3 bg-emerald-50 border border-emerald-100 text-emerald-800 text-xs font-semibold rounded-xl flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" /><span>{msgSuccess}</span></div>}
-
-        <div className="rounded-2xl border border-blue-100 bg-blue-50/60 p-4 mb-4">
-          <div className="flex items-center gap-2 mb-1"><Camera className="w-4 h-4 text-blue-600" /><p className="text-sm font-black text-slate-900">Carga tus fotos de la cédula</p></div>
-          <p className="text-[11px] text-slate-500">No usamos escáner. Puedes elegir una foto de tu teléfono o tomarla directamente con la cámara.</p>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          {(['front', 'back'] as Side[]).map(side => {
-            const preview = side === 'front' ? frontPreview : backPreview;
-            const saved = side === 'front' ? frontUrl : backUrl;
-            const label = side === 'front' ? 'Frente de la cédula' : 'Dorso de la cédula';
-            const inputRef = side === 'front' ? frontInput : backInput;
-            return (
-              <div key={side} className="rounded-2xl border-2 border-dashed border-slate-300 bg-slate-50 p-3">
-                <input ref={inputRef} type="file" accept="image/jpeg,image/png,image/webp" capture="environment" onChange={e => handleFile(side, e)} className="hidden" />
-                <button type="button" onClick={() => inputRef.current?.click()} disabled={uploading !== null} className="w-full min-h-32 rounded-xl bg-white border border-slate-200 overflow-hidden flex flex-col items-center justify-center text-center active:scale-[.99] transition disabled:opacity-60">
-                  {preview ? <img src={preview} alt={label} className="w-full h-32 object-cover" /> : saved ? <div className="w-full h-32 flex flex-col items-center justify-center text-emerald-700"><CheckCircle2 className="w-8 h-8 mb-1" /><span className="text-xs font-bold">Foto cargada</span></div> : uploading === side ? <Loader2 className="w-8 h-8 text-blue-600 animate-spin" /> : <><ImagePlus className="w-8 h-8 text-blue-600 mb-2" /><span className="text-xs font-black text-slate-800">Subir foto</span><span className="text-[10px] text-slate-500 mt-1">Galería o cámara</span></>}
-                </button>
-                <p className="text-[11px] font-bold text-slate-700 mt-2 text-center">{label}</p>
-              </div>
-            );
-          })}
-        </div>
-
-        <button type="button" onClick={submitVerification} disabled={!frontUrl || !backUrl || uploading !== null} className="w-full mt-4 bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-xl text-xs shadow-md transition disabled:opacity-50">
-          🛡️ Enviar Cédula para Verificación
-        </button>
-      </div>
-    </div>
-  );
+ const uploadPhoto=async(side:Side,file:File)=>{setMsgError('');setMsgSuccess('');if(!file.type.startsWith('image/'))return setMsgError('Selecciona una foto de la cédula.');if(file.size>8*1024*1024)return setMsgError('La foto no puede superar 8 MB.');const preview=URL.createObjectURL(file);if(side==='front')setFrontPreview(preview);else setBackPreview(preview);setUploading(side);try{const form=new FormData();form.append('side',side);form.append('photo',file);const token=getAuthToken();const base=(import.meta as any).env?.VITE_API_BASE_URL||'/api/v1';const response=await fetch(`${base}/verification/upload-photo?side=${side}`,{method:'POST',headers:token?{Authorization:`Bearer ${token}`}: {},body:form});const data=await response.json().catch(()=>({}));if(!response.ok)throw new Error(data.detail||data.message||'No se pudo cargar la foto.');if(side==='front')setFrontUrl(data.url||'');else setBackUrl(data.url||'');setMsgSuccess(side==='front'?'Foto frontal cargada correctamente.':'Foto posterior cargada correctamente.');await refreshUser();await loadSummary();}catch(err:any){if(side==='front')setFrontPreview('');else setBackPreview('');setMsgError(err.message||'Error al cargar la foto.');}finally{setUploading(null)}};
+ const handleFile=(side:Side,event:React.ChangeEvent<HTMLInputElement>)=>{const file=event.target.files?.[0];if(file)void uploadPhoto(side,file);event.target.value=''};
+ const submitVerification=async()=>{setMsgError('');if(!frontUrl||!backUrl)return setMsgError('Carga la foto del frente y del dorso de la cédula.');try{await api.post('/verification/upload',{document_type:'CEDULA_RD',document_url:frontUrl,notes:'Cédula cargada mediante fotos directas: frente y dorso.'});setMsgSuccess('¡Cédula enviada para verificación! Administración revisará las fotos.');await refreshUser();await loadSummary();}catch(err:any){setMsgError(err.message||'Error al enviar la verificación.')}};
+ const uploadCertificate=async(category:Category,file:File)=>{setMsgError('');setMsgSuccess('');if(file.size>8*1024*1024)return setMsgError('El documento no puede superar 8 MB.');if(!['application/pdf','image/jpeg','image/png','image/webp'].includes(file.type))return setMsgError('Sube un PDF o una foto JPG, PNG o WEBP.');setCertUploading(category);try{const form=new FormData();form.append('category',category);form.append('file',file);const token=getAuthToken();const base=(import.meta as any).env?.VITE_API_BASE_URL||'/api/v1';const response=await fetch(`${base}/verification/upload-certificate?category=${encodeURIComponent(category)}`,{method:'POST',headers:token?{Authorization:`Bearer ${token}`}: {},body:form});const data=await response.json().catch(()=>({}));if(!response.ok)throw new Error(data.detail||data.message||'No se pudo cargar la certificación.');setMsgSuccess(`${OPTIONALS.find(x=>x.key===category)?.label||'Certificación'} enviada para revisión.`);await refreshUser();await loadSummary();}catch(err:any){setMsgError(err.message||'Error al cargar la certificación.')}finally{setCertUploading(null)}};
+ const handleCert=(category:Category,event:React.ChangeEvent<HTMLInputElement>)=>{const file=event.target.files?.[0];if(file)void uploadCertificate(category,file);event.target.value=''};
+ const stars=Number(summary?.stars||0);
+ return <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/70 backdrop-blur-sm p-4"><div className="bg-white rounded-3xl max-w-2xl w-full max-h-[92vh] overflow-y-auto p-5 sm:p-6 shadow-2xl border border-slate-200 relative">
+  <button onClick={onClose} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 p-2 rounded-xl" aria-label="Cerrar"><X className="w-5 h-5"/></button>
+  <div className="flex items-center gap-2 mb-2 pr-8"><ShieldCheck className="w-6 h-6 text-blue-600 shrink-0"/><h3 className="text-lg font-bold text-slate-900">Verificación del trabajador</h3></div>
+  <p className="text-xs text-slate-500 mb-4">La <strong>cédula es obligatoria</strong>. Las cuatro verificaciones adicionales son opcionales y aumentan tu nivel hasta ⭐⭐⭐⭐⭐.</p>
+  {summary&&<div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 mb-4"><div className="flex items-center justify-between gap-3"><div><p className="text-[10px] font-black uppercase tracking-wider text-amber-700">Nivel actual</p><p className="text-sm font-black text-slate-900">{summary.level}</p></div><div className="text-xl tracking-tight" aria-label={`${stars} de 5 estrellas`}>{'★'.repeat(stars)}<span className="text-slate-300">{'★'.repeat(5-stars)}</span></div></div><div className="grid grid-cols-1 sm:grid-cols-5 gap-2 mt-3">{(summary.categories||[]).map((c:any)=><div key={c.key} className={`rounded-xl p-2 border text-[10px] font-bold ${c.verified?'bg-emerald-50 border-emerald-200 text-emerald-700':'bg-white border-slate-200 text-slate-500'}`}>{c.verified?'✓':'○'} {c.label}</div>)}</div></div>}
+  {msgError&&<div className="mb-3 p-3 bg-red-50 border border-red-100 text-red-700 text-xs rounded-xl">{msgError}</div>}{msgSuccess&&<div className="mb-3 p-3 bg-emerald-50 border border-emerald-100 text-emerald-800 text-xs font-semibold rounded-xl flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0"/><span>{msgSuccess}</span></div>}
+  <div className="rounded-2xl border border-blue-100 bg-blue-50/60 p-4 mb-4"><div className="flex items-center gap-2 mb-1"><Camera className="w-4 h-4 text-blue-600"/><p className="text-sm font-black text-slate-900">1. Cédula / identidad • obligatoria</p></div><p className="text-[11px] text-slate-500">Sube fotos claras del frente y dorso. Esta es la base de la verificación SERVIYA.</p></div>
+  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">{(['front','back'] as Side[]).map(side=>{const preview=side==='front'?frontPreview:backPreview;const saved=side==='front'?frontUrl:backUrl;const label=side==='front'?'Frente de la cédula':'Dorso de la cédula';const inputRef=side==='front'?frontInput:backInput;return <div key={side} className="rounded-2xl border-2 border-dashed border-slate-300 bg-slate-50 p-3"><input ref={inputRef} type="file" accept="image/jpeg,image/png,image/webp" capture="environment" onChange={e=>handleFile(side,e)} className="hidden"/><button type="button" onClick={()=>inputRef.current?.click()} disabled={uploading!==null} className="w-full min-h-32 rounded-xl bg-white border border-slate-200 overflow-hidden flex flex-col items-center justify-center text-center active:scale-[.99] transition disabled:opacity-60">{preview?<img src={preview} alt={label} className="w-full h-32 object-cover"/>:saved?<div className="w-full h-32 flex flex-col items-center justify-center text-emerald-700"><CheckCircle2 className="w-8 h-8 mb-1"/><span className="text-xs font-bold">Foto cargada</span></div>:uploading===side?<Loader2 className="w-8 h-8 text-blue-600 animate-spin"/>:<><ImagePlus className="w-8 h-8 text-blue-600 mb-2"/><span className="text-xs font-black text-slate-800">Subir foto</span><span className="text-[10px] text-slate-500 mt-1">Galería o cámara</span></>}</button><p className="text-[11px] font-bold text-slate-700 mt-2 text-center">{label}</p></div>})}</div>
+  <button type="button" onClick={submitVerification} disabled={!frontUrl||!backUrl||uploading!==null} className="w-full mt-4 bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-xl text-xs shadow-md transition disabled:opacity-50">🛡️ Enviar Cédula para Verificación</button>
+  <div className="mt-6"><div className="flex items-center gap-2 mb-2"><Award className="w-5 h-5 text-amber-500"/><h4 className="font-black text-slate-900">2. Certificaciones opcionales</h4></div><p className="text-[11px] text-slate-500 mb-3">Puedes completar cualquiera de estas cuatro áreas. Cada una aprobada suma una estrella. PDF o foto, máximo 8 MB.</p><div className="space-y-3">{OPTIONALS.map((item,i)=><div key={item.key} className="rounded-2xl border border-slate-200 p-4 bg-slate-50"><div className="flex items-start justify-between gap-3"><div><p className="text-sm font-black text-slate-900">{i+2}. {item.label}</p><p className="text-[11px] text-slate-500 mt-1">{item.hint}</p></div><span className="text-[10px] font-black text-slate-400">OPCIONAL</span></div><input ref={el=>{certInputs.current[item.key]=el}} type="file" accept="application/pdf,image/jpeg,image/png,image/webp" onChange={e=>handleCert(item.key,e)} className="hidden"/><button type="button" onClick={()=>certInputs.current[item.key]?.click()} disabled={certUploading!==null} className="mt-3 w-full py-2.5 rounded-xl bg-white border border-slate-300 text-xs font-black text-slate-800 inline-flex items-center justify-center gap-2 disabled:opacity-50"><FileText className="w-4 h-4 text-blue-600"/>{certUploading===item.key?'Subiendo…':'Subir PDF o foto'}</button></div>)}</div></div>
+  <div className="mt-5 rounded-2xl bg-slate-900 text-white p-4"><p className="text-xs font-black">Escala SERVIYA</p><p className="text-[11px] text-slate-300 mt-1">⭐ Cédula verificada · ⭐⭐⭐ Cédula + 1 área adicional · ⭐⭐⭐⭐ Cédula + 2 áreas adicionales · ⭐⭐⭐⭐⭐ las 5 áreas aprobadas.</p></div>
+ </div></div>;
 };
