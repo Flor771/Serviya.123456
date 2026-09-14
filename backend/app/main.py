@@ -6,6 +6,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from app.core.config import settings
 from app.api.v1.router import api_router
+from app.api.v1.warranty_extra import router as warranty_extra_router
 
 logger = logging.getLogger("serviya")
 
@@ -13,10 +14,8 @@ app = FastAPI(title="SERVIYA.do API 🇩🇴", description="API para la platafor
 origins=["https://serviya-admin.onrender.com","https://serviya-com-odg.onrender.com","http://localhost:5173","http://localhost:4173"]
 app.add_middleware(CORSMiddleware,allow_origins=origins,allow_credentials=True,allow_methods=["*"],allow_headers=["*"])
 app.include_router(api_router)
+app.include_router(warranty_extra_router, prefix="/api/v1")
 
-# Contract tables/triggers are owned by Alembic migrations. Do not recreate the
-# legacy trigger at application startup, because it only handled escrow UPDATEs
-# and could overwrite the INSERT-capable migration trigger.
 digital_contracts_ready = True
 
 @app.get("/api/v1/health")
