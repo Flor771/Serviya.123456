@@ -30,14 +30,18 @@ class CompletionPhotosPayload(BaseModel):
 
 @router.get("")
 def list_services(province: Optional[str] = None, category_name: Optional[str] = None, status: Optional[str] = None, db: Session = Depends(get_db)):
+    """Public marketplace listing.
+
+    Only marketplace information is exposed here. Internal user IDs, names,
+    approximate addresses and worker identity are intentionally omitted.
+    Private relationship data is returned by authenticated role-specific APIs.
+    """
     q = db.query(Service)
     if province: q = q.filter(Service.province == province)
     if category_name: q = q.filter(Service.category_name == category_name)
     if status: q = q.filter(Service.status == status)
     out = []
     for s in q.order_by(Service.created_at.desc()).all():
-        c = db.query(User).filter(User.id == s.client_id).first()
-        w = db.query(User).filter(User.id == s.worker_id).first() if s.worker_id else None
         applications_count = db.query(Application).filter(Application.service_id == s.id).count()
         st = s.status.value if hasattr(s.status, "value") else str(s.status)
         out.append({
@@ -51,18 +55,12 @@ def list_services(province: Optional[str] = None, category_name: Optional[str] =
             "negotiation_status": getattr(s, "negotiation_status", None),
             "province": s.province,
             "municipality": s.municipality,
-            "address_approx": s.address_approx,
             "service_date": s.service_date,
             "service_time": s.service_time,
             "estimated_duration": s.estimated_duration,
             "images": s.images or [],
             "requirements": s.requirements or [],
             "status": st,
-            "client_id": s.client_id,
-            "client_name": f"{c.first_name} {c.last_name}" if c else "Cliente SERVIYA",
-            "worker_id": s.worker_id,
-            "worker_name": f"{w.first_name} {w.last_name}" if w else None,
-            "worker_verified": bool(getattr(w, "is_verified", False)) if w else False,
             "applications_count": applications_count,
             "created_at": str(s.created_at),
         })
@@ -131,19 +129,28 @@ def get_service_applications(service_id: str, current_user: User = Depends(get_c
 
 @router.get("/{service_id}")
 def get_service(service_id: str, db: Session = Depends(get_db)):
+    """Public marketplace detail with minimized identity/location data."""
     s = db.query(Service).filter(Service.id == service_id).first()
     if not s: raise HTTPException(status_code=404, detail="Servicio no encontrado")
-    c = db.query(User).filter(User.id == s.client_id).first()
-    w = db.query(User).filter(User.id == s.worker_id).first() if s.worker_id else None
     return {"service": {
-        "id": s.id, "title": s.title, "description": s.description, "category_name": s.category_name, "subcategory": s.subcategory,
-        "price_rd": s.price_rd, "negotiated_price_rd": getattr(s, "negotiated_price_rd", None), "negotiation_status": getattr(s, "negotiation_status", None),
-        "province": s.province, "municipality": s.municipality, "address_approx": s.address_approx, "service_date": s.service_date,
-        "service_time": s.service_time, "estimated_duration": s.estimated_duration, "images": s.images or [], "requirements": s.requirements or [],
-        "status": s.status.value if hasattr(s.status, "value") else str(s.status), "client_id": s.client_id,
-        "client_name": f"{c.first_name} {c.last_name}" if c else "Cliente SERVIYA", "worker_id": s.worker_id,
-        "worker_name": f"{w.first_name} {w.last_name}" if w else None, "worker_verified": bool(getattr(w, "is_verified", False)) if w else False,
-        "applications_count": db.query(Application).filter(Application.service_id == s.id).count(), "created_at": str(s.created_at)
+        "id": s.id,
+        "title": s.title,
+        "description": s.description,
+        "category_name": s.category_name,
+        "subcategory": s.subcategory,
+        "price_rd": s.price_rd,
+        "negotiated_price_rd": getattr(s, "negotiated_price_rd", None),
+        "negotiation_status": getattr(s, "negotiation_status", None),
+        "province": s.province,
+        "municipality": s.municipality,
+        "service_date": s.service_date,
+        "service_time": s.service_time,
+        "estimated_duration": s.estimated_duration,
+        "images": s.images or [],
+        "requirements": s.requirements or [],
+        "status": s.status.value if hasattr(s.status, "value") else str(s.status),
+        "applications_count": db.query(Application).filter(Application.service_id == s.id).count(),
+        "created_at": str(s.created_at),
     }}
 
 @router.get("/{service_id}/completion-photos")
