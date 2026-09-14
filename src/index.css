@@ -11,3 +11,8 @@ div[class*="z-[90]"] > div[class*="bottom-0"]::before {
   border-radius: 18px;
   flex: 0 0 auto;
 }
+
+/* Revisitas se abre únicamente desde Más o desde una notificación superior. */
+button[class*="fixed"][class*="bottom-20"][class*="bg-indigo-600"][class*="z-[72]"] {
+  display: none !important;
+}
