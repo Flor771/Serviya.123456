@@ -13,6 +13,9 @@ from app.models.models import User, UserRoleEnum, Wallet, WorkerProfile
 
 router = APIRouter(prefix="/auth", tags=["Autenticación"])
 
+TERMS_VERSION = os.getenv("TERMS_VERSION", "2026-09-14")
+PRIVACY_POLICY_VERSION = os.getenv("PRIVACY_POLICY_VERSION", "2026-09-14")
+
 class RegisterSchema(BaseModel):
     first_name: str; last_name: str; email: EmailStr; phone: str; password: str
     confirm_password: Optional[str] = None; role: Optional[str] = "CLIENTE"; cedula: Optional[str] = None
@@ -48,8 +51,10 @@ def register(data: RegisterSchema, db: Session = Depends(get_db)):
     if role_str == "ADMIN": raise HTTPException(403, "Las cuentas administrativas no se registran públicamente.")
     if db.query(User).filter(User.email == data.email).first(): raise HTTPException(400, "Ya existe una cuenta registrada con este correo electrónico.")
     role_enum=UserRoleEnum.TRABAJADOR if role_str == "TRABAJADOR" else UserRoleEnum.CLIENTE
+    accepted_at = datetime.now(timezone.utc)
     user=User(first_name=data.first_name,last_name=data.last_name,email=data.email,phone=data.phone,cedula=data.cedula,password_hash=get_password_hash(data.password),role=role_enum,active_role=role_str,province=data.province or "Distrito Nacional",municipality=data.municipality or "Santo Domingo de Guzmán (DN)",is_verified=False)
     db.add(user); db.flush()
+    db.execute(text("UPDATE users SET terms_accepted_at=:accepted_at, terms_version=:terms_version, privacy_policy_version=:privacy_version WHERE id=:uid"), {"accepted_at":accepted_at,"terms_version":TERMS_VERSION,"privacy_version":PRIVACY_POLICY_VERSION,"uid":user.id})
     if role_str == "TRABAJADOR":
         db.add(WorkerProfile(user_id=user.id,cedula=data.cedula,specialties=data.profession or "Servicios Generales",hourly_rate=600.0,availability="TIEMPO_COMPLETO",has_infotep=False,rating=5.0,review_count=0,is_approved=False))
         db.add(Wallet(worker_id=user.id,available_balance=0.0,pending_custody_balance=0.0,total_earnings=0.0,total_commissions=0.0,total_withdrawn=0.0))
@@ -79,8 +84,6 @@ def recover_password(data: RecoverPasswordSchema, db: Session = Depends(get_db))
         db.execute(text("UPDATE password_reset_tokens SET used_at=:now WHERE user_id=:uid AND used_at IS NULL"),{"now":now,"uid":user.id})
         db.execute(text("INSERT INTO password_reset_tokens (user_id,token_hash,expires_at,created_at) VALUES (:uid,:hash,:exp,:now)"),{"uid":user.id,"hash":token_hash,"exp":now+timedelta(minutes=30),"created_at":now,"now":now})
         db.commit()
-        # Delivery integration is intentionally outside this endpoint; do not leak
-        # the raw token or reveal whether an email is registered.
     return {"message":"Si el correo está registrado, se enviaron instrucciones para recuperar el acceso."}
 
 @router.post("/reset-password")
@@ -97,14 +100,10 @@ def role_toggle(data: RoleToggleSchema,current_user: User=Depends(get_current_ac
     requested=(data.active_role or "").upper().strip()
     role_value=current_user.role.value if hasattr(current_user.role,"value") else str(current_user.role)
     if role_value == "ADMIN":
-        if requested != "ADMIN":
-            raise HTTPException(403,"La cuenta administrativa no puede cambiar a un rol operativo.")
+        if requested != "ADMIN": raise HTTPException(403,"La cuenta administrativa no puede cambiar a un rol operativo.")
     elif role_value == "TRABAJADOR":
-        if requested not in {"TRABAJADOR","TÉCNICO"}:
-            raise HTTPException(403,"El trabajador solo puede utilizar su rol operativo autorizado.")
+        if requested not in {"TRABAJADOR","TÉCNICO"}: raise HTTPException(403,"El trabajador solo puede utilizar su rol operativo autorizado.")
     elif role_value == "CLIENTE":
-        if requested != "CLIENTE":
-            raise HTTPException(403,"El cliente no puede activar otro rol.")
-    else:
-        raise HTTPException(403,"Rol no autorizado.")
+        if requested != "CLIENTE": raise HTTPException(403,"El cliente no puede activar otro rol.")
+    else: raise HTTPException(403,"Rol no autorizado.")
     current_user.active_role=requested; db.commit(); db.refresh(current_user); return {"message":f"Modo actualizado a {requested}","active_role":current_user.active_role}
