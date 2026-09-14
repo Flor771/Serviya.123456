@@ -50,9 +50,11 @@ def get_my_applications(current_user: User = Depends(get_current_active_user), d
 
 @router.post("/{id}/select")
 def select_application(id: str, current_user: User = Depends(get_current_active_user), db: Session = Depends(get_db)):
+    # Lock the service row before checking worker assignment. This makes two concurrent
+    # client selections serialize instead of allowing two workers to be assigned.
     app_item = db.query(Application).filter(Application.id == id).first()
     if not app_item: raise HTTPException(status_code=404, detail="Postulación no encontrada")
-    service = db.query(Service).filter(Service.id == app_item.service_id).first()
+    service = db.query(Service).filter(Service.id == app_item.service_id).with_for_update().first()
     if not service: raise HTTPException(status_code=404, detail="Servicio no encontrado")
     if service.client_id != current_user.id: raise HTTPException(status_code=403, detail="Solamente el cliente creador puede seleccionar técnico")
     if service.worker_id: raise HTTPException(status_code=400, detail="Este servicio ya tiene un técnico seleccionado")

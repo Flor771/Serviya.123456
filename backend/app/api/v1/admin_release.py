@@ -6,6 +6,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 from app.core.deps import get_db, require_admin
 from app.models.models import User
+from app.core.config import settings
 
 router = APIRouter(prefix="/admin-panel", tags=["Aprobación administrativa de fondos"])
 
@@ -57,15 +58,12 @@ def approve_deposit(service_id:str,data:ReleaseApproval,admin_user:User=Depends(
     service=db.execute(text("SELECT id,status,worker_id FROM services WHERE id=:sid FOR UPDATE"),{"sid":service_id}).mappings().first()
     if not service: raise HTTPException(404,"Servicio no encontrado")
     if not service['worker_id']: raise HTTPException(400,"El servicio todavía no tiene trabajador seleccionado.")
-
     wallet=db.execute(text("SELECT id FROM wallets WHERE worker_id=:w FOR UPDATE"),{"w":escrow['worker_id']}).mappings().first()
     if not wallet:
         db.execute(text("INSERT INTO wallets (worker_id,available_balance,pending_custody_balance,total_earnings,total_commissions,total_withdrawn) VALUES (:w,0,0,0,0,0)"),{"w":escrow['worker_id']})
         wallet=db.execute(text("SELECT id FROM wallets WHERE worker_id=:w FOR UPDATE"),{"w":escrow['worker_id']}).mappings().one()
-
-    total=float(escrow['total_amount_rd'] or 0)
-    db.execute(text("UPDATE escrows SET status='RETENIDO',commission_rate_percent=10.0,commission_amount_rd=ROUND(:total*0.10,2),worker_payout_rd=ROUND(:total*0.90,2) WHERE id=:id"),{"id":escrow['id'],'total':total})
-    # Verification creates custody, but does not start the work automatically.
+    total=float(escrow['total_amount_rd'] or 0); rate=float(settings.PLATFORM_COMMISSION_PERCENT); commission=round(total*rate/100,2); payout=round(total-commission,2)
+    db.execute(text("UPDATE escrows SET status='RETENIDO',commission_rate_percent=:rate,commission_amount_rd=:commission,worker_payout_rd=:payout WHERE id=:id"),{"id":escrow['id'],'rate':rate,'commission':commission,'payout':payout})
     db.execute(text("UPDATE services SET status='TRABAJADOR_SELECCIONADO' WHERE id=:sid AND status IN ('PUBLICADA','RECIBIENDO_POSTULACIONES','TRABAJADOR_SELECCIONADO')"),{"sid":service_id})
     db.execute(text("UPDATE wallets SET pending_custody_balance=COALESCE(pending_custody_balance,0)+:amount WHERE id=:wid"),{"wid":wallet['id'],'amount':total})
     db.execute(text("UPDATE transactions SET status='RETENIDO' WHERE user_id=:u AND type='PAGO_CUSTODIA_TRANSFERENCIA' AND status='PENDIENTE_VERIFICACION' AND created_at=(SELECT MAX(created_at) FROM transactions WHERE user_id=:u AND type='PAGO_CUSTODIA_TRANSFERENCIA' AND status='PENDIENTE_VERIFICACION')"),{"u":escrow['client_id']})
@@ -73,9 +71,9 @@ def approve_deposit(service_id:str,data:ReleaseApproval,admin_user:User=Depends(
     db.execute(text("INSERT INTO transactions (user_id,amount,type,status,reference_code,created_at) SELECT :u,:amount,'CUSTODIA_TRABAJO','RETENIDO',:ref,CURRENT_TIMESTAMP WHERE NOT EXISTS (SELECT 1 FROM transactions WHERE user_id=:u AND reference_code=:ref)"),{"u":escrow['worker_id'],"amount":total,"ref":custody_ref})
     _notify(db,escrow['client_id'],'Depósito verificado por Administración',f"Administración confirmó que llegaron RD$ {total:,.2f}. El dinero ahora está en Custodia SERVIYA.",'DEPOSIT_VERIFIED',service_id)
     _notify(db,escrow['worker_id'],'Dinero recibido en Custodia SERVIYA',f"Administración confirmó RD$ {total:,.2f} en Custodia. Inicia el trabajo desde tu panel; el dinero no estará disponible para retiro hasta la liberación administrativa.",'PAYMENT',service_id)
-    _audit(db,admin_user.id,'ADMIN_VERIFY_DEPOSIT',escrow['id'],f"service_id={service_id}; {data.notes or 'Depósito verificado por Administración.'}")
+    _audit(db,admin_user.id,'ADMIN_VERIFY_DEPOSIT',escrow['id'],f"service_id={service_id}; comisión={rate:.4f}%; {data.notes or 'Depósito verificado por Administración.'}")
     db.commit()
-    return {"message":"Depósito verificado y fondos puestos en Custodia SERVIYA.","status":"RETENIDO","approved_by_admin":True,"service_status":"TRABAJADOR_SELECCIONADO","worker_wallet_custody_rd":total,"custody_reference":custody_ref}
+    return {"message":"Depósito verificado y fondos puestos en Custodia SERVIYA.","status":"RETENIDO","approved_by_admin":True,"service_status":"TRABAJADOR_SELECCIONADO","worker_wallet_custody_rd":total,"custody_reference":custody_ref,"commission_rate_percent":rate}
 
 
 @router.post("/escrows/{service_id}/reject-deposit")
@@ -100,8 +98,8 @@ def approve_release(service_id:str,data:ReleaseApproval,admin_user:User=Depends(
     if not worker_wallet:
         db.execute(text("INSERT INTO wallets (worker_id,available_balance,pending_custody_balance,total_earnings,total_commissions,total_withdrawn) VALUES (:w,0,0,0,0,0)"),{"w":escrow['worker_id']})
         worker_wallet=db.execute(text("SELECT id FROM wallets WHERE worker_id=:w FOR UPDATE"),{"w":escrow['worker_id']}).mappings().one()
-    total=float(escrow['total_amount_rd'] or 0); commission=round(total*0.10,2); payout=round(total-commission,2); now=datetime.utcnow()
-    db.execute(text("UPDATE escrows SET status='LIBERADO',commission_rate_percent=10.0,commission_amount_rd=:c,worker_payout_rd=:p,released_at=:now,otp_verified=true WHERE id=:id"),{"id":escrow['id'],'now':now,'c':commission,'p':payout})
+    total=float(escrow['total_amount_rd'] or 0); rate=float(settings.PLATFORM_COMMISSION_PERCENT); commission=round(total*rate/100,2); payout=round(total-commission,2); now=datetime.utcnow()
+    db.execute(text("UPDATE escrows SET status='LIBERADO',commission_rate_percent=:rate,commission_amount_rd=:c,worker_payout_rd=:p,released_at=:now WHERE id=:id"),{"id":escrow['id'],'now':now,'rate':rate,'c':commission,'p':payout})
     db.execute(text("UPDATE wallets SET available_balance=COALESCE(available_balance,0)+:p,pending_custody_balance=GREATEST(COALESCE(pending_custody_balance,0)-:t,0),total_earnings=COALESCE(total_earnings,0)+:p,total_commissions=COALESCE(total_commissions,0)+:c WHERE id=:id"),{"id":worker_wallet['id'],'p':payout,'t':total,'c':commission})
     release_ref=f"ADMIN-RELEASE-{service_id[:8].upper()}"
     db.execute(text("INSERT INTO wallet_transactions (id,wallet_id,user_id,type,amount_rd,description,reference,status,created_at) SELECT :id,:wid,:u,'LIBERACION_ADMIN',:p,:d,:ref,'EXITOSO',CURRENT_TIMESTAMP WHERE NOT EXISTS (SELECT 1 FROM wallet_transactions WHERE reference=:ref)"),{"id":str(uuid.uuid4()),"wid":worker_wallet['id'],"u":escrow['worker_id'],"p":payout,"d":f"Liberación administrativa del servicio {service_id}","ref":release_ref})
@@ -112,9 +110,9 @@ def approve_release(service_id:str,data:ReleaseApproval,admin_user:User=Depends(
         expires=now+timedelta(days=60); ref=f"GAR-SRV-{service_id[:8].upper()}"; db.execute(text("INSERT INTO service_warranties (id,service_id,client_id,worker_id,coverage_days,status,activated_at,expires_at,certificate_ref) VALUES (:id,:sid,:c,:w,60,'ACTIVA',:now,:exp,:ref)"),{"id":str(uuid.uuid4()),"sid":service_id,"c":escrow['client_id'],'w':escrow['worker_id'],'now':now,'exp':expires,'ref':ref})
     _notify(db,escrow['worker_id'],'Pago liberado por administración',f"Administración aprobó la liberación de RD$ {payout:,.2f}.",'PAYMENT_RELEASED',service_id)
     _notify(db,escrow['client_id'],'Pago aprobado y garantía activa','Administración aprobó la liquidación y activó la garantía SERVIYA por 60 días.','PAYMENT_ADMIN_APPROVED',service_id)
-    _audit(db,admin_user.id,'ADMIN_APPROVE_RELEASE',escrow['id'],f"service_id={service_id}; {data.notes or 'Liberación aprobada por Administración.'}")
+    _audit(db,admin_user.id,'ADMIN_APPROVE_RELEASE',escrow['id'],f"service_id={service_id}; comisión={rate:.4f}%; {data.notes or 'Liberación aprobada por Administración.'}")
     db.commit()
-    return {"message":"Fondos liberados correctamente y garantía de 60 días activada.","status":"LIBERADO","worker_payout_rd":payout,"commission_rd":commission,"service_status":"COMPLETADA"}
+    return {"message":"Fondos liberados correctamente y garantía de 60 días activada.","status":"LIBERADO","worker_payout_rd":payout,"commission_rd":commission,"commission_rate_percent":rate,"service_status":"COMPLETADA"}
 
 
 @router.post("/escrows/{service_id}/hold-release")
