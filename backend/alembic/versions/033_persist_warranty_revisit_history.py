@@ -1,12 +1,12 @@
 """Persist every warranty revisit lifecycle change.
 
-Revision ID: 033_persist_warranty_revisit_history
+Revision ID: 033_revisit_history
 Revises: 032_standardize_future_warranty
 """
 from typing import Sequence, Union
 from alembic import op
 
-revision: str = '033_persist_warranty_revisit_history'
+revision: str = '033_revisit_history'
 down_revision: Union[str, None] = '032_standardize_future_warranty'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -75,21 +75,17 @@ def upgrade() -> None:
     END;
     $$ LANGUAGE plpgsql;
     """)
-
     bind.exec_driver_sql("""
     DROP TRIGGER IF EXISTS trg_serviya_persist_warranty_revisit_insert ON warranty_revisits;
     CREATE TRIGGER trg_serviya_persist_warranty_revisit_insert
     AFTER INSERT ON warranty_revisits
-    FOR EACH ROW
-    EXECUTE FUNCTION serviya_persist_warranty_revisit_event();
+    FOR EACH ROW EXECUTE FUNCTION serviya_persist_warranty_revisit_event();
     """)
-
     bind.exec_driver_sql("""
     DROP TRIGGER IF EXISTS trg_serviya_persist_warranty_revisit_update ON warranty_revisits;
     CREATE TRIGGER trg_serviya_persist_warranty_revisit_update
     AFTER UPDATE OF status ON warranty_revisits
-    FOR EACH ROW
-    WHEN (NEW.status IS DISTINCT FROM OLD.status)
+    FOR EACH ROW WHEN (NEW.status IS DISTINCT FROM OLD.status)
     EXECUTE FUNCTION serviya_persist_warranty_revisit_event();
     """)
 
