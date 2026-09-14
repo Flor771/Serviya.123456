@@ -18,17 +18,11 @@ def upgrade() -> None:
     CREATE OR REPLACE FUNCTION serviya_persist_warranty_revisit_event()
     RETURNS trigger AS $$
     DECLARE
-      v_user_id text;
+      v_user_id text := NEW.requested_by_user_id;
       v_title text;
       v_message text;
       v_next text;
     BEGIN
-      IF TG_OP = 'INSERT' THEN
-        v_user_id := NEW.requested_by_user_id;
-      ELSE
-        v_user_id := NEW.requested_by_user_id;
-      END IF;
-
       IF NEW.status = 'SOLICITADA' THEN
         v_title := 'Revisita solicitada';
         v_message := 'La solicitud de revisita de garantía quedó registrada en SERVIYA.';
@@ -64,7 +58,7 @@ def upgrade() -> None:
           id, user_id, process_type, status, title, message, next_step,
           rejection_reason, correction, related_entity_id, created_at
         ) VALUES (
-          gen_random_uuid()::text,
+          md5(random()::text || clock_timestamp()::text || NEW.id),
           v_user_id,
           'WARRANTY_REVISIT',
           NEW.status,
@@ -83,16 +77,25 @@ def upgrade() -> None:
     """)
 
     bind.exec_driver_sql("""
-    DROP TRIGGER IF EXISTS trg_serviya_persist_warranty_revisit ON warranty_revisits;
-    CREATE TRIGGER trg_serviya_persist_warranty_revisit
-    AFTER INSERT OR UPDATE OF status ON warranty_revisits
+    DROP TRIGGER IF EXISTS trg_serviya_persist_warranty_revisit_insert ON warranty_revisits;
+    CREATE TRIGGER trg_serviya_persist_warranty_revisit_insert
+    AFTER INSERT ON warranty_revisits
     FOR EACH ROW
-    WHEN (TG_OP = 'INSERT' OR NEW.status IS DISTINCT FROM OLD.status)
+    EXECUTE FUNCTION serviya_persist_warranty_revisit_event();
+    """)
+
+    bind.exec_driver_sql("""
+    DROP TRIGGER IF EXISTS trg_serviya_persist_warranty_revisit_update ON warranty_revisits;
+    CREATE TRIGGER trg_serviya_persist_warranty_revisit_update
+    AFTER UPDATE OF status ON warranty_revisits
+    FOR EACH ROW
+    WHEN (NEW.status IS DISTINCT FROM OLD.status)
     EXECUTE FUNCTION serviya_persist_warranty_revisit_event();
     """)
 
 
 def downgrade() -> None:
     bind = op.get_bind()
-    bind.exec_driver_sql("DROP TRIGGER IF EXISTS trg_serviya_persist_warranty_revisit ON warranty_revisits;")
+    bind.exec_driver_sql("DROP TRIGGER IF EXISTS trg_serviya_persist_warranty_revisit_insert ON warranty_revisits;")
+    bind.exec_driver_sql("DROP TRIGGER IF EXISTS trg_serviya_persist_warranty_revisit_update ON warranty_revisits;")
     bind.exec_driver_sql("DROP FUNCTION IF EXISTS serviya_persist_warranty_revisit_event();")
