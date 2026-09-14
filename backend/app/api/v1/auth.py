@@ -54,13 +54,13 @@ def register(data: RegisterSchema, db: Session = Depends(get_db)):
         db.add(WorkerProfile(user_id=user.id,cedula=data.cedula,specialties=data.profession or "Servicios Generales",hourly_rate=600.0,availability="TIEMPO_COMPLETO",has_infotep=False,rating=5.0,review_count=0,is_approved=False))
         db.add(Wallet(worker_id=user.id,available_balance=0.0,pending_custody_balance=0.0,total_earnings=0.0,total_commissions=0.0,total_withdrawn=0.0))
     db.commit(); db.refresh(user); token=create_access_token(user.id)
-    return {"message":"Usuario registrado exitosamente en SERVIYA.do","token":token,"access_token":token,"token_type":"bearer","user":_user_payload(user)}
+    return {"message":"Usuario registrado exitosamente en SERVIYA","token":token,"access_token":token,"token_type":"bearer","user":_user_payload(user)}
 
 @router.post("/login")
 def login(data: LoginSchema, db: Session = Depends(get_db)):
     user=db.query(User).filter(User.email == data.email).first(); pwd_hash=getattr(user,"password_hash",None) or getattr(user,"hashed_password",None)
     if not user or not verify_password(data.password,pwd_hash): raise HTTPException(401,"Credenciales incorrectas. Verifique su correo y contraseña.")
-    if user.is_active is False: raise HTTPException(403,"Esta cuenta está suspendida. Contacte con soporte de SERVIYA.do.")
+    if user.is_active is False: raise HTTPException(403,"Esta cuenta está suspendida. Contacte con soporte de SERVIYA.")
     _bootstrap_configured_admin(user, db)
     token=create_access_token(user.id)
     return {"message":"Inicio de sesión exitoso","token":token,"access_token":token,"token_type":"bearer","user":_user_payload(user)}
@@ -71,12 +71,16 @@ def get_me(current_user: User = Depends(get_current_active_user)):
 
 @router.post("/recover-password")
 def recover_password(data: RecoverPasswordSchema, db: Session = Depends(get_db)):
+    # Never return a password-reset token in the HTTP response. In production the
+    # raw token must be delivered through a trusted out-of-band channel (email/SMS).
     user=db.query(User).filter(User.email == data.email).first()
     if user:
         raw=secrets.token_urlsafe(48); token_hash=hashlib.sha256(raw.encode()).hexdigest(); now=datetime.now(timezone.utc)
         db.execute(text("UPDATE password_reset_tokens SET used_at=:now WHERE user_id=:uid AND used_at IS NULL"),{"now":now,"uid":user.id})
-        db.execute(text("INSERT INTO password_reset_tokens (user_id,token_hash,expires_at,created_at) VALUES (:uid,:hash,:exp,:now)"),{"uid":user.id,"hash":token_hash,"exp":now+timedelta(minutes=30),"now":now}); db.commit()
-        return {"message":"Solicitud de recuperación creada. El token de recuperación es válido durante 30 minutos.","reset_token":raw}
+        db.execute(text("INSERT INTO password_reset_tokens (user_id,token_hash,expires_at,created_at) VALUES (:uid,:hash,:exp,:now)"),{"uid":user.id,"hash":token_hash,"exp":now+timedelta(minutes=30),"created_at":now,"now":now})
+        db.commit()
+        # Delivery integration is intentionally outside this endpoint; do not leak
+        # the raw token or reveal whether an email is registered.
     return {"message":"Si el correo está registrado, se enviaron instrucciones para recuperar el acceso."}
 
 @router.post("/reset-password")
@@ -90,4 +94,17 @@ def reset_password(data: ResetPasswordSchema, db: Session = Depends(get_db)):
 
 @router.post("/role-toggle")
 def role_toggle(data: RoleToggleSchema,current_user: User=Depends(get_current_active_user),db: Session=Depends(get_db)):
-    current_user.active_role=data.active_role; db.commit(); db.refresh(current_user); return {"message":f"Modo actualizado a {data.active_role}","active_role":current_user.active_role}
+    requested=(data.active_role or "").upper().strip()
+    role_value=current_user.role.value if hasattr(current_user.role,"value") else str(current_user.role)
+    if role_value == "ADMIN":
+        if requested != "ADMIN":
+            raise HTTPException(403,"La cuenta administrativa no puede cambiar a un rol operativo.")
+    elif role_value == "TRABAJADOR":
+        if requested not in {"TRABAJADOR","TÉCNICO"}:
+            raise HTTPException(403,"El trabajador solo puede utilizar su rol operativo autorizado.")
+    elif role_value == "CLIENTE":
+        if requested != "CLIENTE":
+            raise HTTPException(403,"El cliente no puede activar otro rol.")
+    else:
+        raise HTTPException(403,"Rol no autorizado.")
+    current_user.active_role=requested; db.commit(); db.refresh(current_user); return {"message":f"Modo actualizado a {requested}","active_role":current_user.active_role}
