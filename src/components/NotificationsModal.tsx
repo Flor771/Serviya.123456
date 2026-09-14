@@ -1,5 +1,6 @@
 import React from 'react';
 import { useNotifications } from '../context/NotificationContext';
+import { useAuth } from '../context/AuthContext';
 import { X, Bell, ArrowRight } from 'lucide-react';
 import { api } from '../services/api';
 
@@ -8,20 +9,26 @@ type Destination = 'service' | 'chat' | 'applications' | 'wallet' | 'dispute' | 
 
 export const NotificationsModal: React.FC<NotificationsModalProps> = ({ onClose }) => {
   const { notifications, markAllAsRead } = useNotifications();
+  const { user } = useAuth();
+  const role = String(user?.activeRole || user?.role || '').toUpperCase();
+  const isWorker = role === 'TRABAJADOR';
+  const isClient = role === 'CLIENTE';
 
   const classify = (n: any): { destination: Destination; tab: string; label: string } => {
     const type = String(n.type || '').toUpperCase();
     const text = `${n.title || ''} ${n.message || ''}`.toLowerCase();
-    // Revisitas is modal-only. Do not set the nonexistent "revisitas" app tab.
+    // Revisitas is modal-only. Never navigate to a nonexistent app tab.
     if (type.includes('REVISIT') || type.includes('REVISITA') || type.includes('GARANTIA') || text.includes('revisita') || text.includes('garantía') || text.includes('garantia')) return { destination: 'revisitas', tab: '', label: 'Abrir Revisitas' };
     if (type === 'CONTRACT_ISSUED' || type === 'CONTRACT_PENDING' || type === 'CONTRACT_READY' || text.includes('contrato digital disponible') || text.includes('contrato digital')) return { destination: 'contract', tab: 'contratos', label: 'Abrir contrato digital y aceptar' };
     if (type === 'TRABAJADOR_SELECCIONADO' || text.includes('fuiste seleccionado') || text.includes('has sido seleccionado')) return { destination: 'service', tab: 'mis-servicios', label: 'Abrir negociación y contraoferta' };
     if (type.includes('MESSAGE') || type.includes('CHAT') || text.includes('mensaje')) return { destination: 'chat', tab: 'mensajes', label: 'Abrir mensajes' };
-    // A postulation notification can belong to either role. Keep the main tab valid and let App open the related service modal; this avoids the nonexistent client "postulaciones" tab and the resulting blank screen.
-    if (type.includes('APPLICATION') || type.includes('POSTUL') || text.includes('postulación') || text.includes('postulacion')) return { destination: 'service', tab: '', label: 'Abrir postulación' };
-    if (type.includes('DISPUTE') || type.includes('DISPUTA')) return { destination: 'dispute', tab: 'mis-trabajos', label: 'Abrir disputa' };
+    // Postulation notifications use a role-safe tab. Clients go to their publications;
+    // workers go to their assigned/work area. The related entity remains the service ID.
+    if (type.includes('APPLICATION') || type.includes('POSTUL') || text.includes('postulación') || text.includes('postulacion')) return { destination: 'service', tab: isClient ? 'mis-publicaciones' : (isWorker ? 'mis-servicios' : 'inicio'), label: 'Abrir postulación' };
+    if (type.includes('DISPUTE') || type.includes('DISPUTA')) return { destination: 'dispute', tab: isWorker ? 'mis-servicios' : 'mis-trabajos', label: 'Abrir disputa' };
     if (type.includes('WALLET') || type.includes('WITHDRAW') || type.includes('RETIRO') || type.includes('DEPOSIT') || type.includes('PAYMENT')) return { destination: 'wallet', tab: 'billetera', label: 'Abrir depósito y custodia' };
-    return { destination: 'service', tab: 'mis-trabajos', label: 'Abrir servicio' };
+    // Generic service notifications must never point a worker at the client-only area.
+    return { destination: 'service', tab: isWorker ? 'mis-servicios' : 'mis-trabajos', label: 'Abrir servicio' };
   };
 
   const navigate = (n: any) => {
