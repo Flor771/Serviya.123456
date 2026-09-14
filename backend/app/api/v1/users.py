@@ -107,12 +107,12 @@ def get_workers(province: Optional[str] = None, category: Optional[str] = None, 
     for w in workers:
         wp = db.query(WorkerProfile).filter(WorkerProfile.user_id == w.id).first()
         results.append({
-            "id": w.id, "first_name": w.first_name, "last_name": w.last_name, "province": w.province,
+            "first_name": w.first_name, "last_name": w.last_name, "province": w.province,
             "municipality": w.municipality, "rating": w.rating, "jobs_completed": w.jobs_completed,
             "is_verified": w.is_verified, "avatar_url": w.avatar_url,
             "profession": wp.specialties if wp and wp.specialties else "Técnico Especializado",
             "hourly_rate_rd": wp.hourly_rate if wp and wp.hourly_rate is not None else 500.0,
             "bio": w.bio, "availability": wp.availability if wp else None,
-            "verification": _verification_summary(db, w.id)
+            "verification_level": _verification_summary(db, w.id)["level"]
         })
     return {"workers": results}
