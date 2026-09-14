@@ -1,7 +1,6 @@
 import { StrictMode, type ComponentType } from 'react';
 import { createRoot } from 'react-dom/client';
 import './index.css';
-import { PWAInstallPrompt } from './components/PWAInstallPrompt';
 
 void import('./App.tsx').then((AppModule) => {
   const App = (AppModule as { default?: ComponentType; App?: ComponentType }).default
@@ -14,7 +13,6 @@ void import('./App.tsx').then((AppModule) => {
   createRoot(document.getElementById('root')!).render(
     <StrictMode>
       <App />
-      <PWAInstallPrompt />
     </StrictMode>,
   );
 });
