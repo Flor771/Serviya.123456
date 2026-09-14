@@ -16,3 +16,8 @@ div[class*="z-[90]"] > div[class*="bottom-0"]::before {
 button[class*="fixed"][class*="bottom-20"][class*="bg-indigo-600"][class*="z-[72]"] {
   display: none !important;
 }
+
+/* El lanzador legado no puede abrir automáticamente el panel de Revisitas. */
+div[class*="z-[96]"][class*="bg-slate-950/70"] {
+  display: none !important;
+}

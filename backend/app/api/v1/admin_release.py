@@ -12,16 +12,14 @@ router = APIRouter(prefix="/admin-panel", tags=["Aprobación administrativa de f
 
 class ReleaseApproval(BaseModel):
     notes: str = Field(default="", max_length=1000)
-
+    otp: str = Field(default="", min_length=6, max_length=6)
 
 def _notify(db, user_id, title, message, kind, related_entity_id=None):
     if user_id:
         db.execute(text("INSERT INTO notifications (id,user_id,title,message,type,related_entity_id,read,created_at) VALUES (gen_random_uuid()::text,:u,:t,:m,:k,:rid,false,CURRENT_TIMESTAMP)"), {"u":user_id,"t":title,"m":message,"k":kind,"rid":related_entity_id})
 
-
 def _audit(db, admin_id, action, target_id, notes):
     db.execute(text("INSERT INTO admin_audit_logs (admin_id,action,resource,target_id,details,timestamp) VALUES (:a,:action,'escrows',:id,:details,CURRENT_TIMESTAMP)"), {"a":admin_id,"action":action,"id":str(target_id),"details":notes or 'Aprobación administrativa'})
-
 
 @router.get("/escrows/pending-deposits")
 def pending_deposits(admin_user: User = Depends(require_admin), db: Session = Depends(get_db)):
@@ -30,7 +28,6 @@ def pending_deposits(admin_user: User = Depends(require_admin), db: Session = De
     for r in rows:
         item=dict(r); item["display_title"]=f"{item.get('client_name') or item.get('client_email') or 'Cliente'} — {item.get('title') or 'Servicio'}"; deposits.append(item)
     return {"pending_deposits":deposits,"summary":{"count":len(deposits),"pending_total_rd":sum(float(r['total_amount_rd'] or 0) for r in rows)}}
-
 
 @router.get("/escrows/pending-release")
 def pending_releases(admin_user: User = Depends(require_admin), db: Session = Depends(get_db)):
@@ -48,7 +45,6 @@ def pending_releases(admin_user: User = Depends(require_admin), db: Session = De
     for r in rows:
         item=dict(r); item["amount_rd"]=float(r["total_amount_rd"] or 0); item["payout_rd"]=float(r["worker_payout_rd"] or 0); item["commission_rd"]=float(r["commission_amount_rd"] or 0); item["display_title"]=f"{r['client_name'] or 'Cliente'} — {r['title'] or 'Servicio'}"; items.append(item)
     return {"pending_releases":items,"summary":{"count":len(items),"pending_total_rd":sum(x["amount_rd"] for x in items)}}
-
 
 @router.post("/escrows/{service_id}/approve-deposit")
 def approve_deposit(service_id:str,data:ReleaseApproval,admin_user:User=Depends(require_admin),db:Session=Depends(get_db)):
@@ -75,7 +71,6 @@ def approve_deposit(service_id:str,data:ReleaseApproval,admin_user:User=Depends(
     db.commit()
     return {"message":"Depósito verificado y fondos puestos en Custodia SERVIYA.","status":"RETENIDO","approved_by_admin":True,"service_status":"TRABAJADOR_SELECCIONADO","worker_wallet_custody_rd":total,"custody_reference":custody_ref,"commission_rate_percent":rate}
 
-
 @router.post("/escrows/{service_id}/reject-deposit")
 def reject_deposit(service_id:str,data:ReleaseApproval,admin_user:User=Depends(require_admin),db:Session=Depends(get_db)):
     escrow=db.execute(text("SELECT id,client_id,total_amount_rd FROM escrows WHERE service_id=:sid AND status='PENDIENTE_VERIFICACION' ORDER BY created_at DESC LIMIT 1 FOR UPDATE"),{"sid":service_id}).mappings().first()
@@ -86,11 +81,13 @@ def reject_deposit(service_id:str,data:ReleaseApproval,admin_user:User=Depends(r
     db.commit()
     return {"message":"Depósito rechazado; no se activó Custodia ni el trabajo.","status":"RECHAZADO","approved_by_admin":True}
 
-
 @router.post("/escrows/{service_id}/approve-release")
 def approve_release(service_id:str,data:ReleaseApproval,admin_user:User=Depends(require_admin),db:Session=Depends(get_db)):
-    escrow=db.execute(text("SELECT id,client_id,worker_id,total_amount_rd,commission_amount_rd,worker_payout_rd,status FROM escrows WHERE service_id=:sid AND status='PENDIENTE_APROBACION' ORDER BY created_at DESC LIMIT 1 FOR UPDATE"),{"sid":service_id}).mappings().first()
+    escrow=db.execute(text("SELECT id,client_id,worker_id,total_amount_rd,commission_amount_rd,worker_payout_rd,status,release_otp,otp_verified FROM escrows WHERE service_id=:sid AND status='PENDIENTE_APROBACION' ORDER BY created_at DESC LIMIT 1 FOR UPDATE"),{"sid":service_id}).mappings().first()
     if not escrow: raise HTTPException(404,"No existe una custodia pendiente de aprobación para este servicio.")
+    if escrow['otp_verified']: raise HTTPException(409,"Esta custodia ya fue validada para liberación.")
+    expected=str(escrow['release_otp'] or '').strip(); supplied=str(data.otp or '').strip()
+    if len(expected)!=6 or supplied!=expected: raise HTTPException(403,"Código de conformidad inválido. Solicita el código mostrado en la notificación de finalización y vuelve a intentarlo.")
     service=db.execute(text("SELECT id,status,completion_submitted FROM services WHERE id=:sid FOR UPDATE"),{"sid":service_id}).mappings().first()
     if not service: raise HTTPException(404,"Servicio no encontrado")
     if not service['completion_submitted']: raise HTTPException(400,"El trabajador todavía no ha enviado el trabajo a revisión.")
@@ -99,7 +96,7 @@ def approve_release(service_id:str,data:ReleaseApproval,admin_user:User=Depends(
         db.execute(text("INSERT INTO wallets (worker_id,available_balance,pending_custody_balance,total_earnings,total_commissions,total_withdrawn) VALUES (:w,0,0,0,0,0)"),{"w":escrow['worker_id']})
         worker_wallet=db.execute(text("SELECT id FROM wallets WHERE worker_id=:w FOR UPDATE"),{"w":escrow['worker_id']}).mappings().one()
     total=float(escrow['total_amount_rd'] or 0); rate=float(settings.PLATFORM_COMMISSION_PERCENT); commission=round(total*rate/100,2); payout=round(total-commission,2); now=datetime.utcnow()
-    db.execute(text("UPDATE escrows SET status='LIBERADO',commission_rate_percent=:rate,commission_amount_rd=:c,worker_payout_rd=:p,released_at=:now WHERE id=:id"),{"id":escrow['id'],'now':now,'rate':rate,'c':commission,'p':payout})
+    db.execute(text("UPDATE escrows SET status='LIBERADO',commission_rate_percent=:rate,commission_amount_rd=:c,worker_payout_rd=:p,released_at=:now,otp_verified=true,release_otp=NULL WHERE id=:id"),{"id":escrow['id'],'now':now,'rate':rate,'c':commission,'p':payout})
     db.execute(text("UPDATE wallets SET available_balance=COALESCE(available_balance,0)+:p,pending_custody_balance=GREATEST(COALESCE(pending_custody_balance,0)-:t,0),total_earnings=COALESCE(total_earnings,0)+:p,total_commissions=COALESCE(total_commissions,0)+:c WHERE id=:id"),{"id":worker_wallet['id'],'p':payout,'t':total,'c':commission})
     release_ref=f"ADMIN-RELEASE-{service_id[:8].upper()}"
     db.execute(text("INSERT INTO wallet_transactions (id,wallet_id,user_id,type,amount_rd,description,reference,status,created_at) SELECT :id,:wid,:u,'LIBERACION_ADMIN',:p,:d,:ref,'EXITOSO',CURRENT_TIMESTAMP WHERE NOT EXISTS (SELECT 1 FROM wallet_transactions WHERE reference=:ref)"),{"id":str(uuid.uuid4()),"wid":worker_wallet['id'],"u":escrow['worker_id'],"p":payout,"d":f"Liberación administrativa del servicio {service_id}","ref":release_ref})
@@ -110,10 +107,9 @@ def approve_release(service_id:str,data:ReleaseApproval,admin_user:User=Depends(
         expires=now+timedelta(days=60); ref=f"GAR-SRV-{service_id[:8].upper()}"; db.execute(text("INSERT INTO service_warranties (id,service_id,client_id,worker_id,coverage_days,status,activated_at,expires_at,certificate_ref) VALUES (:id,:sid,:c,:w,60,'ACTIVA',:now,:exp,:ref)"),{"id":str(uuid.uuid4()),"sid":service_id,"c":escrow['client_id'],'w':escrow['worker_id'],'now':now,'exp':expires,'ref':ref})
     _notify(db,escrow['worker_id'],'Pago liberado por administración',f"Administración aprobó la liberación de RD$ {payout:,.2f}.",'PAYMENT_RELEASED',service_id)
     _notify(db,escrow['client_id'],'Pago aprobado y garantía activa','Administración aprobó la liquidación y activó la garantía SERVIYA por 60 días.','PAYMENT_ADMIN_APPROVED',service_id)
-    _audit(db,admin_user.id,'ADMIN_APPROVE_RELEASE',escrow['id'],f"service_id={service_id}; comisión={rate:.4f}%; {data.notes or 'Liberación aprobada por Administración.'}")
+    _audit(db,admin_user.id,'ADMIN_APPROVE_RELEASE',escrow['id'],f"service_id={service_id}; comisión={rate:.4f}%; OTP validado; {data.notes or 'Liberación aprobada por Administración.'}")
     db.commit()
     return {"message":"Fondos liberados correctamente y garantía de 60 días activada.","status":"LIBERADO","worker_payout_rd":payout,"commission_rd":commission,"commission_rate_percent":rate,"service_status":"COMPLETADA"}
-
 
 @router.post("/escrows/{service_id}/hold-release")
 def hold_release(service_id:str,data:ReleaseApproval,admin_user:User=Depends(require_admin),db:Session=Depends(get_db)):
