@@ -18,6 +18,9 @@ class ServiceCreate(BaseModel):
     province: Optional[str] = None
     municipality: Optional[str] = None
     address_approx: Optional[str] = None
+    location_lat: Optional[float] = Field(default=None, ge=-90, le=90)
+    location_lng: Optional[float] = Field(default=None, ge=-180, le=180)
+    location_address: Optional[str] = Field(default=None, max_length=500)
     service_date: Optional[str] = None
     service_time: Optional[str] = None
     estimated_duration: Optional[str] = None
@@ -30,12 +33,6 @@ class CompletionPhotosPayload(BaseModel):
 
 @router.get("")
 def list_services(province: Optional[str] = None, category_name: Optional[str] = None, status: Optional[str] = None, db: Session = Depends(get_db)):
-    """Public marketplace listing.
-
-    Only marketplace information is exposed here. Internal user IDs, names,
-    approximate addresses and worker identity are intentionally omitted.
-    Private relationship data is returned by authenticated role-specific APIs.
-    """
     q = db.query(Service)
     if province: q = q.filter(Service.province == province)
     if category_name: q = q.filter(Service.category_name == category_name)
@@ -45,24 +42,15 @@ def list_services(province: Optional[str] = None, category_name: Optional[str] =
         applications_count = db.query(Application).filter(Application.service_id == s.id).count()
         st = s.status.value if hasattr(s.status, "value") else str(s.status)
         out.append({
-            "id": s.id,
-            "title": s.title,
-            "description": s.description,
-            "category_name": s.category_name,
-            "subcategory": s.subcategory,
-            "price_rd": s.price_rd,
-            "negotiated_price_rd": getattr(s, "negotiated_price_rd", None),
+            "id": s.id, "title": s.title, "description": s.description,
+            "category_name": s.category_name, "subcategory": s.subcategory,
+            "price_rd": s.price_rd, "negotiated_price_rd": getattr(s, "negotiated_price_rd", None),
             "negotiation_status": getattr(s, "negotiation_status", None),
-            "province": s.province,
-            "municipality": s.municipality,
-            "service_date": s.service_date,
-            "service_time": s.service_time,
-            "estimated_duration": s.estimated_duration,
-            "images": s.images or [],
-            "requirements": s.requirements or [],
-            "status": st,
-            "applications_count": applications_count,
-            "created_at": str(s.created_at),
+            "province": s.province, "municipality": s.municipality,
+            "service_date": s.service_date, "service_time": s.service_time,
+            "estimated_duration": s.estimated_duration, "images": s.images or [],
+            "requirements": s.requirements or [], "status": st,
+            "applications_count": applications_count, "created_at": str(s.created_at),
         })
     return {"services": out}
 
@@ -73,10 +61,13 @@ def create_service(data: ServiceCreate, current_user: User = Depends(get_current
         raise HTTPException(status_code=403, detail="Solo los clientes pueden publicar servicios")
     if data.price_rd <= 0:
         raise HTTPException(status_code=400, detail="El precio debe ser mayor que RD$0")
+    if (data.location_lat is None) != (data.location_lng is None):
+        raise HTTPException(status_code=400, detail="La ubicación del mapa debe tener latitud y longitud")
     s = Service(
         client_id=current_user.id, title=data.title, description=data.description, category_name=data.category_name,
         subcategory=data.subcategory, price_rd=data.price_rd, province=data.province, municipality=data.municipality,
-        address_approx=data.address_approx, service_date=data.service_date, service_time=data.service_time,
+        address_approx=data.address_approx, location_lat=data.location_lat, location_lng=data.location_lng,
+        location_address=data.location_address, service_date=data.service_date, service_time=data.service_time,
         estimated_duration=data.estimated_duration, images=data.images or [], requirements=data.requirements or [],
         status=ServiceStatusEnum.PUBLICADA,
     )
@@ -85,81 +76,41 @@ def create_service(data: ServiceCreate, current_user: User = Depends(get_current
 
 @router.get("/{service_id}/applications")
 def get_service_applications(service_id: str, current_user: User = Depends(get_current_active_user), db: Session = Depends(get_db)):
-    """Return the applications for the owner of a service.
-
-    This endpoint powers the Client's "Postulaciones recibidas" window. It is
-    intentionally restricted to the service owner so proposal and worker data
-    cannot be exposed to unrelated users.
-    """
     service = db.query(Service).filter(Service.id == service_id).first()
-    if not service:
-        raise HTTPException(status_code=404, detail="Servicio no encontrado")
-    if service.client_id != current_user.id:
-        raise HTTPException(status_code=403, detail="Solo el cliente creador puede ver las postulaciones")
-
+    if not service: raise HTTPException(status_code=404, detail="Servicio no encontrado")
+    if service.client_id != current_user.id: raise HTTPException(status_code=403, detail="Solo el cliente creador puede ver las postulaciones")
     applications = db.query(Application).filter(Application.service_id == service_id).order_by(Application.created_at.desc()).all()
     out = []
     for app in applications:
         worker = db.query(User).filter(User.id == app.worker_id).first()
-        if not worker:
-            continue
+        if not worker: continue
         worker_profile = getattr(worker, "worker_profile", None)
         status = app.status.value if hasattr(app.status, "value") else str(app.status)
-        out.append({
-            "id": str(app.id),
-            "service_id": str(app.service_id),
-            "worker_id": str(app.worker_id),
-            "worker_name": f"{worker.first_name} {worker.last_name}",
-            "worker_profession": getattr(worker_profile, "specialties", None) or "Trabajador / Técnico",
-            "worker_rating": float(getattr(worker, "rating", 5.0) or 5.0),
-            "worker_is_verified": bool(getattr(worker, "is_verified", False)),
-            "message": app.message,
-            "offered_price_rd": app.offered_price_rd,
-            "availability_note": app.availability_note,
-            "status": status,
-            "created_at": str(app.created_at),
-        })
-    return {
-        "service_id": str(service_id),
-        "count": len(out),
-        "applications": out,
-        "negotiation_status": getattr(service, "negotiation_status", None),
-        "negotiated_price_rd": getattr(service, "negotiated_price_rd", None),
-    }
+        out.append({"id": str(app.id), "service_id": str(app.service_id), "worker_id": str(app.worker_id), "worker_name": f"{worker.first_name} {worker.last_name}", "worker_profession": getattr(worker_profile, "specialties", None) or "Trabajador / Técnico", "worker_rating": float(getattr(worker, "rating", 5.0) or 5.0), "worker_is_verified": bool(getattr(worker, "is_verified", False)), "message": app.message, "offered_price_rd": app.offered_price_rd, "availability_note": app.availability_note, "status": status, "created_at": str(app.created_at)})
+    return {"service_id": str(service_id), "count": len(out), "applications": out, "negotiation_status": getattr(service, "negotiation_status", None), "negotiated_price_rd": getattr(service, "negotiated_price_rd", None)}
+
+@router.get("/{service_id}/location")
+def get_service_location(service_id: str, current_user: User = Depends(get_current_active_user), db: Session = Depends(get_db)):
+    """Return exact map coordinates only to the client owner or assigned worker."""
+    service = db.query(Service).filter(Service.id == service_id).first()
+    if not service: raise HTTPException(status_code=404, detail="Servicio no encontrado")
+    if current_user.id != service.client_id and current_user.id != service.worker_id:
+        raise HTTPException(status_code=403, detail="La ubicación exacta está protegida")
+    if service.location_lat is None or service.location_lng is None:
+        return {"service_id": service_id, "available": False, "latitude": None, "longitude": None, "address": service.location_address or service.address_approx}
+    return {"service_id": service_id, "available": True, "latitude": service.location_lat, "longitude": service.location_lng, "address": service.location_address or service.address_approx, "municipality": service.municipality, "province": service.province}
 
 @router.get("/{service_id}")
 def get_service(service_id: str, db: Session = Depends(get_db)):
-    """Public marketplace detail with minimized identity/location data."""
     s = db.query(Service).filter(Service.id == service_id).first()
     if not s: raise HTTPException(status_code=404, detail="Servicio no encontrado")
-    return {"service": {
-        "id": s.id,
-        "title": s.title,
-        "description": s.description,
-        "category_name": s.category_name,
-        "subcategory": s.subcategory,
-        "price_rd": s.price_rd,
-        "negotiated_price_rd": getattr(s, "negotiated_price_rd", None),
-        "negotiation_status": getattr(s, "negotiation_status", None),
-        "province": s.province,
-        "municipality": s.municipality,
-        "service_date": s.service_date,
-        "service_time": s.service_time,
-        "estimated_duration": s.estimated_duration,
-        "images": s.images or [],
-        "requirements": s.requirements or [],
-        "status": s.status.value if hasattr(s.status, "value") else str(s.status),
-        "applications_count": db.query(Application).filter(Application.service_id == s.id).count(),
-        "created_at": str(s.created_at),
-    }}
+    return {"service": {"id": s.id, "title": s.title, "description": s.description, "category_name": s.category_name, "subcategory": s.subcategory, "price_rd": s.price_rd, "negotiated_price_rd": getattr(s, "negotiated_price_rd", None), "negotiation_status": getattr(s, "negotiation_status", None), "province": s.province, "municipality": s.municipality, "service_date": s.service_date, "service_time": s.service_time, "estimated_duration": s.estimated_duration, "images": s.images or [], "requirements": s.requirements or [], "status": s.status.value if hasattr(s.status, "value") else str(s.status), "applications_count": db.query(Application).filter(Application.service_id == s.id).count(), "created_at": str(s.created_at)}}
 
 @router.get("/{service_id}/completion-photos")
 def get_completion_photos(service_id: str, current_user: User = Depends(get_current_active_user), db: Session = Depends(get_db)):
     row = db.execute(text("SELECT id, client_id, worker_id, status, completion_photos, completion_summary FROM services WHERE id=:id"), {"id": service_id}).mappings().first()
-    if not row:
-        raise HTTPException(404, "Servicio no encontrado")
-    if current_user.id not in {row["client_id"], row["worker_id"]}:
-        raise HTTPException(403, "No tienes acceso a la evidencia de este trabajo")
+    if not row: raise HTTPException(404, "Servicio no encontrado")
+    if current_user.id not in {row["client_id"], row["worker_id"]}: raise HTTPException(403, "No tienes acceso a la evidencia de este trabajo")
     photos = row["completion_photos"] or []
     if isinstance(photos, str):
         try: photos = json.loads(photos)
@@ -169,13 +120,10 @@ def get_completion_photos(service_id: str, current_user: User = Depends(get_curr
 @router.post("/{service_id}/completion-photos")
 def save_completion_photos(service_id: str, data: CompletionPhotosPayload, current_user: User = Depends(get_current_active_user), db: Session = Depends(get_db)):
     row = db.execute(text("SELECT id, client_id, worker_id, status, completion_photos, completion_submitted FROM services WHERE id=:id FOR UPDATE"), {"id": service_id}).mappings().first()
-    if not row:
-        raise HTTPException(404, "Servicio no encontrado")
-    if row["worker_id"] != current_user.id:
-        raise HTTPException(403, "Solo el técnico asignado puede subir evidencia")
+    if not row: raise HTTPException(404, "Servicio no encontrado")
+    if row["worker_id"] != current_user.id: raise HTTPException(403, "Solo el técnico asignado puede subir evidencia")
     status = str(row["status"])
-    if status not in {"EN_PROGRESO", "TRABAJADOR_SELECCIONADO"}:
-        raise HTTPException(400, "La evidencia solo puede subirse mientras el trabajo está activo")
+    if status not in {"EN_PROGRESO", "TRABAJADOR_SELECCIONADO"}: raise HTTPException(400, "La evidencia solo puede subirse mientras el trabajo está activo")
     photos = row["completion_photos"] or []
     if isinstance(photos, str):
         try: photos = json.loads(photos)
@@ -184,10 +132,8 @@ def save_completion_photos(service_id: str, data: CompletionPhotosPayload, curre
     clean_new = []
     for photo in data.photos:
         value = str(photo).strip()
-        if not value.startswith("data:image/"):
-            raise HTTPException(400, "Cada evidencia debe ser una imagen válida")
-        if len(value) > 700_000:
-            raise HTTPException(400, "Una de las fotos supera el tamaño permitido")
+        if not value.startswith("data:image/"): raise HTTPException(400, "Cada evidencia debe ser una imagen válida")
+        if len(value) > 700_000: raise HTTPException(400, "Una de las fotos supera el tamaño permitido")
         clean_new.append(value)
     combined = (photos + clean_new)[-10:]
     summary = data.summary.strip() if data.summary else None
