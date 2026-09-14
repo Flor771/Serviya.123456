@@ -18,6 +18,23 @@ def _elapsed_work_seconds(db, service_id, completed_at):
     return seconds, started, finishing
 
 
+def _mask_account_number(value):
+    if not value:
+        return None
+    value = str(value).strip()
+    if len(value) <= 4:
+        return "••••"
+    return "••••" + value[-4:]
+
+
+def _sanitize_receipt_for_client(receipt):
+    if not receipt:
+        return receipt
+    receipt = dict(receipt)
+    receipt["worker_account_number"] = _mask_account_number(receipt.get("worker_account_number"))
+    return receipt
+
+
 def _build_receipt(db, service_id):
     row = db.execute(text("""
         SELECT s.id AS service_id,s.title,s.description,s.category_name,s.service_date,s.service_time,s.estimated_duration,
@@ -47,8 +64,6 @@ def _build_receipt(db, service_id):
         return None
     elapsed, started_at, finishing_at = _elapsed_work_seconds(db, service_id, row["completion_submitted_at"])
 
-    # Use the historical fiscal snapshot captured on the escrow. Legacy rows
-    # fall back to the old 10%/90% fields only when the new snapshot is null.
     total = float(row["gross_service_amount_rd"] if row["gross_service_amount_rd"] is not None else (row["total_amount_rd"] or 0))
     commission = float(row["platform_commission_rd"] if row["platform_commission_rd"] is not None else (row["commission_amount_rd"] or 0))
     isr_withheld = float(row["isr_withheld_rd"] or 0)
@@ -99,7 +114,10 @@ def _build_receipt(db, service_id):
 @router.get("")
 def list_payment_receipts(current_user: User = Depends(get_current_active_user), db: Session = Depends(get_db)):
     rows = db.execute(text("SELECT s.id FROM services s JOIN escrows e ON e.service_id=s.id WHERE e.status='LIBERADO' AND (s.client_id=:uid OR s.worker_id=:uid) ORDER BY e.released_at DESC NULLS LAST,e.created_at DESC LIMIT 50"), {"uid": current_user.id}).scalars().all()
-    return {"receipts": [r for sid in rows if (r := _build_receipt(db, sid))]}
+    receipts = [r for sid in rows if (r := _build_receipt(db, sid))]
+    if current_user.role.value == "CLIENTE":
+        receipts = [_sanitize_receipt_for_client(r) for r in receipts]
+    return {"receipts": receipts}
 
 
 @router.get("/{service_id}")
@@ -109,4 +127,6 @@ def get_payment_receipt(service_id: str, current_user: User = Depends(get_curren
         raise HTTPException(404, "El comprobante estará disponible cuando Administración haya liberado el pago.")
     if current_user.id not in {receipt["client_id"], receipt["worker_id"]}:
         raise HTTPException(403, "No tienes acceso a este comprobante")
+    if current_user.role.value == "CLIENTE":
+        receipt = _sanitize_receipt_for_client(receipt)
     return {"receipt": receipt}
