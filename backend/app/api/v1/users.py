@@ -1,6 +1,7 @@
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_db, get_current_active_user
@@ -19,6 +20,31 @@ class UpdateProfileSchema(BaseModel):
     hourly_rate_rd: Optional[float] = None
     avatar_url: Optional[str] = None
 
+
+def _verification_summary(db: Session, worker_id: str):
+    rows = db.execute(text("""
+        SELECT verification_category, document_type, document_name, status
+        FROM verifications WHERE worker_id=:uid ORDER BY created_at DESC
+    """), {"uid": worker_id}).mappings().all()
+    categories = {"CEDULA": "Cédula / identidad", "CERTIFICACION_TECNICA": "Certificación técnica", "DIPLOMADO": "Diplomado / formación profesional", "EXPERIENCIA_ACREDITADA": "Experiencia o acreditación profesional", "LICENCIA_ESPECIALIDAD": "Licencia / especialidad"}
+    approved = {}
+    for r in rows:
+        category = r["verification_category"]
+        if not category:
+            dtype = str(r["document_type"] or "").upper()
+            category = "CEDULA" if dtype in {"CEDULA_RD","CEDULA_FRONT","CEDULA_BACK"} else ("CERTIFICACION_TECNICA" if dtype in {"INFOTEP","INFOTEP_CERTIFICATE"} else dtype)
+        if category in categories and category not in approved and r["status"] == "VERIFICADO":
+            approved[category] = r
+    stars = (1 if "CEDULA" in approved else 0) + sum(1 for k in categories if k != "CEDULA" and k in approved)
+    return {
+        "stars": stars,
+        "max_stars": 5,
+        "level": "VERIFICACIÓN COMPLETA" if stars == 5 else ("VERIFICADO" if stars == 1 else "VERIFICACIÓN EN PROGRESO" if stars > 1 else "SIN VERIFICAR"),
+        "base_verified": "CEDULA" in approved,
+        "verified_certifications": [{"category": k, "label": categories[k], "document_name": approved[k]["document_name"]} for k in categories if k != "CEDULA" and k in approved],
+    }
+
+
 @router.get("/profile")
 def get_profile(current_user: User = Depends(get_current_active_user), db: Session = Depends(get_db)):
     role_str = current_user.role.value if hasattr(current_user.role, "value") else str(current_user.role)
@@ -36,6 +62,7 @@ def get_profile(current_user: User = Depends(get_current_active_user), db: Sessi
             "hourly_rate_rd": worker_prof.hourly_rate, "availability": worker_prof.availability,
             "is_approved": worker_prof.is_approved, "has_infotep": worker_prof.has_infotep,
         }
+        profile_data["verification"] = _verification_summary(db, current_user.id)
     return {"user": profile_data}
 
 @router.put("/profile")
@@ -67,7 +94,8 @@ def update_profile(data: UpdateProfileSchema, current_user: User = Depends(get_c
         "email": current_user.email, "phone": current_user.phone, "province": current_user.province,
         "municipality": current_user.municipality, "bio": current_user.bio, "avatar_url": current_user.avatar_url,
         "is_verified": current_user.is_verified, "rating": current_user.rating, "jobs_completed": current_user.jobs_completed,
-        "role": current_user.role.value if hasattr(current_user.role, "value") else str(current_user.role), "active_role": current_user.active_role
+        "role": current_user.role.value if hasattr(current_user.role, "value") else str(current_user.role), "active_role": current_user.active_role,
+        "verification": _verification_summary(db, current_user.id) if current_user.role == UserRoleEnum.TRABAJADOR else None
     }}
 
 @router.get("/workers")
@@ -84,6 +112,7 @@ def get_workers(province: Optional[str] = None, category: Optional[str] = None, 
             "is_verified": w.is_verified, "avatar_url": w.avatar_url,
             "profession": wp.specialties if wp and wp.specialties else "Técnico Especializado",
             "hourly_rate_rd": wp.hourly_rate if wp and wp.hourly_rate is not None else 500.0,
-            "bio": w.bio, "availability": wp.availability if wp else None
+            "bio": w.bio, "availability": wp.availability if wp else None,
+            "verification": _verification_summary(db, w.id)
         })
     return {"workers": results}
