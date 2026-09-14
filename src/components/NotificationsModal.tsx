@@ -12,7 +12,8 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({ onClose 
   const classify = (n: any): { destination: Destination; tab: string; label: string } => {
     const type = String(n.type || '').toUpperCase();
     const text = `${n.title || ''} ${n.message || ''}`.toLowerCase();
-    if (type.includes('REVISIT') || type.includes('REVISITA') || type.includes('GARANTIA') || text.includes('revisita') || text.includes('garantía') || text.includes('garantia')) return { destination: 'revisitas', tab: 'revisitas', label: 'Abrir Revisitas' };
+    // Revisitas is modal-only. Do not set the nonexistent "revisitas" app tab.
+    if (type.includes('REVISIT') || type.includes('REVISITA') || type.includes('GARANTIA') || text.includes('revisita') || text.includes('garantía') || text.includes('garantia')) return { destination: 'revisitas', tab: '', label: 'Abrir Revisitas' };
     if (type === 'CONTRACT_ISSUED' || type === 'CONTRACT_PENDING' || type === 'CONTRACT_READY' || text.includes('contrato digital disponible') || text.includes('contrato digital')) return { destination: 'contract', tab: 'contratos', label: 'Abrir contrato digital y aceptar' };
     if (type === 'TRABAJADOR_SELECCIONADO' || text.includes('fuiste seleccionado') || text.includes('has sido seleccionado')) return { destination: 'service', tab: 'mis-servicios', label: 'Abrir negociación y contraoferta' };
     if (type.includes('MESSAGE') || type.includes('CHAT') || text.includes('mensaje')) return { destination: 'chat', tab: 'mensajes', label: 'Abrir mensajes' };
