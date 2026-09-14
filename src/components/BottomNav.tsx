@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Home, Search, PlusCircle, Wallet, User as UserIcon, BriefcaseBusiness, MessageSquare, Bell, ShieldCheck, Layers, FileText, MoreHorizontal, X, ClipboardList, ChevronRight, FileSignature } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../services/api';
+import { ContractDocumentDownload } from './ContractDocumentDownload';
 
 interface BottomNavProps { activeTab:string; onNavigateTab:(tab:string)=>void; onOpenPublish:()=>void; onOpenWallet:()=>void; onOpenProfile:()=>void; onOpenAuth:(mode:'login'|'register')=>void; onOpenMessages?:()=>void; onOpenNotifications?:()=>void; onOpenVerification?:()=>void; onOpenDisputes?:()=>void; onOpenPolicies?:()=>void; }
 
@@ -35,6 +36,7 @@ export const BottomNav:React.FC<BottomNavProps>=({activeTab,onNavigateTab,onOpen
  };
  const roleText=isWorker?'TRABAJADOR / TÉCNICO':'CLIENTE';
  return <>
+  <ContractDocumentDownload />
   <div className="md:hidden fixed bottom-0 left-0 right-0 z-[70] bg-slate-900 border-t border-slate-800 text-slate-400 px-1.5 py-1.5 shadow-2xl"><div className="grid grid-cols-5 gap-1 max-w-lg mx-auto">
    <button onClick={()=>onNavigateTab('inicio')} className={`flex flex-col items-center py-1 rounded-xl ${activeTab==='inicio'?'text-blue-400':'text-slate-400'}`}><Home className="w-5 h-5"/><span className="text-[10px]">Inicio</span></button>
    <button onClick={()=>user?onNavigateTab('buscar'):onOpenAuth('login')} className={`flex flex-col items-center py-1 rounded-xl ${activeTab==='buscar'?'text-blue-400':'text-slate-400'}`}><Search className="w-5 h-5"/><span className="text-[10px]">{isWorker?'Trabajos':'Buscar'}</span></button>
