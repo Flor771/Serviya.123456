@@ -110,14 +110,14 @@ def get_service(service_id: str, db: Session = Depends(get_db)):
 
 @router.get("/{service_id}/completion-photos")
 def get_completion_photos(service_id: str, current_user: User = Depends(get_current_active_user), db: Session = Depends(get_db)):
-    row = db.execute(text("SELECT id, client_id, worker_id, status, completion_photos, completion_summary FROM services WHERE id=:id"), {"id": service_id}).mappings().first()
+    row = db.execute(text("SELECT id, client_id, worker_id, status, completion_photos, completion_summary, completion_submitted FROM services WHERE id=:id"), {"id": service_id}).mappings().first()
     if not row: raise HTTPException(404, "Servicio no encontrado")
     if current_user.id not in {row["client_id"], row["worker_id"]}: raise HTTPException(403, "No tienes acceso a la evidencia de este trabajo")
     photos = row["completion_photos"] or []
     if isinstance(photos, str):
         try: photos = json.loads(photos)
         except Exception: photos = []
-    return {"service_id": service_id, "photos": photos, "summary": row["completion_summary"]}
+    return {"service_id": service_id, "photos": photos, "summary": row["completion_summary"], "completion_submitted": bool(row["completion_submitted"])}
 
 @router.post("/{service_id}/completion-photos")
 def save_completion_photos(service_id: str, data: CompletionPhotosPayload, current_user: User = Depends(get_current_active_user), db: Session = Depends(get_db)):
@@ -126,6 +126,7 @@ def save_completion_photos(service_id: str, data: CompletionPhotosPayload, curre
     if row["worker_id"] != current_user.id: raise HTTPException(403, "Solo el técnico asignado puede subir evidencia")
     status = str(row["status"])
     if status not in {"EN_PROGRESO", "TRABAJADOR_SELECCIONADO", "FINALIZANDO"}: raise HTTPException(400, "La evidencia solo puede subirse mientras el trabajo está activo o finalizando")
+    if row["completion_submitted"]: raise HTTPException(400, "Este trabajo ya fue enviado a revisión")
     photos = row["completion_photos"] or []
     if isinstance(photos, str):
         try: photos = json.loads(photos)
@@ -138,8 +139,11 @@ def save_completion_photos(service_id: str, data: CompletionPhotosPayload, curre
         if len(value) > 700_000: raise HTTPException(400, "Una de las fotos supera el tamaño permitido")
         clean_new.append(value)
     combined = (photos + clean_new)[-10:]
-    summary = data.summary.strip() if data.summary else None
-    db.execute(text("UPDATE services SET completion_photos=CAST(:photos AS JSON), completion_summary=COALESCE(:summary, completion_summary) WHERE id=:id"), {"photos": json.dumps(combined), "summary": summary, "id": service_id})
-    db.execute(text("INSERT INTO notifications (user_id,title,message,type,is_read,created_at,related_entity_id) VALUES (:uid,:title,:message,:typ,false,CURRENT_TIMESTAMP,:related)"), {"uid": row["client_id"], "title": "Nueva evidencia del trabajo", "message": "El técnico subió fotos del trabajo para tu revisión.", "typ": "COMPLETION_PHOTOS", "related": service_id})
+    summary = data.summary.strip() if data.summary else "Trabajo terminado y evidencia enviada para revisión del cliente."
+    if len(summary) < 5: raise HTTPException(400, "Escribe un resumen de al menos 5 caracteres")
+    otp=f"{__import__('random').randint(100000,999999)}"
+    db.execute(text("UPDATE services SET completion_photos=CAST(:photos AS JSON), completion_summary=:summary, completion_submitted=true, completion_submitted_at=CURRENT_TIMESTAMP WHERE id=:id"), {"photos": json.dumps(combined), "summary": summary, "id": service_id})
+    db.execute(text("UPDATE escrows SET release_otp=:otp WHERE service_id=:sid AND status='RETENIDO'"), {"otp": otp, "sid": service_id})
+    db.execute(text("INSERT INTO notifications (user_id,title,message,type,read,created_at,related_entity_id) VALUES (:uid,:title,:message,'COMPLETION_SUBMITTED',false,CURRENT_TIMESTAMP,:related)"), {"uid": row["client_id"], "title": "Trabajo terminado: evidencia recibida", "message": "El técnico envió fotos y el resumen del trabajo terminado. Revisa la evidencia y acepta la finalización para enviar la solicitud a Administración.", "related": service_id})
     db.commit()
-    return {"message": "Evidencia guardada correctamente", "service_id": service_id, "photos": combined}
+    return {"message": "Evidencia y trabajo terminado enviados correctamente al cliente", "service_id": service_id, "photos": combined, "completion_submitted": True}
