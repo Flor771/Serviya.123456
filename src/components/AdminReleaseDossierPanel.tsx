@@ -1,7 +1,7 @@
 import React,{useEffect,useState} from 'react';
 import {api} from '../services/api';
 import {CheckCircle2,Clock3,FileCheck2,ShieldCheck,Wallet,Building2,UserRound,ArrowRight,RefreshCw,Image as ImageIcon,AlertTriangle,KeyRound} from 'lucide-react';
-const money=(v:any)=>`RD$ ${Number(v||0).toLocaleString('es-DO',{minimumFractionDigits:2,maximumFractionDigits:2})`;
+const money=(v:any)=>`RD$ ${Number(v||0).toLocaleString('es-DO',{minimumFractionDigits:2,maximumFractionDigits:2})}`;
 const dt=(v:any)=>v?new Date(v).toLocaleString('es-DO'):'—';
 const name=(r:any,p:string)=>[r?.[`${p}_first_name`],r?.[`${p}_last_name`]].filter(Boolean).join(' ')||r?.[`${p}_name`]||r?.[`${p}_email`]||'—';
 export const AdminReleaseDossierPanel:React.FC=()=>{
