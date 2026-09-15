@@ -36,7 +36,10 @@ def submit_completion(service_id: str, data: CompletionSubmitSchema, current_use
     s=db.execute(text("SELECT id,client_id,worker_id,status,completion_submitted,completion_photos FROM services WHERE id=:id FOR UPDATE"),{"id":service_id}).mappings().first()
     if not s: raise HTTPException(404,"Servicio no encontrado")
     if s["worker_id"] != current_user.id: raise HTTPException(403,"Solo el técnico asignado puede enviar el trabajo a revisión")
-    if s["status"] != "EN_PROGRESO": raise HTTPException(400,"El trabajo debe estar en progreso para enviarlo a revisión")
+    work_status = db.execute(text("SELECT status FROM service_work_status_history WHERE service_id=:sid ORDER BY created_at DESC, id DESC LIMIT 1"), {"sid":service_id}).scalar()
+    service_status = s["status"].value if hasattr(s["status"], "value") else str(s["status"])
+    can_submit = service_status == "EN_PROGRESO" or (service_status == "TRABAJADOR_SELECCIONADO" and work_status == "FINALIZANDO")
+    if not can_submit: raise HTTPException(400,"El trabajo debe estar en progreso o marcado como FINALIZANDO antes de enviarlo a revisión")
     if s["completion_submitted"]: raise HTTPException(400,"Este trabajo ya fue enviado a revisión")
     photos = s["completion_photos"] or []
     if isinstance(photos, str):
@@ -47,7 +50,7 @@ def submit_completion(service_id: str, data: CompletionSubmitSchema, current_use
     otp=f"{__import__('random').randint(100000,999999)}"
     db.execute(text("UPDATE services SET completion_submitted=true,completion_summary=:summary,completion_submitted_at=CURRENT_TIMESTAMP WHERE id=:id"),{"summary":data.summary,"id":service_id})
     db.execute(text("UPDATE escrows SET release_otp=:otp WHERE service_id=:sid AND status='RETENIDO'"),{"otp":otp,"sid":service_id})
-    notify(db,s["client_id"],"Trabajo listo para revisión",f"El técnico envió el trabajo a revisión. Revisa las fotos y el resumen antes de aprobar y liberar fondos. Código de conformidad: {otp}.","COMPLETION_SUBMITTED",service_id)
+    notify(db,s["client_id"],"Trabajo listo para revisión","El técnico envió el trabajo a revisión. Revisa las fotos y el resumen antes de aprobar y liberar fondos. Código de conformidad: %s." % otp,"COMPLETION_SUBMITTED",service_id)
     db.commit()
     return {"message":"Trabajo enviado a revisión del cliente.","service_id":service_id,"completion_submitted":True,"release_otp":otp}
 
