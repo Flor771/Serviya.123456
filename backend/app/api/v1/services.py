@@ -42,11 +42,13 @@ def list_services(province: Optional[str] = None, category_name: Optional[str] =
         applications_count = db.query(Application).filter(Application.service_id == s.id).count()
         st = s.status.value if hasattr(s.status, "value") else str(s.status)
         out.append({
-            "id": s.id, "title": s.title, "description": s.description,
+            "id": s.id, "client_id": s.client_id, "worker_id": s.worker_id,
+            "title": s.title, "description": s.description,
             "category_name": s.category_name, "subcategory": s.subcategory,
             "price_rd": s.price_rd, "negotiated_price_rd": getattr(s, "negotiated_price_rd", None),
             "negotiation_status": getattr(s, "negotiation_status", None),
             "province": s.province, "municipality": s.municipality,
+            "address_approx": getattr(s, "address_approx", None),
             "service_date": s.service_date, "service_time": s.service_time,
             "estimated_duration": s.estimated_duration, "images": s.images or [],
             "requirements": s.requirements or [], "status": st,
@@ -104,7 +106,7 @@ def get_service_location(service_id: str, current_user: User = Depends(get_curre
 def get_service(service_id: str, db: Session = Depends(get_db)):
     s = db.query(Service).filter(Service.id == service_id).first()
     if not s: raise HTTPException(status_code=404, detail="Servicio no encontrado")
-    return {"service": {"id": s.id, "title": s.title, "description": s.description, "category_name": s.category_name, "subcategory": s.subcategory, "price_rd": s.price_rd, "negotiated_price_rd": getattr(s, "negotiated_price_rd", None), "negotiation_status": getattr(s, "negotiation_status", None), "province": s.province, "municipality": s.municipality, "service_date": s.service_date, "service_time": s.service_time, "estimated_duration": s.estimated_duration, "images": s.images or [], "requirements": s.requirements or [], "status": s.status.value if hasattr(s.status, "value") else str(s.status), "applications_count": db.query(Application).filter(Application.service_id == s.id).count(), "created_at": str(s.created_at)}}
+    return {"service": {"id": s.id, "client_id": s.client_id, "worker_id": s.worker_id, "title": s.title, "description": s.description, "category_name": s.category_name, "subcategory": s.subcategory, "price_rd": s.price_rd, "negotiated_price_rd": getattr(s, "negotiated_price_rd", None), "negotiation_status": getattr(s, "negotiation_status", None), "province": s.province, "municipality": s.municipality, "address_approx": getattr(s, "address_approx", None), "service_date": s.service_date, "service_time": s.service_time, "estimated_duration": s.estimated_duration, "images": s.images or [], "requirements": s.requirements or [], "status": s.status.value if hasattr(s.status, "value") else str(s.status), "applications_count": db.query(Application).filter(Application.service_id == s.id).count(), "created_at": str(s.created_at)}}
 
 @router.get("/{service_id}/completion-photos")
 def get_completion_photos(service_id: str, current_user: User = Depends(get_current_active_user), db: Session = Depends(get_db)):
@@ -123,7 +125,7 @@ def save_completion_photos(service_id: str, data: CompletionPhotosPayload, curre
     if not row: raise HTTPException(404, "Servicio no encontrado")
     if row["worker_id"] != current_user.id: raise HTTPException(403, "Solo el técnico asignado puede subir evidencia")
     status = str(row["status"])
-    if status not in {"EN_PROGRESO", "TRABAJADOR_SELECCIONADO"}: raise HTTPException(400, "La evidencia solo puede subirse mientras el trabajo está activo")
+    if status not in {"EN_PROGRESO", "TRABAJADOR_SELECCIONADO", "FINALIZANDO"}: raise HTTPException(400, "La evidencia solo puede subirse mientras el trabajo está activo o finalizando")
     photos = row["completion_photos"] or []
     if isinstance(photos, str):
         try: photos = json.loads(photos)
