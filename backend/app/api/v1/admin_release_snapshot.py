@@ -11,6 +11,7 @@ router = APIRouter(prefix="/admin-panel", tags=["Liberación administrativa segu
 
 class ReleaseApproval(BaseModel):
     notes: str = Field(default="", max_length=1000)
+    otp: str = Field(default="", min_length=6, max_length=6)
 
 
 def _notify(db, user_id, title, message, kind, related_entity_id=None):
@@ -27,13 +28,20 @@ def approve_release_snapshot(service_id: str, data: ReleaseApproval, admin_user:
     escrow = db.execute(text("""
         SELECT id,client_id,worker_id,total_amount_rd,commission_amount_rd,worker_payout_rd,
                gross_service_amount_rd,platform_commission_rd,isr_withheld_rd,itbis_withheld_rd,
-               net_worker_payout_rd,fiscal_rule_code,tax_mode,status
+               net_worker_payout_rd,fiscal_rule_code,tax_mode,status,release_otp,otp_verified
         FROM escrows
         WHERE service_id=:sid AND status='PENDIENTE_APROBACION'
         ORDER BY created_at DESC LIMIT 1 FOR UPDATE
     """), {"sid": service_id}).mappings().first()
     if not escrow:
         raise HTTPException(404, "No existe una custodia pendiente de aprobación para este servicio.")
+
+    if escrow["otp_verified"]:
+        raise HTTPException(409, "Esta custodia ya fue validada para liberación.")
+    expected = str(escrow["release_otp"] or "").strip()
+    supplied = str(data.otp or "").strip()
+    if len(expected) != 6 or supplied != expected:
+        raise HTTPException(403, "Código de conformidad inválido para esta liberación.")
 
     service = db.execute(text("SELECT id,completion_submitted FROM services WHERE id=:sid FOR UPDATE"), {"sid": service_id}).mappings().first()
     if not service:
@@ -74,7 +82,9 @@ def approve_release_snapshot(service_id: str, data: ReleaseApproval, admin_user:
         UPDATE escrows
         SET status='LIBERADO', released_at=:now,
             commission_amount_rd=:commission,
-            worker_payout_rd=:net
+            worker_payout_rd=:net,
+            otp_verified=true,
+            release_otp=NULL
         WHERE id=:id AND status='PENDIENTE_APROBACION'
     """), {"id": escrow["id"], "now": now, "commission": commission, "net": net})
     if result.rowcount != 1:
@@ -116,7 +126,7 @@ def approve_release_snapshot(service_id: str, data: ReleaseApproval, admin_user:
     tax_mode = escrow["tax_mode"] or "CONFIGURACION"
     _notify(db, escrow["worker_id"], "Pago liberado por Administración", f"Administración aprobó la liberación del neto histórico de RD$ {net:,.2f}.", "PAYMENT_RELEASED", service_id)
     _notify(db, escrow["client_id"], "Pago aprobado y garantía activa", "Administración aprobó la liquidación y activó la garantía SERVIYA por 60 días.", "PAYMENT_ADMIN_APPROVED", service_id)
-    _audit(db, admin_user.id, escrow["id"], f"service_id={service_id}; gross={gross}; commission={commission}; isr={isr}; itbis={itbis}; net_worker={net}; fiscal_rule={fiscal_rule}; tax_mode={tax_mode}; {data.notes or 'Liberación aprobada por Administración.'}")
+    _audit(db, admin_user.id, escrow["id"], f"service_id={service_id}; gross={gross}; commission={commission}; isr={isr}; itbis={itbis}; net_worker={net}; fiscal_rule={fiscal_rule}; tax_mode={tax_mode}; OTP validado; {data.notes or 'Liberación aprobada por Administración.'}")
 
     db.commit()
     return {
