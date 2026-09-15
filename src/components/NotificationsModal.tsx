@@ -17,17 +17,14 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({ onClose 
   const classify = (n: any): { destination: Destination; tab: string; label: string } => {
     const type = String(n.type || '').toUpperCase();
     const text = `${n.title || ''} ${n.message || ''}`.toLowerCase();
-    // Revisitas is modal-only. Never navigate to a nonexistent app tab.
     if (type.includes('REVISIT') || type.includes('REVISITA') || type.includes('GARANTIA') || text.includes('revisita') || text.includes('garantía') || text.includes('garantia')) return { destination: 'revisitas', tab: '', label: 'Abrir Revisitas' };
     if (type === 'CONTRACT_ISSUED' || type === 'CONTRACT_PENDING' || type === 'CONTRACT_READY' || text.includes('contrato digital disponible') || text.includes('contrato digital')) return { destination: 'contract', tab: 'contratos', label: 'Abrir contrato digital y aceptar' };
     if (type === 'TRABAJADOR_SELECCIONADO' || text.includes('fuiste seleccionado') || text.includes('has sido seleccionado')) return { destination: 'service', tab: 'mis-servicios', label: 'Abrir negociación y contraoferta' };
     if (type.includes('MESSAGE') || type.includes('CHAT') || text.includes('mensaje')) return { destination: 'chat', tab: 'mensajes', label: 'Abrir mensajes' };
-    // Postulation notifications use a role-safe tab. Clients go to their publications;
-    // workers go to their assigned/work area. The related entity remains the service ID.
-    if (type.includes('APPLICATION') || type.includes('POSTUL') || text.includes('postulación') || text.includes('postulacion')) return { destination: 'service', tab: isClient ? 'mis-publicaciones' : (isWorker ? 'mis-servicios' : 'inicio'), label: 'Abrir postulación' };
+    // Applications are role-safe: App routes clients to Mis publicaciones and workers to Mis postulaciones.
+    if (type.includes('APPLICATION') || type.includes('POSTUL') || text.includes('postulación') || text.includes('postulacion')) return { destination: 'applications', tab: isClient ? 'mis-publicaciones' : (isWorker ? 'postulaciones' : 'inicio'), label: 'Abrir postulación' };
     if (type.includes('DISPUTE') || type.includes('DISPUTA')) return { destination: 'dispute', tab: isWorker ? 'mis-servicios' : 'mis-trabajos', label: 'Abrir disputa' };
     if (type.includes('WALLET') || type.includes('WITHDRAW') || type.includes('RETIRO') || type.includes('DEPOSIT') || type.includes('PAYMENT')) return { destination: 'wallet', tab: 'billetera', label: 'Abrir depósito y custodia' };
-    // Generic service notifications must never point a worker at the client-only area.
     return { destination: 'service', tab: isWorker ? 'mis-servicios' : 'mis-trabajos', label: 'Abrir servicio' };
   };
 
