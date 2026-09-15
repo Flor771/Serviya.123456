@@ -116,16 +116,16 @@ def approve_release_snapshot(service_id: str, data: ReleaseApproval, admin_user:
 
     warranty = db.execute(text("SELECT id FROM service_warranties WHERE service_id=:sid LIMIT 1"), {"sid": service_id}).scalar()
     if not warranty:
-        expires = now + timedelta(days=60)
+        expires = now + timedelta(days=15)
         db.execute(text("""
             INSERT INTO service_warranties (id,service_id,client_id,worker_id,coverage_days,status,activated_at,expires_at,certificate_ref)
-            VALUES (:id,:sid,:c,:w,60,'ACTIVA',:now,:exp,:ref)
+            VALUES (:id,:sid,:c,:w,15,'ACTIVA',:now,:exp,:ref)
         """), {"id": str(uuid.uuid4()), "sid": service_id, "c": escrow["client_id"], "w": escrow["worker_id"], "now": now, "exp": expires, "ref": f"GAR-SRV-{service_id[:8].upper()}"})
 
     fiscal_rule = escrow["fiscal_rule_code"] or "PENDIENTE_CLASIFICACION"
     tax_mode = escrow["tax_mode"] or "CONFIGURACION"
     _notify(db, escrow["worker_id"], "Pago liberado por Administración", f"Administración aprobó la liberación del neto histórico de RD$ {net:,.2f}.", "PAYMENT_RELEASED", service_id)
-    _notify(db, escrow["client_id"], "Pago aprobado y garantía activa", "Administración aprobó la liquidación y activó la garantía SERVIYA por 60 días.", "PAYMENT_ADMIN_APPROVED", service_id)
+    _notify(db, escrow["client_id"], "Pago aprobado y garantía activa", "Administración aprobó la liquidación y activó la garantía SERVIYA por 15 días.", "PAYMENT_ADMIN_APPROVED", service_id)
     _audit(db, admin_user.id, escrow["id"], f"service_id={service_id}; gross={gross}; commission={commission}; isr={isr}; itbis={itbis}; net_worker={net}; fiscal_rule={fiscal_rule}; tax_mode={tax_mode}; OTP validado; {data.notes or 'Liberación aprobada por Administración.'}")
 
     db.commit()
