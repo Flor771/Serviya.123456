@@ -12,8 +12,8 @@ interface Props { service: Service; onClose: () => void; onRefresh: () => void; 
 export const MobileServiceDetailModal: React.FC<Props> = ({ service, onClose, onRefresh, onOpenChat, onOpenDispute }) => {
   const { user } = useAuth();
   const isWorker = user?.role === 'TRABAJADOR' || user?.activeRole === 'TRABAJADOR';
-  const isClient = user?.id === service.client_id;
-  const selected = user?.id === service.worker_id;
+  const isClient = String(user?.id ?? '') === String(service.client_id ?? '');
+  const selected = String(user?.id ?? '') === String(service.worker_id ?? '');
   const applicationsClosed = !!service.worker_id || service.status === 'TRABAJADOR_SELECCIONADO';
   const canSeeExactLocation = isClient || selected;
   const [apps, setApps] = useState<Application[]>([]); const [location, setLocation] = useState<ServiceLocation | null>(null);
