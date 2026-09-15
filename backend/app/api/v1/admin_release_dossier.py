@@ -14,6 +14,7 @@ def release_dossier(service_id: str, admin_user: User = Depends(require_admin), 
                e.gross_service_amount_rd,e.platform_commission_rd,e.isr_withheld_rd,e.itbis_withheld_rd,
                e.net_worker_payout_rd,e.fiscal_rule_code,e.tax_mode,e.status AS escrow_status,
                e.voucher_url,e.bank_account_id,e.payment_method,e.created_at AS deposit_created_at,e.released_at,
+               e.release_otp,e.otp_verified,
                s.title,s.description,s.negotiated_price_rd,s.price_rd,s.status AS service_status,
                s.completion_submitted,s.completion_summary,s.completion_submitted_at,s.completion_photos,
                s.service_date,s.service_time,s.estimated_duration,s.province,s.municipality,s.address_approx,
@@ -47,8 +48,7 @@ def release_dossier(service_id: str, admin_user: User = Depends(require_admin), 
     transactions = db.execute(text("""
         SELECT id,amount,type,status,reference_code,created_at
         FROM transactions
-        WHERE reference_code LIKE :prefix OR type IN ('CUSTODIA_TRABAJO','LIBERACION_ADMIN')
-          AND user_id IN (:client_id,:worker_id)
+        WHERE reference_code LIKE :prefix OR (type IN ('CUSTODIA_TRABAJO','LIBERACION_ADMIN') AND user_id IN (:client_id,:worker_id))
         ORDER BY created_at ASC
     """), {"prefix": f"%{service_id[:8].upper()}%", "client_id": row["client_id"], "worker_id": row["worker_id"]}).mappings().all()
 
