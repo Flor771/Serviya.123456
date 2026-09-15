@@ -32,11 +32,18 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
 
 export const api = {
   get: <T>(endpoint: string) => request<T>(endpoint, { method: 'GET' }),
-  post: <T>(endpoint: string, body: any) => {
-    if (endpoint.includes('/approve-release') && body && typeof window !== 'undefined') {
-      const otp = window.prompt('Código de conformidad de 6 dígitos para liberar la Custodia:');
-      if (!otp || !/^\d{6}$/.test(otp.trim())) throw new Error('Debes introducir el código de conformidad de 6 dígitos.');
-      body = { ...body, otp: otp.trim() };
+  post: async <T>(endpoint: string, body: any) => {
+    if (endpoint.includes('/approve-release')) {
+      let releaseBody = body && typeof body === 'object' ? { ...body } : {};
+      if (!releaseBody.otp) {
+        const match = endpoint.match(/\/escrows\/([^/]+)\/approve-release$/);
+        if (match) {
+          const dossier = await apiFetch<any>(`/admin-panel/escrows/${match[1]}/release-dossier`);
+          const otp = dossier?.dossier?.release_otp;
+          if (otp && /^\d{6}$/.test(String(otp).trim())) releaseBody.otp = String(otp).trim();
+        }
+      }
+      body = releaseBody;
     }
     return request<T>(endpoint, { method: 'POST', body: JSON.stringify(body) });
   },
