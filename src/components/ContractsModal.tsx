@@ -87,6 +87,7 @@ export const ContractsModal: React.FC<{ onClose: () => void }> = ({ onClose }) =
   const parties = doc.parties || {};
   const custody = doc.custody || {};
   const terms = Array.isArray(doc.terms) ? doc.terms : [];
+  const policies = doc.policies || {};
 
   return <div className="fixed inset-0 z-[95] bg-slate-950/70 p-3 sm:p-6 overflow-y-auto">
     <div className="max-w-6xl mx-auto bg-slate-100 rounded-3xl shadow-2xl min-h-[80vh] overflow-hidden">
@@ -155,6 +156,27 @@ export const ContractsModal: React.FC<{ onClose: () => void }> = ({ onClose }) =
               <div className="flex items-center gap-2 mb-3"><Scale className="w-5 h-5 text-slate-600"/><p className="font-black">Condiciones y obligaciones</p></div>
               <ul className="space-y-2">{terms.map((term: string, i: number) => <li key={i} className="text-sm text-slate-600 flex gap-2"><span className="font-black text-blue-600">{i+1}.</span><span>{term}</span></li>)}</ul>
             </div>
+
+            {Object.keys(policies).length > 0 && <div className="rounded-2xl border border-indigo-200 bg-indigo-50 p-4">
+              <div className="flex items-center gap-2 mb-4"><Scale className="w-5 h-5 text-indigo-700"/><p className="font-black text-indigo-900">Políticas y reglas del contrato</p></div>
+              <div className="space-y-4">
+                {[
+                  ['client', 'Reglas del cliente'],
+                  ['worker', 'Reglas del trabajador / técnico'],
+                  ['payment_and_custody', 'Pago y Custodia'],
+                  ['cancellation_and_disputes', 'Cancelaciones y disputas'],
+                  ['warranty', 'Garantía'],
+                  ['conduct', 'Conducta y seguridad']
+                ].map(([key, label]) => {
+                  const list = Array.isArray(policies[key]) ? policies[key] : [];
+                  if (!list.length) return null;
+                  return <div key={key}>
+                    <p className="text-xs font-black uppercase text-indigo-800">{label}</p>
+                    <ul className="mt-2 space-y-1.5">{list.map((rule: string, i: number) => <li key={i} className="text-sm text-slate-700 flex gap-2"><span className="font-black text-indigo-600">•</span><span>{rule}</span></li>)}</ul>
+                  </div>;
+                })}
+              </div>
+            </div>}
 
             <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
               <div className="flex items-center gap-2 mb-3"><LockKeyhole className="w-5 h-5 text-slate-700"/><p className="font-black">Trazabilidad y aceptación electrónica</p></div>
