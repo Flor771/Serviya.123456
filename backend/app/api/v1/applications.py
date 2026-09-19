@@ -59,12 +59,52 @@ def select_application(id: str, current_user: User = Depends(get_current_active_
     if service.client_id != current_user.id: raise HTTPException(status_code=403, detail="Solamente el cliente creador puede seleccionar técnico")
     if service.worker_id: raise HTTPException(status_code=400, detail="Este servicio ya tiene un técnico seleccionado")
     if app_item.status != ApplicationStatusEnum.PENDIENTE: raise HTTPException(status_code=400, detail="Esta postulación ya no está disponible para selección")
-    app_item.status = ApplicationStatusEnum.SELECCIONADO; service.worker_id = app_item.worker_id; service.status = ServiceStatusEnum.TRABAJADOR_SELECCIONADO
+    app_item.status = ApplicationStatusEnum.SELECCIONADO; service.worker_id = app_item.worker_id; service.status = ServiceStatusEnum.TRABAJADOR_SELECCIONADO; service.negotiation_status = "SELECCION_PENDIENTE"; service.negotiation_offer_rd = None; service.negotiated_price_rd = None; service.price_agreed_at = None
     db.add(Notification(user_id=app_item.worker_id, title="Postulación aceptada: inicia la negociación", message=f"Tu postulación fue aceptada para: {service.title}. Abre esta notificación para entrar directamente a la negociación y enviar tu contraoferta al cliente. No necesitas enviar un mensaje primero.", type="TRABAJADOR_SELECCIONADO", related_entity_id=service.id))
     record_process(db, user_id=app_item.worker_id, process_type="POSTULACION", status="ACEPTADO", title="Postulación aceptada", message=f"Has sido seleccionado para el servicio {service.title}.", next_step="Puedes iniciar la negociación y enviar tu contraoferta al cliente.", related_entity_id=service.id)
     db.query(Application).filter(Application.service_id == service.id, Application.id != app_item.id, Application.status == ApplicationStatusEnum.PENDIENTE).update({Application.status: ApplicationStatusEnum.RECHAZADO}, synchronize_session=False)
     db.commit()
-    return {"message": "Técnico seleccionado exitosamente para el servicio", "status": "ACEPTADO", "service_id": service.id, "worker_id": app_item.worker_id}
+    return {"message": "Técnico seleccionado. El trabajador debe aceptar o rechazar la selección antes de negociar.", "status": "SELECCION_PENDIENTE", "service_id": service.id, "worker_id": app_item.worker_id}
+
+
+
+@router.post("/service/{service_id}/selection/accept")
+def accept_selection(service_id: str, current_user: User = Depends(get_current_active_user), db: Session = Depends(get_db)):
+    service = db.query(Service).filter(Service.id == service_id).with_for_update().first()
+    if not service: raise HTTPException(status_code=404, detail="Servicio no encontrado")
+    if service.worker_id != current_user.id: raise HTTPException(status_code=403, detail="Solo el trabajador seleccionado puede aceptar")
+    if service.status != ServiceStatusEnum.TRABAJADOR_SELECCIONADO: raise HTTPException(status_code=409, detail="La selección ya no está pendiente")
+    if service.negotiation_status != "SELECCION_PENDIENTE": raise HTTPException(status_code=409, detail="La selección ya fue respondida")
+    service.negotiation_status = "SELECCION_ACEPTADA"
+    db.add(Notification(user_id=service.client_id, title="Trabajador aceptó la selección", message=f"El trabajador aceptó la selección para: {service.title}. Ahora pueden negociar el precio final.", type="SELECCION_ACEPTADA", related_entity_id=service.id))
+    record_process(db, user_id=current_user.id, process_type="POSTULACION", status="ACEPTADO", title="Selección aceptada", message=f"Aceptaste la selección para {service.title}.", next_step="Ahora puedes negociar el precio final con el cliente.", related_entity_id=service.id)
+    record_process(db, user_id=service.client_id, process_type="POSTULACION", status="ACEPTADO", title="Selección aceptada por el trabajador", message=f"El trabajador aceptó participar en {service.title}.", next_step="Ahora pueden negociar el precio final.", related_entity_id=service.id)
+    db.commit()
+    return {"message":"Selección aceptada. Ya pueden negociar el precio final.","status":"ACEPTADO","service_id":service_id}
+
+@router.post("/service/{service_id}/selection/reject")
+def reject_selection(service_id: str, data: dict = {}, current_user: User = Depends(get_current_active_user), db: Session = Depends(get_db)):
+    service = db.query(Service).filter(Service.id == service_id).with_for_update().first()
+    if not service: raise HTTPException(status_code=404, detail="Servicio no encontrado")
+    if service.worker_id != current_user.id: raise HTTPException(status_code=403, detail="Solo el trabajador seleccionado puede rechazar")
+    if service.status != ServiceStatusEnum.TRABAJADOR_SELECCIONADO: raise HTTPException(status_code=409, detail="La selección ya no está pendiente")
+    if service.negotiation_status != "SELECCION_PENDIENTE": raise HTTPException(status_code=409, detail="La selección ya fue respondida")
+    reason = str(data.get("reason") or "").strip()[:500]
+    app_item = db.query(Application).filter(Application.service_id == service_id, Application.worker_id == current_user.id).first()
+    if app_item: app_item.status = ApplicationStatusEnum.RECHAZADO
+    service.worker_id = None
+    service.status = ServiceStatusEnum.PUBLICADA
+    service.negotiation_status = "PENDIENTE"
+    service.negotiation_offer_rd = None
+    service.negotiation_offer_by = None
+    service.negotiation_offer_note = None
+    service.negotiated_price_rd = None
+    service.price_agreed_at = None
+    db.add(Notification(user_id=service.client_id, title="Selección rechazada por el trabajador", message=f"El trabajador rechazó la selección para: {service.title}." + (f" Motivo: {reason}" if reason else ""), type="SELECCION_RECHAZADA", related_entity_id=service.id))
+    record_process(db, user_id=current_user.id, process_type="POSTULACION", status="RECHAZADO", title="Selección rechazada", message=f"No aceptaste la selección para {service.title}." + (f" Motivo: {reason}" if reason else ""), next_step="Puedes continuar buscando otros servicios.", related_entity_id=service.id)
+    record_process(db, user_id=service.client_id, process_type="POSTULACION", status="RECHAZADO", title="Selección rechazada", message=f"El trabajador rechazó la selección para {service.title}.", next_step="Puedes seleccionar otra postulación disponible.", related_entity_id=service.id)
+    db.commit()
+    return {"message":"Selección rechazada. El servicio volvió a estar disponible para nuevas postulaciones.","status":"RECHAZADO","service_id":service_id}
 
 @router.post("/service/{service_id}/start")
 def start_service(service_id: str, data: StartServiceSchema = StartServiceSchema(), current_user: User = Depends(get_current_active_user), db: Session = Depends(get_db)):
