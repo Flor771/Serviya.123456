@@ -124,7 +124,9 @@ def save_completion_photos(service_id: str, data: CompletionPhotosPayload, curre
     row = db.execute(text("SELECT id, client_id, worker_id, status, completion_photos, completion_submitted FROM services WHERE id=:id FOR UPDATE"), {"id": service_id}).mappings().first()
     if not row: raise HTTPException(404, "Servicio no encontrado")
     if row["worker_id"] != current_user.id: raise HTTPException(403, "Solo el técnico asignado puede subir evidencia")
-    status = str(row["status"])
+    raw_status = row["status"]
+    status = raw_status.value if hasattr(raw_status, "value") else str(raw_status)
+    if status.startswith("ServiceStatusEnum."): status = status.split(".", 1)[1]
     if status not in {"EN_PROGRESO", "TRABAJADOR_SELECCIONADO", "FINALIZANDO"}: raise HTTPException(400, "La evidencia solo puede subirse mientras el trabajo está activo o finalizando")
     if row["completion_submitted"]: raise HTTPException(400, "Este trabajo ya fue enviado a revisión")
     photos = row["completion_photos"] or []
@@ -136,7 +138,7 @@ def save_completion_photos(service_id: str, data: CompletionPhotosPayload, curre
     for photo in data.photos:
         value = str(photo).strip()
         if not value.startswith("data:image/"): raise HTTPException(400, "Cada evidencia debe ser una imagen válida")
-        if len(value) > 700_000: raise HTTPException(400, "Una de las fotos supera el tamaño permitido")
+        if len(value) > 450_000: raise HTTPException(400, "Una de las fotos supera el tamaño permitido. Intenta con una foto más ligera.")
         clean_new.append(value)
     combined = (photos + clean_new)[-10:]
     summary = data.summary.strip() if data.summary else "Trabajo terminado y evidencia enviada para revisión del cliente."
