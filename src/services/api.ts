@@ -49,5 +49,5 @@ export const api = {
   },
   put: <T>(endpoint: string, body: any) => request<T>(endpoint, { method: 'PUT', body: JSON.stringify(body) }),
   patch: <T>(endpoint: string, body?: any) => request<T>(endpoint, { method: 'PATCH', body: body ? JSON.stringify(body) : undefined }),
-  delete: <T>(endpoint: string) => request<T>(endpoint, { method: 'DELETE' })
+  delete: <T>(endpoint: string, body?: any) => request<T>(endpoint, { method: 'DELETE', body: body === undefined ? undefined : JSON.stringify(body) })
 };
