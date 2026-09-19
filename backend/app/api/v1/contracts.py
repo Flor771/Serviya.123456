@@ -63,7 +63,7 @@ def _contract_document(service, escrow, client, worker, admin_id, notes=""):
                     "province": service.province, "municipality": service.municipality,
                     "address_approx": service.address_approx, "service_date": service.service_date,
                     "service_time": service.service_time, "estimated_duration": service.estimated_duration,
-                    "requirements": service.requirements or [], "images": service.images or []},
+                    "requirements": service.requirements or [], "images": service.images or [], "initial_budget_rd": float(service.price_rd or 0)},
         "agreement": {"negotiation_status": service.negotiation_status,
                       "negotiated_price_rd": float(service.negotiated_price_rd or 0),
                       "price_agreed_at": service.price_agreed_at.isoformat() if service.price_agreed_at else None,
@@ -71,16 +71,61 @@ def _contract_document(service, escrow, client, worker, admin_id, notes=""):
         "parties": {"client": {"id": str(client.id), "name": f"{client.first_name} {client.last_name}", "email": client.email, "phone": client.phone},
                     "worker": {"id": str(worker.id), "name": f"{worker.first_name} {worker.last_name}", "email": worker.email, "phone": worker.phone}},
         "custody": {"escrow_id": str(escrow.id), "status": escrow.status, "total_amount_rd": total,
-                     "commission_percent": 10.0, "commission_rd": commission, "worker_payout_rd": payout,
+                     "commission_percent": float(escrow.commission_rate_percent if escrow.commission_rate_percent is not None else (commission / total * 100 if total else 0)), "commission_rd": commission, "worker_payout_rd": payout,
                      "payment_method": escrow.payment_method, "voucher_received": bool(escrow.voucher_url),
-                     "custody_activated_at": generated_at},
-        "terms": ["El precio de este contrato corresponde al precio final acordado entre cliente y trabajador.",
-                  "El pago fue depositado para este trabajo específico y quedó retenido en Custodia SERVIYA tras verificación administrativa.",
-                  "El trabajador se obliga a ejecutar el servicio descrito y a entregar evidencia de finalización cuando corresponda.",
-                  "La confirmación del cliente no libera automáticamente los fondos; la liberación final corresponde exclusivamente a Administración SERVIYA.",
-                  "SERVIYA registra las actuaciones, estados, comprobantes y aprobaciones relacionadas con este contrato para fines de trazabilidad y prueba.",
-                  "Las partes deben conservar este documento y sus comprobantes. Las controversias se tramitan mediante el procedimiento de disputas de SERVIYA.",
-                  "La garantía y sus condiciones se rigen por las políticas vigentes de SERVIYA asociadas al servicio."],
+                     "custody_activated_at": escrow.created_at.isoformat() if escrow.created_at else None},
+        "terms": [
+                  "El precio, alcance, fecha y condiciones descritos en este documento forman parte del acuerdo aceptado por las partes.",
+                  "El trabajador debe ejecutar únicamente el alcance acordado y comunicar por la plataforma cualquier cambio, retraso, impedimento o costo adicional antes de realizarlo.",
+                  "El cliente debe facilitar el acceso y las condiciones razonables necesarias para realizar el servicio y comunicar cualquier inconformidad por los canales de SERVIYA.",
+                  "No se permiten pagos adicionales, cobros fuera de la plataforma ni cambios de precio sin aceptación expresa de las partes y registro en SERVIYA.",
+                  "El pago destinado al servicio permanece en Custodia SERVIYA y no se entrega automáticamente al trabajador por la sola confirmación del cliente.",
+                  "Para solicitar la finalización, el trabajador debe entregar evidencia del trabajo realizado cuando sea aplicable. El cliente podrá revisar y comunicar observaciones.",
+                  "La aprobación del cliente coloca la custodia en estado pendiente de revisión; Administración SERVIYA es quien realiza la liberación final conforme al expediente.",
+                  "Ninguna de las partes debe compartir credenciales, códigos de seguridad, datos de acceso o información sensible de la otra parte.",
+                  "Está prohibido utilizar SERVIYA para actividades ilícitas, engañosas, discriminatorias, fraudulentas, amenazas, acoso o servicios que infrinjan la ley.",
+                  "Las cancelaciones, incumplimientos y controversias deben registrarse en SERVIYA con la evidencia disponible. Administración podrá revisar mensajes, comprobantes, fotografías, documentos y demás registros.",
+                  "Para contratos nuevos, la garantía SERVIYA aplicable es de 15 días, según las condiciones de garantía vigentes. Las garantías adicionales ofrecidas por escrito por el trabajador se mantienen cuando sean aplicables.",
+                  "Las partes deben conservar el contrato, comprobantes y evidencias. La aceptación electrónica, fechas y hash SHA-256 forman parte del registro de trazabilidad del acuerdo."
+                ],
+        "policies": {
+            "client": [
+                "Pagar el precio acordado mediante el mecanismo indicado por SERVIYA.",
+                "Entregar información correcta sobre el servicio, ubicación, fecha y condiciones de trabajo.",
+                "Permitir el acceso o las condiciones necesarias para ejecutar el servicio cuando corresponda.",
+                "Revisar el resultado y reportar problemas o incumplimientos por los canales oficiales.",
+                "No solicitar ni realizar pagos fuera de SERVIYA para modificar el acuerdo de este contrato."
+            ],
+            "worker": [
+                "Ejecutar el servicio conforme al alcance, precio, fecha y condiciones acordadas.",
+                "Mantener informado al cliente mediante SERVIYA sobre avances, retrasos o incidencias.",
+                "No iniciar trabajos adicionales con costo sin aceptación registrada del cliente.",
+                "Entregar evidencia de finalización cuando el flujo del servicio la requiera.",
+                "Cumplir las normas de seguridad, respeto y legalidad aplicables al trabajo."
+            ],
+            "payment_and_custody": [
+                "El monto de este contrato queda asociado exclusivamente al servicio identificado.",
+                "La comisión de SERVIYA y el neto del trabajador se calculan y registran en la operación.",
+                "La custodia protege el pago mientras el servicio está en proceso de revisión.",
+                "La liberación de fondos requiere revisión administrativa del expediente cuando el flujo lo establezca."
+            ],
+            "cancellation_and_disputes": [
+                "Una cancelación debe registrarse y explicar su motivo cuando el sistema lo solicite.",
+                "Si existe una disputa, los fondos permanecerán sujetos al estado de Custodia hasta la resolución administrativa correspondiente.",
+                "Las partes deben aportar evidencia relevante: conversaciones, comprobantes, fotografías, documentos y demás registros disponibles."
+            ],
+            "warranty": [
+                "Los contratos nuevos tienen una garantía SERVIYA de 15 días.",
+                "La garantía se limita a las condiciones aplicables al servicio contratado y no cubre daños o modificaciones ajenos al trabajo realizado.",
+                "Las garantías adicionales ofrecidas por escrito por el trabajador no quedan sustituidas por esta garantía SERVIYA."
+            ],
+            "conduct": [
+                "Respeto mutuo y comunicación profesional.",
+                "Prohibición de fraude, suplantación, amenazas, acoso, discriminación y actividades ilegales.",
+                "Protección de credenciales y datos personales de las partes.",
+                "Uso de los canales de SERVIYA para dejar constancia de acuerdos y cambios importantes."
+            ]
+        },
         "admin_notes": notes or "Depósito verificado y contrato digital emitido.",
         "legal_notice": "Este documento electrónico constituye un registro de la operación, del acuerdo y de las actuaciones registradas en SERVIYA. Su valor probatorio o fuerza contractual frente a terceros dependerá de la legislación aplicable y de las formalidades que dicha legislación exija; para operaciones que requieran una formalidad especial se recomienda asesoría legal y, cuando corresponda, firma electrónica cualificada o notarización."
     }
