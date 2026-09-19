@@ -285,3 +285,131 @@ def delete_admin_bank_account(account_id: int, admin_user: User = Depends(requir
         raise HTTPException(status_code=404, detail="Cuenta bancaria no encontrada.")
     db.delete(account); db.commit()
     return {"message": "Cuenta bancaria eliminada exitosamente."}
+
+
+# ---------------------------------------------------------------------------
+# Herramientas de limpieza administrativa para pruebas
+# ---------------------------------------------------------------------------
+class CleanupConfirmSchema(BaseModel):
+    confirmation: str
+
+class CleanupMovementSchema(BaseModel):
+    confirmation: str
+
+@router.get("/cleanup/services")
+def cleanup_services(admin_user: User = Depends(require_admin), db: Session = Depends(get_db)):
+    rows = db.execute(text("""
+        SELECT s.id, s.title, s.status::text AS status, s.price_rd, s.client_id, s.worker_id,
+               s.created_at,
+               COALESCE(c.first_name || ' ' || c.last_name, 'Sin cliente') AS client_name
+        FROM services s
+        LEFT JOIN users c ON c.id = s.client_id
+        ORDER BY s.created_at DESC
+        LIMIT 200
+    """)).mappings().all()
+    return {"services": [dict(r) for r in rows]}
+
+@router.get("/cleanup/movements")
+def cleanup_movements(admin_user: User = Depends(require_admin), db: Session = Depends(get_db)):
+    rows = db.execute(text("""
+        SELECT id::text AS id, 'financial_movements' AS source,
+               movement_type AS type, amount_dop AS amount,
+               description, created_at
+        FROM financial_movements
+        UNION ALL
+        SELECT id::text, 'wallet_transactions', type, amount_rd,
+               description, created_at
+        FROM wallet_transactions
+        UNION ALL
+        SELECT id::text, 'transactions', type, amount,
+               COALESCE(reference_code, ''), created_at
+        FROM transactions
+        UNION ALL
+        SELECT id::text, 'payments', 'PAYMENT', amount,
+               COALESCE(payment_method, ''), escrow_deposited_at
+        FROM payments
+        UNION ALL
+        SELECT id::text, 'withdrawals', 'RETIRO', amount,
+               COALESCE(reference_code, method), created_at
+        FROM withdrawals
+        ORDER BY created_at DESC NULLS LAST
+        LIMIT 300
+    """)).mappings().all()
+    return {"movements": [dict(r) for r in rows]}
+
+@router.delete("/cleanup/services/{service_id}")
+def delete_service_for_test(
+    service_id: str,
+    data: CleanupConfirmSchema,
+    admin_user: User = Depends(require_admin),
+    db: Session = Depends(get_db)
+):
+    if data.confirmation.strip().upper() != "ELIMINAR":
+        raise HTTPException(status_code=400, detail='Escriba "ELIMINAR" para confirmar.')
+    service = db.execute(text("""
+        SELECT id, title, client_id, worker_id
+        FROM services WHERE id = :id FOR UPDATE
+    """), {"id": service_id}).mappings().first()
+    if not service:
+        raise HTTPException(status_code=404, detail="Publicación no encontrada.")
+
+    # Eliminar primero dependencias explícitas del flujo de servicios.
+    db.execute(text("DELETE FROM messages WHERE service_id = :id"), {"id": service_id})
+    db.execute(text("DELETE FROM reviews WHERE service_id = :id"), {"id": service_id})
+    db.execute(text("DELETE FROM warranty_revisits WHERE service_id = :id"), {"id": service_id})
+    db.execute(text("DELETE FROM service_work_status_history WHERE service_id = :id"), {"id": service_id})
+    db.execute(text("DELETE FROM service_warranties WHERE service_id = :id"), {"id": service_id})
+    db.execute(text("DELETE FROM digital_contracts WHERE service_id = :id"), {"id": service_id})
+    db.execute(text("DELETE FROM disputes WHERE service_id = :id"), {"id": service_id})
+    db.execute(text("DELETE FROM financial_movements WHERE escrow_id IN (SELECT id FROM escrows WHERE service_id = :id)"), {"id": service_id})
+    db.execute(text("DELETE FROM escrows WHERE service_id = :id"), {"id": service_id})
+    db.execute(text("DELETE FROM applications WHERE service_id = :id"), {"id": service_id})
+    db.execute(text("DELETE FROM services WHERE id = :id"), {"id": service_id})
+
+    _audit(db, admin_user.id, "TEST_SERVICE_DELETED", "services", 0,
+           f"Publicación de prueba eliminada: {service_id} - {service['title']}")
+    db.commit()
+    return {"message": "Publicación y datos relacionados eliminados correctamente.", "service_id": service_id}
+
+@router.delete("/cleanup/movements/{source}/{movement_id}")
+def delete_movement_for_test(
+    source: str,
+    movement_id: str,
+    data: CleanupMovementSchema,
+    admin_user: User = Depends(require_admin),
+    db: Session = Depends(get_db)
+):
+    if data.confirmation.strip().upper() != "ELIMINAR":
+        raise HTTPException(status_code=400, detail='Escriba "ELIMINAR" para confirmar.')
+    allowed = {
+        "financial_movements": "financial_movements",
+        "wallet_transactions": "wallet_transactions",
+        "transactions": "transactions",
+        "payments": "payments",
+        "withdrawals": "withdrawals",
+    }
+    table = allowed.get(source)
+    if not table:
+        raise HTTPException(status_code=400, detail="Tipo de movimiento no permitido.")
+
+    # No se permite borrar auditoría administrativa desde esta herramienta.
+    if table == "withdrawals":
+        row = db.execute(text("SELECT id FROM withdrawals WHERE id = :id"), {"id": int(movement_id)}).first()
+        if not row:
+            raise HTTPException(status_code=404, detail="Movimiento no encontrado.")
+        db.execute(text("DELETE FROM withdrawals WHERE id = :id"), {"id": int(movement_id)})
+    elif table == "payments":
+        row = db.execute(text("SELECT id FROM payments WHERE id = :id"), {"id": int(movement_id)}).first()
+        if not row:
+            raise HTTPException(status_code=404, detail="Movimiento no encontrado.")
+        db.execute(text("DELETE FROM payments WHERE id = :id"), {"id": int(movement_id)})
+    else:
+        row = db.execute(text(f"SELECT id FROM {table} WHERE id::text = :id"), {"id": movement_id}).first()
+        if not row:
+            raise HTTPException(status_code=404, detail="Movimiento no encontrado.")
+        db.execute(text(f"DELETE FROM {table} WHERE id::text = :id"), {"id": movement_id})
+
+    _audit(db, admin_user.id, "TEST_MOVEMENT_DELETED", source, 0,
+           f"Movimiento de prueba eliminado: {source}/{movement_id}")
+    db.commit()
+    return {"message": "Movimiento de prueba eliminado correctamente.", "source": source, "id": movement_id}
