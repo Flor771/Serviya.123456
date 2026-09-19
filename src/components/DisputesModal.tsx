@@ -25,6 +25,8 @@ export const DisputesModal: React.FC<DisputesModalProps> = ({ serviceId, onClose
   const [msgSuccess, setMsgSuccess] = useState('');
   const [msgError, setMsgError] = useState('');
   const [disputes, setDisputes] = useState<DisputeItem[]>([]);
+  const [eligibleServices, setEligibleServices] = useState<any[]>([]);
+  const [selectedServiceId, setSelectedServiceId] = useState<string>(serviceId || '');
   const [loading, setLoading] = useState(false);
 
   const loadDisputes = async () => {
@@ -40,12 +42,31 @@ export const DisputesModal: React.FC<DisputesModalProps> = ({ serviceId, onClose
   };
 
   useEffect(() => {
+    setSelectedServiceId(serviceId || '');
+  }, [serviceId]);
+
+  const loadEligibleServices = async () => {
+    if (serviceId) return;
+    try {
+      const data = await api.get<{ services: any[] }>('/services');
+      const mine = (data.services || []).filter((s: any) =>
+        s.worker_id && ['TRABAJADOR_SELECCIONADO','EN_PROGRESO','FINALIZANDO','PENDIENTE_APROBACION','EN_DISPUTA'].includes(String(s.status))
+      );
+      setEligibleServices(mine);
+    } catch {
+      setEligibleServices([]);
+    }
+  };
+
+  useEffect(() => {
     loadDisputes();
-  }, []);
+    loadEligibleServices();
+  }, [serviceId]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!serviceId) {
+    const activeServiceId = selectedServiceId || serviceId;
+    if (!activeServiceId) {
       setMsgError('Selecciona el servicio correspondiente para iniciar la disputa.');
       return;
     }
@@ -58,7 +79,7 @@ export const DisputesModal: React.FC<DisputesModalProps> = ({ serviceId, onClose
     setMsgError('');
     try {
       await api.post('/disputes', {
-        service_id: serviceId,
+        service_id: activeServiceId,
         reason,
         description: description.trim()
       });
@@ -93,8 +114,14 @@ export const DisputesModal: React.FC<DisputesModalProps> = ({ serviceId, onClose
           </div>
         )}
 
-        {!serviceId && (
+        {!selectedServiceId && (
           <div className="mb-4">
+            <h4 className="text-xs font-bold text-slate-700 mb-2">Abrir una disputa</h4>
+            {eligibleServices.length > 0 ? <div className="space-y-2 mb-4">{eligibleServices.map((s:any) => <button key={s.id} type="button" onClick={()=>{setSelectedServiceId(String(s.id));setMsgError('');setMsgSuccess('')}} className="w-full text-left bg-red-50 hover:bg-red-100 border border-red-200 rounded-xl p-3">
+              <p className="text-xs font-black text-slate-900">{s.title || 'Servicio SERVIYA'}</p>
+              <p className="text-[10px] text-red-700 mt-1">{String(s.status || '').replaceAll('_',' ')} • RD$ {Number(s.negotiated_price_rd || s.price_rd || 0).toLocaleString('es-DO')}</p>
+              <p className="text-[10px] text-slate-500 mt-1">Toca para iniciar el reclamo</p>
+            </button>)}</div> : <div className="bg-slate-50 border border-slate-100 rounded-xl p-3 text-center text-[11px] text-slate-500 mb-4">No hay servicios con trabajador asignado disponibles para abrir una nueva disputa.</div>}
             <h4 className="text-xs font-bold text-slate-700 mb-2">Mis disputas</h4>
             {loading ? (
               <div className="text-center py-4 text-xs text-slate-500">Cargando disputas...</div>
@@ -124,7 +151,8 @@ export const DisputesModal: React.FC<DisputesModalProps> = ({ serviceId, onClose
           </div>
         )}
 
-        {serviceId ? (
+        {selectedServiceId ? (
+          <div className="mb-3 p-3 rounded-xl bg-blue-50 border border-blue-200 text-xs text-blue-800"><b>Servicio seleccionado:</b> {eligibleServices.find((s:any)=>String(s.id)===String(selectedServiceId))?.title || selectedServiceId}</div>
           <form onSubmit={handleSubmit} className="space-y-3">
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-1">Motivo Principal</label>
