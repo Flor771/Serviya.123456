@@ -101,7 +101,7 @@ def create_dispute(
     escrow = db.execute(text("""
         UPDATE escrows
         SET status = 'EN_DISPUTA'
-        WHERE service_id = :sid AND status IN ('RETENIDO','PENDIENTE_APROBACION')
+        WHERE service_id = :sid AND status = 'RETENIDO'
         RETURNING id
     """), {"sid": data.service_id}).first()
     if not escrow:
