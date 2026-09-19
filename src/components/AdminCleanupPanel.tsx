@@ -30,9 +30,9 @@ export const AdminCleanupPanel:React.FC=()=>{
   setBusy(confirming.id);
   try{
    if(confirming.kind==='service'){
-    await api.delete<any>(`/admin/cleanup/services/${encodeURIComponent(confirming.id)}`,{ } as any);
+    await api.delete<any>(`/admin/cleanup/services/${encodeURIComponent(confirming.id)}`,{confirmation:'ELIMINAR'});
    }else{
-    await api.delete<any>(`/admin/cleanup/movements/${encodeURIComponent(confirming.source!)}/${encodeURIComponent(confirming.id)}`,{} as any);
+    await api.delete<any>(`/admin/cleanup/movements/${encodeURIComponent(confirming.source!)}/${encodeURIComponent(confirming.id)}`,{confirmation:'ELIMINAR'});
    }
    setConfirming(null);setPhrase('');await load();
   }catch(e:any){setError(e?.message||'No se pudo eliminar.')}
