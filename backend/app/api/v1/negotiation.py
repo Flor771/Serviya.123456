@@ -39,6 +39,8 @@ def offer_price(service_id: str, data: PriceOfferSchema, current_user: User = De
     st = s["status"].value if hasattr(s["status"], "value") else str(s["status"])
     if st != "TRABAJADOR_SELECCIONADO":
         raise HTTPException(400, "La negociación de precio se cierra cuando el trabajo comienza")
+    if s["negotiation_status"] not in {"SELECCION_ACEPTADA", "PENDIENTE", "NEGOCIANDO", "PENDIENTE_ACEPTACION"}:
+        raise HTTPException(409, "El trabajador debe aceptar la selección antes de iniciar la negociación")
     active = db.execute(text("SELECT id FROM escrows WHERE service_id=:sid AND status IN ('RETENIDO','EN_DISPUTA','PENDIENTE_APROBACION') LIMIT 1"), {"sid":service_id}).scalar()
     if active: raise HTTPException(400, "El precio ya quedó financiado o en proceso de liquidación y no puede modificarse")
     proposal_text = f"PROPUESTA DE PRECIO: RD$ {data.price_rd:,.2f}" + (f" — {data.note}" if data.note else "")
@@ -49,6 +51,25 @@ def offer_price(service_id: str, data: PriceOfferSchema, current_user: User = De
     db.execute(text("INSERT INTO messages (service_id,sender_id,receiver_id,text,content,created_at) VALUES (:sid,:sender,:receiver,:msg,:msg,CURRENT_TIMESTAMP)"), {"sid":service_id,"sender":current_user.id,"receiver":receiver,"msg":proposal_text})
     db.commit()
     return {"message":"Propuesta enviada. Espera la aceptación de la otra parte.","offer_rd":data.price_rd,"status":"PENDIENTE_ACEPTACION"}
+
+
+@router.post("/{service_id}/reject")
+def reject_price(service_id: str, data: dict = {}, current_user: User = Depends(get_current_active_user), db: Session = Depends(get_db)):
+    s = get_service(db, service_id)
+    if not s: raise HTTPException(404, "Servicio no encontrado")
+    if current_user.id not in {s["client_id"], s["worker_id"]}: raise HTTPException(403, "No perteneces a esta negociación")
+    if not s["negotiation_offer_rd"] or not s["negotiation_offer_by"]: raise HTTPException(400, "No existe una propuesta pendiente para rechazar")
+    if s["negotiation_offer_by"] == current_user.id: raise HTTPException(400, "La persona que hizo la propuesta no puede rechazarla como respuesta a sí misma")
+    st = s["status"].value if hasattr(s["status"], "value") else str(s["status"])
+    if st != "TRABAJADOR_SELECCIONADO": raise HTTPException(400, "La negociación ya no está activa")
+    reason = str(data.get("reason") or "").strip()[:500]
+    proposer = s["negotiation_offer_by"]
+    db.execute(text("UPDATE services SET negotiation_offer_rd=NULL,negotiation_offer_by=NULL,negotiation_offer_note=NULL,negotiated_price_rd=NULL,price_agreed_at=NULL,negotiation_status='RECHAZADA' WHERE id=:id"), {"id":service_id})
+    label = "Cliente" if current_user.id == s["client_id"] else "Trabajador / Técnico"
+    notify(db, proposer, "Propuesta de precio no aceptada", f"{label} no aceptó la propuesta de precio para {s['title']}." + (f" Motivo: {reason}" if reason else "") + " Puedes enviar una nueva propuesta.", "PRICE_REJECTED", service_id)
+    db.execute(text("INSERT INTO messages (service_id,sender_id,receiver_id,text,content,created_at) VALUES (:sid,:sender,:receiver,:msg,:msg,CURRENT_TIMESTAMP)"), {"sid":service_id,"sender":current_user.id,"receiver":proposer,"msg":"PROPUESTA NO ACEPTADA" + (f": {reason}" if reason else "")})
+    db.commit()
+    return {"message":"Propuesta no aceptada. La negociación puede continuar con una nueva propuesta.","status":"RECHAZADA"}
 
 @router.post("/{service_id}/accept")
 def accept_price(service_id: str, current_user: User = Depends(get_current_active_user), db: Session = Depends(get_db)):
