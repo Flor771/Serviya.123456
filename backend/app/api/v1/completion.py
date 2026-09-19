@@ -90,7 +90,14 @@ def get_completion(service_id: str, current_user: User = Depends(get_current_act
     if not s: raise HTTPException(404,"Servicio no encontrado")
     if current_user.id not in {s["client_id"],s["worker_id"]}: raise HTTPException(403,"No tienes acceso a este trabajo")
     photos = s["completion_photos"] or []
-    return {"service_id":service_id,"completion_submitted":bool(s["completion_submitted"]),"summary":s["completion_summary"],"submitted_at":str(s["completion_submitted_at"]) if s["completion_submitted_at"] else None,"status":s["status"].value if hasattr(s["status"],"value") else str(s["status"]),"photos":photos}
+    if isinstance(photos, str):
+        import json
+        try: photos = json.loads(photos)
+        except Exception: photos = []
+    if not isinstance(photos, list): photos = []
+    status = s["status"].value if hasattr(s["status"],"value") else str(s["status"])
+    if status.startswith("ServiceStatusEnum."): status = status.split(".", 1)[1]
+    return {"service_id":service_id,"completion_submitted":bool(s["completion_submitted"]),"summary":s["completion_summary"],"submitted_at":str(s["completion_submitted_at"]) if s["completion_submitted_at"] else None,"status":status,"photos":photos}
 
 @router.get("/{service_id}/warranty")
 def get_warranty(service_id: str, current_user: User = Depends(get_current_active_user), db: Session = Depends(get_db)):
