@@ -5,7 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import { Service } from '../types';
 
 const MAX_PHOTOS = 10;
-const MAX_CHARS = 700_000;
+const MAX_CHARS = 400_000;
 
 const compressPhoto = (file: File): Promise<string> => new Promise((resolve, reject) => {
   if (!file.type.startsWith('image/')) return reject(new Error('Solo se permiten imágenes.'));
@@ -14,7 +14,7 @@ const compressPhoto = (file: File): Promise<string> => new Promise((resolve, rej
   reader.onload = () => {
     const img = new Image();
     img.onload = () => {
-      const scale = Math.min(1, 1200 / Math.max(img.width, img.height));
+      const scale = Math.min(1, 1000 / Math.max(img.width, img.height));
       const canvas = document.createElement('canvas');
       canvas.width = Math.max(1, Math.round(img.width * scale));
       canvas.height = Math.max(1, Math.round(img.height * scale));
@@ -27,7 +27,7 @@ const compressPhoto = (file: File): Promise<string> => new Promise((resolve, rej
         quality -= 0.08;
         data = canvas.toDataURL('image/jpeg', quality);
       }
-      if (data.length > MAX_CHARS) return reject(new Error('La foto es demasiado grande.'));
+      if (data.length > MAX_CHARS) return reject(new Error('La foto es demasiado grande para subirla desde el teléfono. Intenta nuevamente con una foto más ligera.'));
       resolve(data);
     };
     img.onerror = () => reject(new Error('No se pudo procesar la foto.'));
