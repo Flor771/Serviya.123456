@@ -135,16 +135,23 @@ def save_completion_photos(service_id: str, data: CompletionPhotosPayload, curre
         except Exception: photos = []
     if not isinstance(photos, list): photos = []
     clean_new = []
+    total_chars = sum(len(str(x)) for x in photos if isinstance(x, str))
     for photo in data.photos:
         value = str(photo).strip()
         if not value.startswith("data:image/"): raise HTTPException(400, "Cada evidencia debe ser una imagen válida")
         if len(value) > 450_000: raise HTTPException(400, "Una de las fotos supera el tamaño permitido. Intenta con una foto más ligera.")
+        if total_chars + len(value) > 2_500_000: raise HTTPException(400, "La evidencia completa es demasiado grande. Sube menos fotos o fotos más ligeras.")
+        total_chars += len(value)
         clean_new.append(value)
     combined = (photos + clean_new)[-10:]
     summary = data.summary.strip() if data.summary else "Trabajo terminado y evidencia enviada para revisión del cliente."
     if len(summary) < 5: raise HTTPException(400, "Escribe un resumen de al menos 5 caracteres")
     otp=f"{__import__('random').randint(100000,999999)}"
-    db.execute(text("UPDATE services SET completion_photos=CAST(:photos AS JSON), completion_summary=:summary, completion_submitted=true, completion_submitted_at=CURRENT_TIMESTAMP WHERE id=:id"), {"photos": json.dumps(combined), "summary": summary, "id": service_id})
+    try:
+        db.execute(text("UPDATE services SET completion_photos=CAST(:photos AS JSON), completion_summary=:summary, completion_submitted=true, completion_submitted_at=CURRENT_TIMESTAMP WHERE id=:id"), {"photos": json.dumps(combined, ensure_ascii=False), "summary": summary, "id": service_id})
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(500, f"No se pudo guardar la evidencia. Intenta con fotos más ligeras. Detalle: {str(exc)[:180]}")
     db.execute(text("UPDATE escrows SET release_otp=:otp WHERE service_id=:sid AND status='RETENIDO'"), {"otp": otp, "sid": service_id})
     db.execute(text("INSERT INTO notifications (user_id,title,message,type,read,created_at,related_entity_id) VALUES (:uid,:title,:message,'COMPLETION_SUBMITTED',false,CURRENT_TIMESTAMP,:related)"), {"uid": row["client_id"], "title": "Trabajo terminado: evidencia recibida", "message": "El técnico envió fotos y el resumen del trabajo terminado. Revisa la evidencia y acepta la finalización para enviar la solicitud a Administración.", "related": service_id})
     db.commit()
