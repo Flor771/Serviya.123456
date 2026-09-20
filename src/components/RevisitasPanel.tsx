@@ -26,10 +26,11 @@ export const RevisitasPanel: React.FC<{ onClose: () => void }> = ({ onClose }) =
       const out: any[] = [];
       for (const c of cs?.contracts || []) {
         try {
-          const completion = await api.get<any>(`/completion/${c.service_id}`);
+          // La garantía/revisita se consulta de forma independiente al estado actual
+          // del servicio. Así el cliente sigue viendo la revisita aunque el trabajo
+          // haya avanzado a otro estado después de la corrección.
           const w = await api.get<any>(`/completion/${c.service_id}/warranty`);
-          const proof = Array.isArray(completion?.photos) ? completion.photos.length > 0 : Boolean(completion?.photos);
-          if (String(completion?.status || '').toUpperCase() !== 'COMPLETADA' || !completion?.completion_submitted || !proof || w?.warranty?.expired) continue;
+          if (!w?.warranty || w?.warranty?.expired) continue;
           const revisits = (w?.revisits || []).filter((r: any) => String(r.status || '').toUpperCase() !== 'CERRADA');
           if (isWorker) {
             if (revisits.length) out.push({ ...c, warranty: w.warranty, revisits });
@@ -67,6 +68,16 @@ export const RevisitasPanel: React.FC<{ onClose: () => void }> = ({ onClose }) =
       window.alert(`Solicitud de revisita enviada. Estado guardado: ${r?.status || 'SOLICITADA'}.`);
     } catch (e: any) {
       setError(e?.message || 'La solicitud fue rechazada.');
+    } finally { setBusy(false); }
+  };
+
+  const clientAction = async (serviceId: string, revisitId: string, action: 'confirm' | 'escalate') => {
+    setBusy(true); setError('');
+    try {
+      await api.post(`/completion/${serviceId}/warranty/revisits/${revisitId}/${action}`, {});
+      await load();
+    } catch (e: any) {
+      setError(e?.message || 'La acción no pudo completarse.');
     } finally { setBusy(false); }
   };
 
@@ -109,7 +120,7 @@ export const RevisitasPanel: React.FC<{ onClose: () => void }> = ({ onClose }) =
           : items.map(x => <article key={x.service_id} className="bg-white rounded-2xl border p-4">
             <div className="flex justify-between gap-3"><div><p className="text-[10px] uppercase font-black text-indigo-600">{x.contract_number || 'Contrato SERVIYA'}</p><h3 className="font-black text-slate-900">{x.title || x.warranty?.service_title}</h3><p className="text-xs text-slate-500 mt-1">Garantía: {x.warranty?.coverage_days || 15} días · vence {x.warranty?.expires_at ? new Date(x.warranty.expires_at).toLocaleDateString('es-DO') : '—'}</p></div><span className="px-2 py-1 rounded-lg bg-emerald-50 text-emerald-700 text-[10px] font-black"><CheckCircle2 className="inline w-3 h-3"/> Finalizado</span></div>
             {!isWorker && <div className="mt-3 space-y-3">
-              <p className="text-xs text-emerald-700 font-bold">✓ Evidencia registrada</p>
+              <p className="text-xs text-emerald-700 font-bold">✓ Garantía activa • seguimiento de revisitas disponible</p>
               {x.revisits?.length > 0 && x.revisits.map((r: any) => {
                 const status = String(r.status || '').toUpperCase();
                 const labels: Record<string,string> = {
@@ -130,7 +141,12 @@ export const RevisitasPanel: React.FC<{ onClose: () => void }> = ({ onClose }) =
                   </div>
                   <p className="mt-2 text-xs text-slate-600">{r.description}</p>
                   {r.scheduled_at && <p className="mt-2 text-xs font-bold text-blue-700"><CalendarDays className="inline w-3 h-3 mr-1"/>Programada: {new Date(r.scheduled_at).toLocaleString('es-DO')}</p>}
-                  {status === 'CORRECCION_REALIZADA' && <p className="mt-3 rounded-xl bg-emerald-50 border border-emerald-200 p-3 text-xs font-bold text-emerald-800">El trabajador registró la corrección. Revisa el trabajo y confirma si quedó solucionado.</p>}
+                  {status === 'CORRECCION_REALIZADA' && <div className="mt-3 space-y-2">
+                    <p className="rounded-xl bg-emerald-50 border border-emerald-200 p-3 text-xs font-bold text-emerald-800">El trabajador registró la corrección. Revisa el trabajo y confirma si quedó solucionado.</p>
+                    <button type="button" disabled={busy} onClick={() => clientAction(x.service_id, r.id, 'confirm')} className="w-full rounded-xl bg-emerald-600 text-white py-3 text-sm font-black"><CheckCircle2 className="inline w-4 h-4 mr-1"/> Confirmar que quedó solucionado</button>
+                    <button type="button" disabled={busy} onClick={() => clientAction(x.service_id, r.id, 'escalate')} className="w-full rounded-xl border border-amber-300 bg-amber-50 text-amber-800 py-3 text-sm font-black">No quedó solucionado • Escalar a Administración</button>
+                  </div>}
+                  {status === 'PROGRAMADA' && <p className="mt-3 rounded-xl bg-blue-50 border border-blue-200 p-3 text-xs font-bold text-blue-800"><CalendarDays className="inline w-4 h-4 mr-1"/> El trabajador ya programó la revisita. Revisa aquí la fecha y hora.</p>}
                 </div>;
               })}
               <button type="button" onClick={() => { setSelected({ ...x, service_id: x.service_id || x.warranty?.service_id }); setError(''); setIssue(''); setDescription(''); }} className="w-full rounded-xl bg-indigo-600 text-white py-3 text-sm font-black">{x.revisits?.length ? 'Solicitar otra revisita' : 'Solicitar revisita de este trabajo'}</button>
