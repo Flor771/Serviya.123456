@@ -24,6 +24,7 @@ import { WorkersView } from './components/WorkersView';
 import { ApplicationsView } from './components/ApplicationsView';
 import { WalletEscrowFlowModal } from './components/WalletEscrowFlowModal';
 import { ClientFundsCard } from './components/ClientFundsCard';
+import { RevisitasPanel } from './components/RevisitasPanel';
 import { Service } from './types';
 import { api } from './services/api';
 
@@ -47,6 +48,7 @@ const AppContent: React.FC = () => {
   const [disputeServiceId, setDisputeServiceId] = useState<string | null>(null);
   const [reviewParams, setReviewParams] = useState<{ serviceId: string; targetUserId: string } | null>(null);
   const [walletEscrowParams, setWalletEscrowParams] = useState<{ serviceId: string; amount: number } | null>(null);
+  const [showRevisitasPanel, setShowRevisitasPanel] = useState(false);
 
   const openAuth = (mode: 'login' | 'register', role: 'CLIENTE' | 'TRABAJADOR') => { setAuthRole(role); setAuthModalMode(mode); };
   const fetchServices = async () => { try { const data = await api.get<{ services: Service[] }>('/services'); setServices(data?.services || []); } catch (err) { console.error('No se pudieron cargar los servicios:', err); setServices([]); } };
@@ -59,7 +61,8 @@ const AppContent: React.FC = () => {
       const serviceId = detail.serviceId ? String(detail.serviceId) : '';
       const destination = String(detail.destination || 'service');
       const notificationType = String(detail.notificationType || '').toUpperCase();
-      setShowNotificationsModal(false); setSelectedService(null); setChatParams(null); setShowPublishModal(false); setShowVerificationModal(false); setShowPoliciesModal(false); setDisputeServiceId(null); setReviewParams(null); setWalletEscrowParams(null);
+      setShowNotificationsModal(false); setSelectedService(null); setChatParams(null); setShowPublishModal(false); setShowVerificationModal(false); setShowPoliciesModal(false); setDisputeServiceId(null); setReviewParams(null); setWalletEscrowParams(null); setShowRevisitasPanel(false);
+      if (destination === 'revisitas') { setShowRevisitasPanel(true); return; }
       if (destination === 'applications') setActiveTab(isWorker ? 'postulaciones' : 'mis-publicaciones');
       else if (destination === 'chat') {
         setActiveTab('mensajes');
@@ -113,6 +116,7 @@ const AppContent: React.FC = () => {
     {showPoliciesModal&&<PoliciesModal onClose={()=>setShowPoliciesModal(false)} />}
     {disputeServiceId!==null&&user&&<DisputesModal serviceId={disputeServiceId||undefined} onClose={()=>setDisputeServiceId(null)} />}
     {reviewParams&&<ReviewsModal serviceId={reviewParams.serviceId} targetUserId={reviewParams.targetUserId} onClose={()=>setReviewParams(null)} />}
+    {showRevisitasPanel&&user&&<RevisitasPanel onClose={()=>setShowRevisitasPanel(false)} />}
   </div>;
 };
 export const App:React.FC=()=> <AuthProvider><WalletProvider><NotificationProvider><AppContent/></NotificationProvider></WalletProvider></AuthProvider>;
