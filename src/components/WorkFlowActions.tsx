@@ -20,6 +20,148 @@ export const WorkFlowActions: React.FC<Props> = ({ service, onRefresh, onOpenCha
   const [workStatus, setWorkStatus] = useState<any>(null);
   const [warranty, setWarranty] = useState<any>(null);
   const [showWarranty, setShowWarranty] = useState(false);
+  const [openSection, setOpenSection] = useState<'status' | 'contract' | 'finish' | 'review' | null>(null);
+
+  const userId = String(user?.id ?? '');
+  const workerId = String(service.worker_id ?? '');
+  const clientId = String(service.client_id ?? '');
+  const role = String(user?.role ?? user?.activeRole ?? '').toUpperCase();
+  const isWorkerByRole = role === 'TRABAJADOR' || role === 'TECNICO' || role === 'TÉCNICO';
+  const isWorkerAssigned = !!workerId && userId === workerId;
+  const isWorker = isWorkerAssigned || (isWorkerByRole && !!workerId);
+  const isClient = !!clientId && userId === clientId;
+
+  const load = async () => {
+    try { setCompletion(await api.get(`/completion/${service.id}`)); } catch { setCompletion(null); }
+    try { setWorkStatus(await api.get(`/work-status/${service.id}`)); } catch { setWorkStatus(null); }
+    try { const w:any = await api.get(`/completion/${service.id}/warranty`); setWarranty(w?.warranty || null); } catch { setWarranty(null); }
+  };
+
+  useEffect(() => { if (user) void load(); }, [service.id, service.status, user?.id]);
+
+  const executeWork = async () => {
+    if (!window.confirm('¿Confirmas que vas a iniciar oficialmente este trabajo? La Custodia permanecerá protegida.')) return;
+    setBusy(true); setError(''); setSuccess('');
+    try { await api.post(`/completion/${service.id}/execute`); setSuccess('Trabajo iniciado oficialmente. La Custodia permanece protegida.'); await load(); onRefresh(); }
+    catch (e:any) { setError(e?.message || 'No se pudo iniciar el trabajo.'); }
+    finally { setBusy(false); }
+  };
+
+  const approveCompletion = async () => {
+    if (!window.confirm('¿Confirmas que revisaste las fotos y que el trabajo quedó terminado y conforme? Al aceptar, la solicitud pasará a Administración para la liberación de los fondos.')) return;
+    setBusy(true); setError(''); setSuccess('');
+    try { await api.post(`/completion/${service.id}/approve`); setSuccess('Conformidad registrada. La solicitud de liberación fue enviada a Administración; los fondos siguen protegidos hasta la liberación administrativa.'); await load(); onRefresh(); }
+    catch (e:any) { setError(e?.message || 'No se pudo registrar la aprobación.'); }
+    finally { setBusy(false); }
+  };
+
+  if (!user || (!isWorker && !isClient)) return null;
+
+  const selected = service.status === 'TRABAJADOR_SELECCIONADO';
+  const inProgress = service.status === 'EN_PROGRESO';
+  const completed = service.status === 'COMPLETADA';
+  const finalizing = workStatus?.current_status === 'FINALIZANDO';
+  const workerRoleCanFinish = isWorker && !completed && !completion?.completion_submitted && (selected || inProgress || finalizing);
+  const completionPhotos = Array.isArray(completion?.photos) ? completion.photos : (typeof completion?.photos === 'string' ? (() => { try { const p = JSON.parse(completion.photos); return Array.isArray(p) ? p : []; } catch { return []; } })() : []);
+  const evidenceReady = completionPhotos.length > 0;
+  // The backend already supports direct client approval when the worker has uploaded evidence
+  // and the work-status is FINALIZANDO. This keeps evidence -> review -> admin as one flow,
+  // including evidence that was uploaded before completion_submitted was set.
+  const clientCanApprove = isClient && evidenceReady && (!!completion?.completion_submitted || finalizing);
+
+  const toggleSection = (section: 'status' | 'contract' | 'finish' | 'review') =>
+    setOpenSection(prev => prev === section ? null : section);
+
+  return (<>
+    <div className={embedded ? 'w-full' : 'fixed bottom-20 md:bottom-6 left-1/2 -translate-x-1/2 z-[45] w-[calc(100%-1.5rem)] max-w-2xl'}>
+      <div className="bg-white border border-slate-200 shadow-xl rounded-2xl overflow-hidden">
+        <div className="p-3 bg-gradient-to-r from-blue-700 to-teal-600 text-white">
+          <p className="text-[10px] uppercase tracking-widest font-black opacity-90">Continuidad del trabajo</p>
+          <div className="flex items-center justify-between gap-3 mt-1">
+            <div>
+              <p className="text-base font-black">{String(service.status).replaceAll('_', ' ')}</p>
+              <p className="text-[11px] opacity-90">Gestiona cada etapa del servicio sin perderte.</p>
+            </div>
+            <div className="text-[10px] font-bold bg-white/15 rounded-full px-2 py-1">SERVIYA</div>
+          </div>
+        </div>
+
+        {error && <div className="m-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs font-semibold p-2.5">{error}</div>}
+        {success && <div className="m-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold p-2.5">{success}</div>}
+
+        <div className="p-3 space-y-2">
+          <button onClick={() => toggleSection('status')} className="w-full flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-left">
+            <span><b className="block text-xs text-slate-900">Estado y seguimiento</b><span className="text-[10px] text-slate-500">Ver avance e historial</span></span>
+            <span className="text-slate-400">{openSection === 'status' ? '−' : '+'}</span>
+          </button>
+          {openSection === 'status' && <div className="rounded-xl border border-slate-200 p-2"><WorkStatusPanel service={service} /></div>}
+
+          {selected && showNegotiation && <div>
+            <button onClick={() => toggleSection('contract')} className="w-full flex items-center justify-between gap-3 rounded-xl border border-blue-200 bg-blue-50 px-3 py-3 text-left">
+              <span><b className="block text-xs text-blue-950">Contratación y Custodia</b><span className="text-[10px] text-blue-700">Precio, negociación y depósito</span></span>
+              <span className="text-blue-500">{openSection === 'contract' ? '−' : '+'}</span>
+            </button>
+            {openSection === 'contract' && <div className="mt-2 space-y-3"><NegotiationPanel serviceId={service.id} clientId={service.client_id} workerId={service.worker_id} budget={service.price_rd} title={service.title} onRefresh={onRefresh} onOpenChat={onOpenChat} />{isWorker && !finalizing && <button onClick={executeWork} disabled={busy} className="w-full inline-flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-sm px-4 py-3 rounded-xl disabled:opacity-50"><Play className="w-4 h-4" />{busy ? 'Iniciando…' : 'Iniciar trabajo oficialmente'}</button>}</div>}
+          </div>}
+
+          {selected && isWorker && !showNegotiation && !finalizing && <button onClick={executeWork} disabled={busy} className="w-full inline-flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-sm px-4 py-3 rounded-xl disabled:opacity-50"><Play className="w-4 h-4" />{busy ? 'Iniciando…' : 'Iniciar trabajo oficialmente'}</button>}
+
+          {workerRoleCanFinish && <div>
+            <button onClick={() => toggleSection('finish')} className="w-full flex items-center justify-between gap-3 rounded-xl border-2 border-emerald-200 bg-emerald-50 px-3 py-3 text-left">
+              <span><b className="block text-xs text-emerald-950">Finalizar trabajo</b><span className="text-[10px] text-emerald-700">Subir evidencia y enviar a revisión</span></span>
+              <span className="text-emerald-600">{openSection === 'finish' ? '−' : '+'}</span>
+            </button>
+            {openSection === 'finish' && <div className="mt-2 rounded-xl border border-emerald-200 bg-emerald-50 p-3 space-y-2"><p className="text-xs text-emerald-900"><b>Custodia retenida.</b> El pago está protegido mientras se revisa el trabajo.</p><button onClick={() => setShowPhotos(true)} disabled={busy} className="w-full inline-flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-sm px-4 py-3 rounded-xl disabled:opacity-50"><Camera className="w-5 h-5" />Subir prueba y enviar trabajo terminado</button></div>}
+          </div>}
+
+          {clientCanApprove && <div>
+            <button onClick={() => toggleSection('review')} className="w-full flex items-center justify-between gap-3 rounded-xl border-2 border-amber-300 bg-amber-50 px-3 py-3 text-left">
+              <span><b className="block text-xs text-amber-950">Trabajo terminado • Revisar evidencia</b><span className="text-[10px] text-amber-800">Fotos, resumen y confirmación</span></span>
+              <span className="text-amber-600">{openSection === 'review' ? '−' : '+'}</span>
+            </button>
+            {openSection === 'review' && <div className="mt-2 rounded-xl border border-amber-200 bg-amber-50 p-3 space-y-3">
+              <p className="text-[11px] text-amber-900">Revisa el resumen y las fotos. Al confirmar, la solicitud pasa a Administración.</p>
+              {completion?.summary && <div className="rounded-xl bg-white border border-amber-200 p-3"><p className="text-[10px] uppercase font-black text-slate-500">Resumen del trabajador</p><p className="text-xs text-slate-800 mt-1 whitespace-pre-wrap">{completion.summary}</p></div>}
+              {evidenceReady && <div><p className="text-[10px] uppercase font-black text-slate-500 mb-2">Fotos de evidencia ({completionPhotos.length})</p><div className="grid grid-cols-2 sm:grid-cols-3 gap-2">{completionPhotos.map((photo: string, index: number) => <a key={index} href={photo} target="_blank" rel="noreferrer" className="block rounded-xl overflow-hidden border border-amber-200 bg-white"><img src={photo} alt={`Evidencia ${index + 1}`} className="w-full h-28 object-cover" /></a>)}</div></div>}
+              <button onClick={approveCompletion} disabled={busy} className="w-full inline-flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-sm px-3 py-3 rounded-xl disabled:opacity-50"><CheckCircle className="w-5 h-5" />{busy ? 'Registrando…' : 'Aceptar trabajo finalizado y enviar a Administración'}</button>
+            </div>}
+          </div>}
+
+          {isClient && completion?.completion_submitted && completion?.status === 'PENDIENTE_APROBACION' && <div className="rounded-xl border border-emerald-300 bg-emerald-50 p-3"><p className="text-sm font-black text-emerald-950">✓ Conformidad registrada</p><p className="text-[11px] text-emerald-800 mt-1">La solicitud está en Administración. Los fondos siguen protegidos.</p></div>}
+          {completion?.completion_submitted && <div className="rounded-xl bg-slate-50 border border-slate-200 p-3 text-[11px] text-slate-700"><b>Seguimiento:</b> {isClient ? (completion?.status === 'PENDIENTE_APROBACION' ? 'Solicitud enviada a Administración.' : 'Revisa las fotos y confirma cuando estés conforme.') : 'Esperando conformidad del cliente y liberación administrativa.'}</div>}
+          <button onClick={() => onOpenChat(service.id, isWorker ? service.client_id : service.worker_id!)} className="w-full inline-flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-3 py-3 rounded-xl"><MessageSquare className="w-4 h-4" />Mensajes</button>
+        </div>
+      </div>
+
+      {completed && <div className="rounded-2xl bg-emerald-50 border-2 border-emerald-300 p-4 sm:p-5 space-y-3 mt-3"><div className="flex items-center gap-3"><div className="w-11 h-11 rounded-full bg-emerald-600 text-white flex items-center justify-center"><CircleCheckBig className="w-6 h-6" /></div><div><p className="text-[10px] uppercase tracking-widest font-black text-emerald-700">SERVIYA • ESTADO FINAL</p><h3 className="text-lg sm:text-xl font-black text-emerald-950">PROCESO FINALIZADO</h3></div></div><p className="text-sm text-emerald-900">Cliente: Conformidad registrada</p><p className="text-sm text-emerald-900">Trabajador: Pago liberado a su billetera</p><p className="text-sm text-emerald-900">Custodia: Fondos liberados</p><div className="rounded-xl bg-white border border-emerald-200 p-3 text-xs text-emerald-900"><LockKeyhole className="w-4 h-4 inline mr-1" />Proceso cerrado. Garantía de 60 días.</div>{warranty && <button onClick={() => setShowWarranty(true)} className="w-full inline-flex items-center justify-center gap-2 bg-white border border-emerald-300 text-emerald-800 font-bold text-xs px-3 py-3 rounded-xl"><ShieldCheck className="w-4 h-4" />Ver garantía</button>}</div>}
+    </div>
+
+    {showPhotos && <WorkPhotosModal service={service} onClose={() => setShowPhotos(false)} onRefresh={async () => { await load(); onRefresh(); }} />}
+    {showWarranty && warranty && <WarrantyModal warranty={warranty} onClose={() => setShowWarranty(false)} />}
+  </>);
+eact, { useEffect, useState } from 'react';
+import { Camera, CheckCircle, MessageSquare, ShieldCheck, Play, CircleCheckBig, LockKeyhole } from 'lucide-react';
+import { api } from '../services/api';
+import { useAuth } from '../context/AuthContext';
+import { Service } from '../types';
+import { WorkPhotosModal } from './WorkPhotosModal';
+import { NegotiationPanel } from './NegotiationPanel';
+import { WorkStatusPanel } from './WorkStatusPanel';
+import { WarrantyModal } from './WarrantyModal';
+
+interface Props { service: Service; onRefresh: () => void; onOpenChat: (serviceId: string, receiverId: string) => void; embedded?: boolean; showNegotiation?: boolean; }
+
+export const WorkFlowActions: React.FC<Props> = ({ service, onRefresh, onOpenChat, embedded = false, showNegotiation = true }) => {
+  const { user } = useAuth();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+  const [showPhotos, setShowPhotos] = useState(false);
+  const [completion, setCompletion] = useState<any>(null);
+  const [workStatus, setWorkStatus] = useState<any>(null);
+  const [warranty, setWarranty] = useState<any>(null);
+  const [showWarranty, setShowWarranty] = useState(false);
+  const [openSection, setOpenSection] = useState<'status' | 'contract' | 'finish' | 'review' | null>(null);
 
   const userId = String(user?.id ?? '');
   const workerId = String(service.worker_id ?? '');
