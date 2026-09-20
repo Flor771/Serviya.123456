@@ -66,6 +66,21 @@ def participant_warranty(service_id: str, current_user: User, db: Session):
     return row
 
 
+@router.get("/{service_id}/warranty")
+def get_warranty(service_id: str, current_user: User = Depends(get_current_active_user), db: Session = Depends(get_db)):
+    """Return the active warranty and its revisit history for the client/worker."""
+    ensure_table(db)
+    warranty = participant_warranty(service_id, current_user, db)
+    rows = db.execute(text("""
+        SELECT id,service_id,issue,description,status,scheduled_at,resolution_notes,created_at,updated_at,resolved_at
+        FROM warranty_revisits WHERE service_id=:sid ORDER BY created_at DESC
+    """), {"sid": service_id}).mappings().all()
+    return {
+        "warranty": dict(warranty),
+        "revisits": [dict(r) for r in rows],
+    }
+
+
 @router.post("/{service_id}/warranty/revisit")
 def request_revisit(service_id: str, data: RevisitRequest, current_user: User = Depends(get_current_active_user), db: Session = Depends(get_db)):
     ensure_table(db)
