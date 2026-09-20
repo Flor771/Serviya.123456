@@ -11,7 +11,7 @@ router = APIRouter(prefix="/completion", tags=["Garantía y Revisitas"])
 
 class RevisitRequest(BaseModel):
     issue: str = Field(min_length=3, max_length=180)
-    description: str = Field(min_length=10, max_length=2000)
+    description: str = Field(min_length=3, max_length=2000)
 
 class ScheduleRequest(BaseModel):
     scheduled_at: datetime
@@ -21,8 +21,6 @@ class ResolutionRequest(BaseModel):
 
 
 def ensure_table(db: Session) -> None:
-    # Compatibility guard for databases that existed before migration 024.
-    # Normal deployments create these tables through Alembic.
     db.execute(text("""
         CREATE TABLE IF NOT EXISTS warranty_revisits (
             id VARCHAR(64) PRIMARY KEY,
@@ -71,8 +69,6 @@ def participant_warranty(service_id: str, current_user: User, db: Session):
 @router.post("/{service_id}/warranty/revisit")
 def request_revisit(service_id: str, data: RevisitRequest, current_user: User = Depends(get_current_active_user), db: Session = Depends(get_db)):
     ensure_table(db)
-    # Lock the warranty row before checking for an active revisit. This closes the
-    # race where two simultaneous client requests could both pass the old check.
     warranty = db.execute(text("""
         SELECT w.id,w.service_id,w.client_id,w.worker_id,w.coverage_days,w.status,w.activated_at,w.expires_at,w.certificate_ref,
                s.title
