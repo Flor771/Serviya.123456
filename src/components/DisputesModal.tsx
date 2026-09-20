@@ -126,9 +126,7 @@ export const DisputesModal: React.FC<DisputesModalProps> = ({ serviceId, onClose
             {loading ? (
               <div className="text-center py-4 text-xs text-slate-500">Cargando disputas...</div>
             ) : disputes.length === 0 ? (
-              <div className="bg-slate-50 border border-slate-100 rounded-xl p-4 text-center text-xs text-slate-500">
-                No tienes disputas registradas.
-              </div>
+              <div className="bg-slate-50 border border-slate-100 rounded-xl p-4 text-center text-xs text-slate-500">No tienes disputas registradas.</div>
             ) : (
               <div className="space-y-2">
                 {disputes.map((d) => (
@@ -152,42 +150,27 @@ export const DisputesModal: React.FC<DisputesModalProps> = ({ serviceId, onClose
         )}
 
         {selectedServiceId ? (
-          <div className="mb-3 p-3 rounded-xl bg-blue-50 border border-blue-200 text-xs text-blue-800"><b>Servicio seleccionado:</b> {eligibleServices.find((s:any)=>String(s.id)===String(selectedServiceId))?.title || selectedServiceId}</div>
-          <form onSubmit={handleSubmit} className="space-y-3">
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">Motivo Principal</label>
-              <select
-                value={reason}
-                onChange={(e) => setReason(e.target.value)}
-                className="w-full text-xs p-3 bg-slate-50 border border-slate-200 rounded-xl"
-              >
-                <option value="TRABAJO_INCOMPLETO">El trabajo quedó incompleto</option>
-                <option value="DEFECTO_CALIDAD">Trabajo de mala calidad o daño material</option>
-                <option value="NO_PRESENTACION">El trabajador no se presentó</option>
-                <option value="OTRO">Otro motivo</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">Explicación detallada *</label>
-              <textarea
-                rows={4}
-                placeholder="Describe lo sucedido, acuerdos no cumplidos..."
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                className="w-full text-xs p-3 bg-slate-50 border border-slate-200 rounded-xl"
-                required
-              />
-            </div>
-
-            <button
-              type="submit"
-              disabled={submitting}
-              className="w-full bg-amber-600 hover:bg-amber-700 text-white font-bold py-3 rounded-xl text-xs shadow-md transition disabled:opacity-50"
-            >
-              {submitting ? 'Abriendo Disputa...' : '⚠️ Abrir Disputa Oficial'}
-            </button>
-          </form>
+          <>
+            <div className="mb-3 p-3 rounded-xl bg-blue-50 border border-blue-200 text-xs text-blue-800"><b>Servicio seleccionado:</b> {eligibleServices.find((s:any)=>String(s.id)===String(selectedServiceId))?.title || selectedServiceId}</div>
+            <form onSubmit={handleSubmit} className="space-y-3">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Motivo Principal</label>
+                <select value={reason} onChange={(e) => setReason(e.target.value)} className="w-full text-xs p-3 bg-slate-50 border border-slate-200 rounded-xl">
+                  <option value="TRABAJO_INCOMPLETO">El trabajo quedó incompleto</option>
+                  <option value="DEFECTO_CALIDAD">Trabajo de mala calidad o daño material</option>
+                  <option value="NO_PRESENTACION">El trabajador no se presentó</option>
+                  <option value="OTRO">Otro motivo</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Explicación detallada *</label>
+                <textarea rows={4} placeholder="Describe lo sucedido, acuerdos no cumplidos..." value={description} onChange={(e) => setDescription(e.target.value)} className="w-full text-xs p-3 bg-slate-50 border border-slate-200 rounded-xl" required />
+              </div>
+              <button type="submit" disabled={submitting} className="w-full bg-amber-600 hover:bg-amber-700 text-white font-bold py-3 rounded-xl text-xs shadow-md transition disabled:opacity-50">
+                {submitting ? 'Abriendo Disputa...' : '⚠️ Abrir Disputa Oficial'}
+              </button>
+            </form>
+          </>
         ) : (
           <div className="text-center text-[11px] text-slate-500 flex items-center justify-center gap-1">
             Abre los detalles de un servicio para iniciar una nueva disputa <ChevronRight className="w-3 h-3" />
