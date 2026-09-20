@@ -108,7 +108,33 @@ export const RevisitasPanel: React.FC<{ onClose: () => void }> = ({ onClose }) =
           <div className="bg-white rounded-2xl p-8 text-center"><ShieldCheck className="w-10 h-10 mx-auto text-slate-300"/><p className="font-black text-slate-700 mt-3">{isWorker ? 'No tienes solicitudes de revisita pendientes' : 'No hay trabajos elegibles para una revisita'}</p><p className="text-xs text-slate-500 mt-1">{isWorker ? 'Las solicitudes de los clientes aparecerán aquí cuando existan.' : 'Debe ser un trabajo ya finalizado, con evidencia registrada y garantía vigente.'}</p></div>
           : items.map(x => <article key={x.service_id} className="bg-white rounded-2xl border p-4">
             <div className="flex justify-between gap-3"><div><p className="text-[10px] uppercase font-black text-indigo-600">{x.contract_number || 'Contrato SERVIYA'}</p><h3 className="font-black text-slate-900">{x.title || x.warranty?.service_title}</h3><p className="text-xs text-slate-500 mt-1">Garantía: {x.warranty?.coverage_days || 15} días · vence {x.warranty?.expires_at ? new Date(x.warranty.expires_at).toLocaleDateString('es-DO') : '—'}</p></div><span className="px-2 py-1 rounded-lg bg-emerald-50 text-emerald-700 text-[10px] font-black"><CheckCircle2 className="inline w-3 h-3"/> Finalizado</span></div>
-            {!isWorker && <><p className="text-xs text-emerald-700 font-bold mt-3">✓ Evidencia registrada</p><button type="button" onClick={() => { setSelected({ ...x, service_id: x.service_id || x.warranty?.service_id }); setError(''); setIssue(''); setDescription(''); }} className="mt-3 w-full rounded-xl bg-indigo-600 text-white py-3 text-sm font-black">Solicitar revisita de este trabajo</button></>}
+            {!isWorker && <div className="mt-3 space-y-3">
+              <p className="text-xs text-emerald-700 font-bold">✓ Evidencia registrada</p>
+              {x.revisits?.length > 0 && x.revisits.map((r: any) => {
+                const status = String(r.status || '').toUpperCase();
+                const labels: Record<string,string> = {
+                  SOLICITADA: 'Solicitud enviada • Esperando programación',
+                  PROGRAMADA: 'Revisita programada • Esperando visita',
+                  CORRECCION_EN_PROCESO: 'Revisita en proceso',
+                  EN_PROCESO: 'Revisita en proceso',
+                  CORRECCION_REALIZADA: 'Corrección realizada • Esperando tu confirmación',
+                  ESCALADA_ADMIN: 'En revisión por Administración'
+                };
+                return <div key={r.id} className="rounded-2xl border border-indigo-100 bg-indigo-50/60 p-4">
+                  <div className="flex items-center justify-between gap-2">
+                    <div>
+                      <p className="text-[10px] uppercase font-black tracking-wide text-indigo-700">Revisita</p>
+                      <p className="font-black text-slate-900">{r.issue}</p>
+                    </div>
+                    <span className="rounded-full bg-white px-2 py-1 text-[10px] font-black text-indigo-700">{labels[status] || r.status}</span>
+                  </div>
+                  <p className="mt-2 text-xs text-slate-600">{r.description}</p>
+                  {r.scheduled_at && <p className="mt-2 text-xs font-bold text-blue-700"><CalendarDays className="inline w-3 h-3 mr-1"/>Programada: {new Date(r.scheduled_at).toLocaleString('es-DO')}</p>}
+                  {status === 'CORRECCION_REALIZADA' && <p className="mt-3 rounded-xl bg-emerald-50 border border-emerald-200 p-3 text-xs font-bold text-emerald-800">El trabajador registró la corrección. Revisa el trabajo y confirma si quedó solucionado.</p>}
+                </div>;
+              })}
+              <button type="button" onClick={() => { setSelected({ ...x, service_id: x.service_id || x.warranty?.service_id }); setError(''); setIssue(''); setDescription(''); }} className="w-full rounded-xl bg-indigo-600 text-white py-3 text-sm font-black">{x.revisits?.length ? 'Solicitar otra revisita' : 'Solicitar revisita de este trabajo'}</button>
+            </div>}
             {isWorker && <div className="mt-3 space-y-3">{x.revisits.map((r: any) => <div key={r.id} className="rounded-2xl border bg-slate-50 p-4"><div className="flex justify-between gap-2"><div><p className="font-black text-slate-900">{r.issue}</p><p className="text-xs text-slate-600 mt-1">{r.description || 'Sin descripción adicional.'}</p></div><span className="text-[10px] font-black text-indigo-700">{r.status}</span></div>{r.scheduled_at && <p className="mt-2 text-xs text-blue-700"><CalendarDays className="inline w-3 h-3"/> {new Date(r.scheduled_at).toLocaleString('es-DO')}</p>}<div className="mt-3 grid gap-2">{r.status === 'SOLICITADA' && <><input type="datetime-local" value={schedule} onChange={e => setSchedule(e.target.value)} className="w-full rounded-xl border p-3 text-sm"/><button disabled={busy} onClick={() => workerAction(x.service_id, r.id, 'schedule')} className="w-full rounded-xl bg-blue-600 text-white py-3 text-sm font-black"><CalendarDays className="inline w-4 h-4 mr-1"/> Programar revisita</button></>}{r.status === 'PROGRAMADA' && <button disabled={busy} onClick={() => workerAction(x.service_id, r.id, 'start')} className="w-full rounded-xl bg-indigo-600 text-white py-3 text-sm font-black"><PlayCircle className="inline w-4 h-4 mr-1"/> Iniciar revisita</button>}{['EN_PROCESO','CORRECCION_EN_PROCESO'].includes(String(r.status || '').toUpperCase()) && <><textarea value={notes} onChange={e => setNotes(e.target.value)} rows={3} placeholder="Describe la corrección realizada" className="w-full rounded-xl border p-3 text-sm"/><button disabled={busy} onClick={() => workerAction(x.service_id, r.id, 'complete')} className="w-full rounded-xl bg-emerald-600 text-white py-3 text-sm font-black"><Send className="inline w-4 h-4 mr-1"/> Registrar corrección</button></>}</div></div>)}</div>}
           </article>)}
       </div>
