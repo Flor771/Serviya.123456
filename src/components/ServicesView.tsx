@@ -6,7 +6,9 @@ import { AnnouncementsBanner } from './AnnouncementsBanner';
 
 interface ServicesViewProps { services: Service[]; onSelectService: (service: Service) => void; onOpenPublish: () => void; }
 
-const categoryIcon = (icon:string) => { const icons:any={Laptop,Sparkles,Wrench,Zap,Paintbrush,Hammer,HardHat,Truck,Trees,Scissors,HeartHandshake,Car,GraduationCap,Camera,MoreHorizontal}; const Icon=icons[icon]||Wrench; return <Icon className="w-5 h-5"/>; };\n\nexport const ServicesView: React.FC<ServicesViewProps> = ({ services, onSelectService, onOpenPublish }) => {
+const categoryIcon = (icon:string) => { const icons:any={Laptop,Sparkles,Wrench,Zap,Paintbrush,Hammer,HardHat,Truck,Trees,Scissors,HeartHandshake,Car,GraduationCap,Camera,MoreHorizontal}; const Icon=icons[icon]||Wrench; return <Icon className="w-5 h-5"/>; };
+
+export const ServicesView: React.FC<ServicesViewProps> = ({ services, onSelectService, onOpenPublish }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('');
   const [selectedProvince, setSelectedProvince] = useState('');
