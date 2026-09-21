@@ -24,7 +24,13 @@ const images: Record<string,string> = {
   reparaciones:'https://images.unsplash.com/photo-1581244277943-fe4a9c777189?auto=format&fit=crop&w=900&q=80',
   proyectoVivienda:'https://images.unsplash.com/photo-1600607687920-4e2a09cf159d?auto=format&fit=crop&w=900&q=80',
   proyectoElectrico:'https://images.unsplash.com/photo-1621905251918-48416bd8575a?auto=format&fit=crop&w=900&q=80',
-  proyectoPintura:'https://images.unsplash.com/photo-1531058020387-3be344556be6?auto=format&fit=crop&w=900&q=80'
+  proyectoPintura:'https://images.unsplash.com/photo-1562259949-e8e7689d7828?auto=format&fit=crop&w=900&q=80',
+  quickLimpieza:'https://images.unsplash.com/photo-1581578731548-c64695cc6952?auto=format&fit=crop&w=900&q=80',
+  quickFuga:'https://images.unsplash.com/photo-1607472586893-edb57bdc0e39?auto=format&fit=crop&w=900&q=80',
+  quickLampara:'https://images.unsplash.com/photo-1621905252507-b35492cc74b4?auto=format&fit=crop&w=900&q=80',
+  quickHabitacion:'https://images.unsplash.com/photo-1564540583246-934409427776?auto=format&fit=crop&w=900&q=80',
+  heroRapido:'https://images.unsplash.com/photo-1581244277943-fe4a9c777189?auto=format&fit=crop&w=900&q=80',
+  heroProyecto:'https://images.unsplash.com/photo-1503387762-592deb58ef4e?auto=format&fit=crop&w=900&q=80'
 };
 
 const clean = (v:string) => v.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]/g,'');
@@ -71,10 +77,10 @@ export const ModernLanding:React.FC<Props> = ({services,onSelectCategory,onSelec
   }).slice(0,6),[services,q,province]);
 
   const quick = [
-    ['Limpieza del hogar','limpieza','RD$1,500'],
-    ['Reparar una fuga','plomeria','RD$1,500'],
-    ['Instalar una lámpara','electricidad','RD$1,000'],
-    ['Pintar una habitación','pintura','Desde RD$3,000']
+    ['Limpieza del hogar','quickLimpieza','RD$1,500'],
+    ['Reparar una fuga','quickFuga','RD$1,500'],
+    ['Instalar una lámpara','quickLampara','RD$1,000'],
+    ['Pintar una habitación','quickHabitacion','Desde RD$3,000']
   ];
   const projects = [
     ['Remodelación de vivienda','proyectoVivienda','Desde RD$250,000'],
@@ -100,8 +106,8 @@ export const ModernLanding:React.FC<Props> = ({services,onSelectCategory,onSelec
           </div>
         </div>
         <div className="hidden sm:grid grid-cols-2 gap-3 p-5">
-          <div className="relative overflow-hidden rounded-3xl min-h-[250px]"><img src={images.reparaciones} className="absolute inset-0 h-full w-full object-cover" alt="Profesional trabajando"/><div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent"/><b className="absolute bottom-4 left-4">Soluciones rápidas</b></div>
-          <div className="relative overflow-hidden rounded-3xl min-h-[250px] mt-8"><img src={images.construccion} className="absolute inset-0 h-full w-full object-cover" alt="Proyecto de construcción"/><div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent"/><b className="absolute bottom-4 left-4">Grandes proyectos</b></div>
+          <div className="relative overflow-hidden rounded-3xl min-h-[250px]"><img src={images.heroRapido} className="absolute inset-0 h-full w-full object-cover" alt="Profesional trabajando"/><div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent"/><b className="absolute bottom-4 left-4">Soluciones rápidas</b></div>
+          <div className="relative overflow-hidden rounded-3xl min-h-[250px] mt-8"><img src={images.heroProyecto} className="absolute inset-0 h-full w-full object-cover" alt="Proyecto de construcción"/><div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent"/><b className="absolute bottom-4 left-4">Grandes proyectos</b></div>
         </div>
       </div>
     </section>
@@ -139,7 +145,7 @@ export const ModernLanding:React.FC<Props> = ({services,onSelectCategory,onSelec
 
     <section>
       <div className="flex items-end justify-between mb-3"><div><p className="text-[10px] uppercase tracking-widest font-black text-blue-600">Oportunidades</p><h2 className="text-2xl font-black">Trabajos publicados</h2></div><button onClick={()=>onNavigateTab('buscar')} className="text-xs font-black text-blue-600">Ver todos →</button></div>
-      {(q||province?filtered:featured).length ? <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">{(q||province?filtered:featured).map(s=><button key={s.id} onClick={()=>onSelectService(s)} className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm text-left hover:shadow-md"><img src={imageFor(s.category_name||'')} className="h-36 w-full object-cover" alt={s.title}/><div className="p-4"><div className="flex justify-between gap-2"><h3 className="font-black line-clamp-2">{s.title}</h3><b className="text-blue-600 text-sm whitespace-nowrap">RD$ {Number(s.price_rd||0).toLocaleString()}</b></div><p className="text-xs text-slate-500 mt-2 line-clamp-2">{s.description}</p><p className="text-[11px] text-slate-500 mt-3"><MapPin className="inline w-3.5 h-3.5 mr-1"/>{s.municipality}, {s.province}</p></div></button>)}</div> : <div className="rounded-2xl border border-dashed border-slate-300 p-7 text-center text-sm text-slate-500">Aquí aparecerán los trabajos publicados.</div>}
+      {(q||province?filtered:featured).length ? <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">{(q||province?filtered:featured).map((s,i)=><button key={s.id} onClick={()=>onSelectService(s)} className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm text-left hover:shadow-md"><img src={[images.limpieza,images.plomeria,images.electricidad,images.pintura,images.construccion,images.transporte][i % 6]} className="h-36 w-full object-cover" alt={s.title}/><div className="p-4"><div className="flex justify-between gap-2"><h3 className="font-black line-clamp-2">{s.title}</h3><b className="text-blue-600 text-sm whitespace-nowrap">RD$ {Number(s.price_rd||0).toLocaleString()}</b></div><p className="text-xs text-slate-500 mt-2 line-clamp-2">{s.description}</p><p className="text-[11px] text-slate-500 mt-3"><MapPin className="inline w-3.5 h-3.5 mr-1"/>{s.municipality}, {s.province}</p></div></button>)}</div> : <div className="rounded-2xl border border-dashed border-slate-300 p-7 text-center text-sm text-slate-500">Aquí aparecerán los trabajos publicados.</div>}
     </section>
 
 
