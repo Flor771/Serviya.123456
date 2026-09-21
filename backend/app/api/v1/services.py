@@ -63,6 +63,12 @@ def create_service(data: ServiceCreate, current_user: User = Depends(get_current
         raise HTTPException(status_code=403, detail="Solo los clientes pueden publicar servicios")
     if data.price_rd <= 0:
         raise HTTPException(status_code=400, detail="El precio debe ser mayor que RD$0")
+    # Evita publicaciones activas duplicadas del mismo cliente con título similar.
+    normalized_title = " ".join(data.title.lower().split())
+    recent = db.query(Service).filter(Service.client_id == current_user.id, Service.status.in_([ServiceStatusEnum.PUBLICADA, ServiceStatusEnum.RECIBIENDO_POSTULACIONES])).all()
+    for existing in recent:
+        if " ".join(existing.title.lower().split()) == normalized_title:
+            raise HTTPException(status_code=409, detail="Ya tienes una publicación activa con ese mismo título. Revisa tus servicios antes de crear otra.")
     if (data.location_lat is None) != (data.location_lng is None):
         raise HTTPException(status_code=400, detail="La ubicación del mapa debe tener latitud y longitud")
     s = Service(

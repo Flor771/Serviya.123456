@@ -18,6 +18,7 @@ class UpdateProfileSchema(BaseModel):
     municipality: Optional[str] = None
     profession: Optional[str] = None
     hourly_rate_rd: Optional[float] = None
+    availability: Optional[str] = None
     avatar_url: Optional[str] = None
 
 
@@ -80,14 +81,15 @@ def update_profile(data: UpdateProfileSchema, current_user: User = Depends(get_c
             raise HTTPException(400, "La foto de perfil es demasiado grande. Elige una imagen más pequeña.")
         current_user.avatar_url = data.avatar_url
 
-    if data.profession is not None or data.hourly_rate_rd is not None:
+    if data.profession is not None or data.hourly_rate_rd is not None or data.availability is not None:
         worker_prof = db.query(WorkerProfile).filter(WorkerProfile.user_id == current_user.id).first()
         if not worker_prof:
-            worker_prof = WorkerProfile(user_id=current_user.id, specialties=data.profession or "Técnico General", hourly_rate=data.hourly_rate_rd or 500.0)
+            worker_prof = WorkerProfile(user_id=current_user.id, specialties=data.profession or "Técnico General", hourly_rate=data.hourly_rate_rd or 500.0, availability=data.availability or "NO_DISPONIBLE")
             db.add(worker_prof)
         else:
             if data.profession is not None: worker_prof.specialties = data.profession
             if data.hourly_rate_rd is not None: worker_prof.hourly_rate = data.hourly_rate_rd
+            if data.availability is not None: worker_prof.availability = data.availability
     db.commit(); db.refresh(current_user)
     return {"message": "Perfil actualizado exitosamente", "user": {
         "id": current_user.id, "first_name": current_user.first_name, "last_name": current_user.last_name,
