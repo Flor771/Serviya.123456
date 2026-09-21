@@ -78,8 +78,8 @@ const AppContent: React.FC = () => {
       }
     };
     const handleWalletEscrow = (event: Event) => { const detail = (event as CustomEvent).detail || {}; if (!detail.serviceId || !detail.amount) return; setShowNotificationsModal(false); setSelectedService(null); setChatParams(null); setShowPublishModal(false); setShowVerificationModal(false); setShowPoliciesModal(false); setDisputeServiceId(null); setReviewParams(null); setActiveTab('billetera'); setWalletEscrowParams({ serviceId: String(detail.serviceId), amount: Number(detail.amount) }); };
-    window.addEventListener('serviya:navigate', handleNavigate); window.addEventListener('serviya:open-wallet-escrow', handleWalletEscrow);
-    return () => { window.removeEventListener('serviya:navigate', handleNavigate); window.removeEventListener('serviya:open-wallet-escrow', handleWalletEscrow); };
+    const handleOpenPolicies = () => setShowPoliciesModal(true);\n    window.addEventListener('serviya:navigate', handleNavigate); window.addEventListener('serviya:open-wallet-escrow', handleWalletEscrow); window.addEventListener('serviya:open-policies', handleOpenPolicies);
+    return () => { window.removeEventListener('serviya:navigate', handleNavigate); window.removeEventListener('serviya:open-wallet-escrow', handleWalletEscrow); window.removeEventListener('serviya:open-policies', handleOpenPolicies); };
   }, [services, user, isWorker, isClient]);
 
   if (loading) return <div className="min-h-screen bg-slate-100 flex items-center justify-center text-slate-500 font-semibold">Cargando SERVIYA…</div>;
