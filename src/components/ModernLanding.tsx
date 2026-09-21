@@ -37,6 +37,28 @@ const iconFor = (name:string) => {
   return <Wrench className="w-5 h-5"/>;
 };
 
+
+
+const FAQS = [
+  ['¿Qué es SERVIYA?','Es un marketplace de servicios donde clientes pueden publicar necesidades y trabajadores o técnicos pueden postularse para realizar trabajos.'],
+  ['¿Cómo publico un trabajo?','Pulsa “Publicar trabajo”, describe lo que necesitas, indica ubicación, presupuesto o precio y las condiciones del servicio.'],
+  ['¿Cómo contrato a un trabajador?','Revisa las propuestas recibidas, conversa con los candidatos, acuerda las condiciones y selecciona al trabajador.'],
+  ['¿Cómo funciona el pago?','El cliente registra el comprobante del depósito. Administración verifica el pago y, cuando corresponde, mantiene los fondos en Custodia SERVIYA hasta la confirmación del trabajo.'],
+  ['¿Cuándo recibe el trabajador su dinero?','Después de completar el trabajo, presentar la evidencia y que el cliente confirme la finalización, Administración procesa la liberación según el estado de la operación.'],
+  ['¿Qué hago si tengo un problema?','Puedes utilizar las herramientas de soporte y disputas de SERVIYA. Los registros del trabajo ayudan a revisar el caso.'],
+  ['¿Puedo trabajar como técnico?','Sí. Regístrate como TRABAJADOR/TÉCNICO, completa tu perfil y busca trabajos disponibles para enviar tus propuestas.'],
+  ['¿SERVIYA guarda información de mis trabajos?','SERVIYA puede conservar publicaciones, mensajes, contratos, evidencias, valoraciones y movimientos necesarios para operar y resolver reclamaciones, según su Política de Privacidad.']
+];
+
+const GUIDE = [
+  ['01','Busca','Explora categorías o usa el buscador para encontrar el servicio que necesitas.'],
+  ['02','Publica','Si no encuentras lo que buscas, publica tu trabajo con los detalles importantes.'],
+  ['03','Conecta','Recibe propuestas, revisa perfiles y conversa antes de seleccionar.'],
+  ['04','Trabaja','Acuerda las condiciones y realiza el servicio siguiendo el flujo de SERVIYA.'],
+  ['05','Confirma','Revisa la evidencia y confirma cuando el trabajo esté terminado.'],
+  ['06','Cierra','Se procesa la liberación correspondiente y puedes valorar la experiencia.']
+];
+
 export const ModernLanding:React.FC<Props> = ({services,onSelectCategory,onSelectService,onOpenPublish,onNavigateTab}) => {
   const [q,setQ] = useState('');
   const [province,setProvince] = useState('');
@@ -118,6 +140,29 @@ export const ModernLanding:React.FC<Props> = ({services,onSelectCategory,onSelec
     <section>
       <div className="flex items-end justify-between mb-3"><div><p className="text-[10px] uppercase tracking-widest font-black text-blue-600">Oportunidades</p><h2 className="text-2xl font-black">Trabajos publicados</h2></div><button onClick={()=>onNavigateTab('buscar')} className="text-xs font-black text-blue-600">Ver todos →</button></div>
       {(q||province?filtered:featured).length ? <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">{(q||province?filtered:featured).map(s=><button key={s.id} onClick={()=>onSelectService(s)} className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm text-left hover:shadow-md"><img src={imageFor(s.category_name||'')} className="h-36 w-full object-cover" alt={s.title}/><div className="p-4"><div className="flex justify-between gap-2"><h3 className="font-black line-clamp-2">{s.title}</h3><b className="text-blue-600 text-sm whitespace-nowrap">RD$ {Number(s.price_rd||0).toLocaleString()}</b></div><p className="text-xs text-slate-500 mt-2 line-clamp-2">{s.description}</p><p className="text-[11px] text-slate-500 mt-3"><MapPin className="inline w-3.5 h-3.5 mr-1"/>{s.municipality}, {s.province}</p></div></button>)}</div> : <div className="rounded-2xl border border-dashed border-slate-300 p-7 text-center text-sm text-slate-500">Aquí aparecerán los trabajos publicados.</div>}
+    </section>
+
+
+    <section className="rounded-3xl bg-white border border-slate-200 p-5 sm:p-7">
+      <div className="text-center max-w-2xl mx-auto"><p className="text-[10px] uppercase tracking-widest font-black text-blue-600">Mini tutorial</p><h2 className="text-2xl font-black mt-1">Cómo usar SERVIYA</h2><p className="text-sm text-slate-500 mt-2">Una guía rápida para comenzar, desde buscar un servicio hasta cerrar el trabajo.</p></div>
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mt-5">
+        {GUIDE.map(([num,title,text])=><div key={num} className="rounded-2xl bg-slate-50 border border-slate-200 p-4"><span className="inline-flex w-8 h-8 items-center justify-center rounded-xl bg-blue-600 text-white text-xs font-black">{num}</span><h3 className="font-black mt-3">{title}</h3><p className="text-xs text-slate-500 mt-1 leading-relaxed">{text}</p></div>)}
+      </div>
+      <div className="mt-5 grid sm:grid-cols-2 gap-3">
+        <button onClick={onOpenPublish} className="rounded-xl bg-blue-600 text-white px-4 py-3 text-sm font-black">Publicar mi primer trabajo</button>
+        <button onClick={()=>onNavigateTab('buscar')} className="rounded-xl bg-slate-900 text-white px-4 py-3 text-sm font-black">Buscar un servicio</button>
+      </div>
+    </section>
+
+    <section className="rounded-3xl bg-slate-950 text-white p-5 sm:p-7">
+      <div className="text-center"><p className="text-[10px] uppercase tracking-widest font-black text-blue-300">Ayuda</p><h2 className="text-2xl font-black mt-1">Preguntas y respuestas</h2><p className="text-sm text-slate-400 mt-2">Toca una pregunta para ver la respuesta.</p></div>
+      <div className="mt-5 space-y-2 max-w-3xl mx-auto">
+        {FAQS.map(([question,answer])=><details key={question} className="group rounded-2xl bg-white/5 border border-white/10 overflow-hidden"><summary className="cursor-pointer list-none px-4 py-4 font-bold text-sm flex items-center justify-between gap-3">{question}<span className="text-blue-300 text-lg group-open:rotate-45 transition">+</span></summary><p className="px-4 pb-4 text-xs sm:text-sm text-slate-300 leading-relaxed">{answer}</p></details>)}
+      </div>
+    </section>
+
+    <section className="rounded-3xl bg-white border border-slate-200 p-5 sm:p-7">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3"><div><p className="text-[10px] uppercase tracking-widest font-black text-blue-600">Legal</p><h2 className="text-xl font-black">Políticas de SERVIYA</h2><p className="text-sm text-slate-500 mt-1">Consulta los términos de uso y la política de privacidad.</p></div><button onClick={()=>window.dispatchEvent(new CustomEvent('serviya:open-policies'))} className="rounded-xl bg-blue-600 text-white px-4 py-3 text-xs font-black">Ver políticas</button></div>
     </section>
 
     <section className="grid sm:grid-cols-3 gap-3">
