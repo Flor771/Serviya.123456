@@ -93,6 +93,15 @@ export const DOMINICAN_BANKS = [
 
 export const SERVICE_CATEGORIES: Category[] = [
   {
+    id: 'cat-digital',
+    name: 'Servicios Digitales',
+    slug: 'servicios-digitales',
+    icon: 'Laptop',
+    description: 'Servicios que pueden realizarse de forma remota: diseño, edición, CV, traducción, programación, marketing y voz.',
+    subcategories: ['Diseño Gráfico', 'Edición de Video', 'CV y Documentos', 'Traducción', 'Programación y Tecnología', 'Marketing y Redes', 'Voz y TTS']
+  },
+
+  {
     id: 'cat-limpieza',
     name: 'Limpieza',
     slug: 'limpieza',
