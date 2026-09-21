@@ -1,4 +1,4 @@
-const CACHE_NAME = 'serviya-v10';
+const CACHE_NAME = 'serviya-v11';
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
